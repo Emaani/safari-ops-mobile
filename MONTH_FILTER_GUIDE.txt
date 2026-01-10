@@ -1,0 +1,213 @@
+================================================================================
+MONTH FILTER - NEW DESIGN GUIDE
+================================================================================
+
+BEFORE (Old Design):
+--------------------
+┌─────────────────────────────────┐
+│  Month                          │
+├─────────────────────────────────┤
+│ [Dropdown]                   ▼  │
+│  • All Months                   │
+│  • January                      │
+│  • February                     │
+│  • March                        │
+│  • ...                          │
+│  • December                     │
+└─────────────────────────────────┘
+
+Issues:
+  ❌ Not clear what "All Months" means
+  ❌ Mixed all-time with specific months
+  ❌ 13 options in one dropdown
+
+
+AFTER (New Design):
+-------------------
+┌─────────────────────────────────┐
+│  Filter by Month                │
+├─────────────────────────────────┤
+│ [Primary Dropdown]           ▼  │
+│  • All Time                     │
+│  • Per Month                    │
+└─────────────────────────────────┘
+
+When "All Time" selected:
+  → Shows ALL data (no date filter)
+  → No secondary selector
+
+When "Per Month" selected:
+  ┌─────────────────────────────────┐
+  │  Filter by Month                │
+  ├─────────────────────────────────┤
+  │ [Per Month]                  ▼  │  ← Primary
+  ├═════════════════════════════════┤
+  │ [January]                    ▼  │  ← Secondary (BLUE BORDER)
+  │  • January                      │
+  │  • February                     │
+  │  • ...                          │
+  │  • December                     │
+  └─────────────────────────────────┘
+
+Benefits:
+  ✅ Clear "All Time" vs "Per Month"
+  ✅ Secondary selector only when needed
+  ✅ Blue border shows active month selector
+  ✅ Better visual hierarchy
+
+================================================================================
+USER FLOW
+================================================================================
+
+Scenario 1: View All-Time Data
+-------------------------------
+1. Tap "Filter by Month" dropdown
+2. Select "All Time"
+3. Result:
+   → Secondary selector disappears
+   → Dashboard shows ALL data
+   → No month/year filtering applied
+
+Scenario 2: View Specific Month
+--------------------------------
+1. Tap "Filter by Month" dropdown
+2. Select "Per Month"
+3. Secondary selector appears (defaults to current month)
+4. Tap secondary selector
+5. Select desired month (e.g., "December")
+6. Result:
+   → Dashboard filters to December 2026
+   → Only December data shown
+
+Scenario 3: Switch Between Modes
+---------------------------------
+From "All Time" → "Per Month":
+  → Secondary selector appears
+  → Defaults to current month
+  → Dashboard filters automatically
+
+From "Per Month" → "All Time":
+  → Secondary selector disappears
+  → Dashboard shows all data
+  → Filter removed automatically
+
+================================================================================
+WHAT GETS FILTERED
+================================================================================
+
+When "All Time" Selected:
+  ✅ Total Revenue: ALL months
+  ✅ Total Expenses: ALL months
+  ✅ Outstanding Payments: ALL months
+  ✅ Bookings (Completed/Pending/etc): ALL
+
+  Not Affected (always real-time):
+  → Active Bookings (current status)
+  → Fleet Utilization (current status)
+
+When "Per Month" Selected:
+  ✅ Total Revenue: Selected month only
+  ✅ Total Expenses: Selected month only
+  ✅ Outstanding Payments: Selected month only
+  ✅ Bookings: Selected month only
+
+  Not Affected (always real-time):
+  → Active Bookings (current status)
+  → Fleet Utilization (current status)
+
+================================================================================
+VISUAL INDICATORS
+================================================================================
+
+Primary Dropdown:
+  Border: Standard gray (1px)
+  Background: White/Card color
+  Text: Black
+
+Secondary Dropdown (when visible):
+  Border: BLUE (2px) ← Visual distinction
+  Background: White/Card color
+  Text: Black
+  Margin: 8px top spacing
+
+Selected State:
+  → Dropdown shows selected value
+  → Blue border on secondary picker
+  → Clear visual feedback
+
+================================================================================
+TECHNICAL DETAILS
+================================================================================
+
+State Variables:
+  filterMode: 'all-time' | 'per-month'
+  dashboardMonthFilter: 0-11 | 'all'
+  dashboardFilterYear: 2026
+
+Logic:
+  if (filterMode === 'all-time') {
+    dashboardMonthFilter = 'all'
+    → Show ALL data
+  } else {
+    dashboardMonthFilter = 0-11
+    → Show selected month data
+  }
+
+Default:
+  filterMode: 'per-month'
+  dashboardMonthFilter: Current month (e.g., 0 for January)
+  dashboardFilterYear: Current year (e.g., 2026)
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+Visual:
+  □ Label shows "Filter by Month"
+  □ Primary dropdown has two options
+  □ Secondary picker only visible for "Per Month"
+  □ Blue border on secondary picker
+  □ Clean layout, no overlapping
+
+Functional:
+  □ "All Time" hides secondary selector
+  □ "All Time" shows all dashboard data
+  □ "Per Month" shows secondary selector
+  □ "Per Month" filters dashboard data
+  □ Changing month updates data immediately
+  □ Currency filter still works independently
+
+Data Accuracy:
+  □ All Time: Total Revenue includes all months
+  □ Per Month: Total Revenue includes only selected month
+  □ All Time: Outstanding Payments includes all months
+  □ Per Month: Outstanding Payments for selected month only
+  □ Active Bookings always shows current (not filtered)
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+OLD:
+  [Month ▼]
+  → All Months
+  → January - December
+
+NEW:
+  [Filter by Month ▼]
+  → All Time
+  → Per Month
+      └─→ [Month Selector ▼]
+          → January - December
+
+Change:
+  • Clearer labeling
+  • Two-tier selection
+  • Visual distinction
+  • Better UX
+
+================================================================================
+
+Next Step: Clear Metro cache and reload app to see new filter design!
+
+================================================================================

@@ -1,0 +1,224 @@
+================================================================================
+TEST NEW MONTH FILTER - QUICK START
+================================================================================
+
+STATUS: Month Filter redesigned with "All Time" and "Per Month" options
+ACTION REQUIRED: Restart Metro and test new filter design
+
+================================================================================
+STEP 1: RESTART METRO
+================================================================================
+
+cd d:\Projects\Jackalwild\Jackaldashboard\safari-ops-mobile
+taskkill /F /IM node.exe
+clear-cache.bat
+npx expo start --clear
+
+================================================================================
+STEP 2: RELOAD APP
+================================================================================
+
+On device: Shake → Tap "Reload"
+Or: Close app completely → Reopen
+
+================================================================================
+STEP 3: TEST NEW FILTER (5 minutes)
+================================================================================
+
+Test 1: Visual Check
+--------------------
+□ See "Filter by Month" label (not just "Month")
+□ Primary dropdown shows "Per Month" (default)
+□ Secondary month selector visible below
+□ Secondary selector has BLUE BORDER
+□ Layout looks clean and professional
+
+Test 2: All Time Mode
+----------------------
+□ Tap "Filter by Month" dropdown
+□ Select "All Time"
+□ Secondary selector DISAPPEARS
+□ Dashboard shows all data
+□ Check Total Revenue includes all months
+□ Check console: "Filter mode changed to All Time"
+
+Test 3: Per Month Mode
+-----------------------
+□ Tap "Filter by Month" dropdown
+□ Select "Per Month"
+□ Secondary selector APPEARS
+□ Has blue border (2px thick)
+□ Defaults to current month
+□ Dashboard filters to current month
+
+Test 4: Change Month
+--------------------
+□ With "Per Month" selected
+□ Tap secondary month selector
+□ Select different month (e.g., December)
+□ Dashboard updates immediately
+□ Check Total Revenue shows only that month
+□ Check console: Filter values logged
+
+Test 5: Mode Switching
+----------------------
+□ Switch from "All Time" to "Per Month"
+   → Secondary selector appears
+   → Defaults to current month
+   → Data filters automatically
+
+□ Switch from "Per Month" to "All Time"
+   → Secondary selector disappears
+   → Shows all data immediately
+
+Test 6: Currency Filter
+-----------------------
+□ Currency dropdown still works
+□ Independent of month filter
+□ USD/UGX/KES conversion works
+
+================================================================================
+WHAT TO LOOK FOR
+================================================================================
+
+Visual:
+  ✓ "Filter by Month" label
+  ✓ Two options: "All Time" and "Per Month"
+  ✓ Secondary selector only for "Per Month"
+  ✓ Blue border on secondary selector
+  ✓ Clean layout, no overlap
+
+Functional:
+  ✓ All Time → shows all data
+  ✓ Per Month → filters by month
+  ✓ Immediate updates (no lag)
+  ✓ Console logs show filter changes
+  ✓ Data accuracy matches web
+
+================================================================================
+EXPECTED CONSOLE OUTPUT
+================================================================================
+
+On App Load:
+  LOG  [Dashboard] Initializing dashboardMonthFilter to current month: 0
+  LOG  [Dashboard] Initializing dashboardFilterYear to current year: 2026
+
+When Selecting "All Time":
+  LOG  [Dashboard] Filter mode changed to All Time
+  LOG  [DashboardData] Bookings: NO date filter (all months)
+  LOG  [DashboardCalculations] Dashboard Month Filter: all
+
+When Selecting "Per Month":
+  LOG  [Dashboard] Filter mode changed to Per Month, defaulting to month: 0
+  LOG  [DashboardData] Bookings date filter: 2026-01-01... to 2026-01-31...
+  LOG  [DashboardCalculations] Dashboard Month Filter: 0
+
+================================================================================
+COMPARISON: BEFORE VS AFTER
+================================================================================
+
+BEFORE:
+  ┌─────────────────┐
+  │ Month        ▼  │  ← Unclear label
+  ├─────────────────┤
+  │ All Months      │  ← What does this mean?
+  │ January         │
+  │ February        │
+  │ ...             │
+  └─────────────────┘
+
+  Issues:
+    ✗ "All Months" ambiguous
+    ✗ Mixed all-time with months
+    ✗ Flat hierarchy
+
+AFTER:
+  ┌──────────────────────┐
+  │ Filter by Month   ▼  │  ← Clear label
+  ├──────────────────────┤
+  │ All Time             │  ← Explicit
+  │ Per Month            │  ← Explicit
+  └──────────────────────┘
+       ↓ (Per Month selected)
+  ┌══════════════════════┐
+  │ January           ▼  │  ← Blue border!
+  ├──────────────────────┤
+  │ January              │
+  │ February             │
+  │ ...                  │
+  └──────────────────────┘
+
+  Benefits:
+    ✓ Clear "All Time" vs "Per Month"
+    ✓ Two-tier hierarchy
+    ✓ Visual distinction
+    ✓ Better UX
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Filter not visible:
+  → Restart Metro with cache clear
+  → Reload app (not just refresh)
+
+Secondary selector not appearing:
+  → Make sure "Per Month" is selected
+  → Check console for errors
+
+Blue border not showing:
+  → Styles may not have loaded
+  → Clear cache and restart
+
+Data not filtering:
+  → Check console logs for filter values
+  → Verify month/year correct
+  → Compare with web dashboard
+
+================================================================================
+ADDITIONAL TESTS (OPTIONAL)
+================================================================================
+
+□ Test with landscape orientation
+□ Test on different screen sizes
+□ Test with different system font sizes
+□ Test rapid filter switching
+□ Test while pull-to-refresh active
+□ Verify real-time sync still works
+□ Check memory usage (should be same)
+□ Verify app doesn't crash
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+Visual:
+  ✓ New filter UI visible
+  ✓ Professional appearance
+  ✓ Clear labeling
+
+Functional:
+  ✓ Both modes work correctly
+  ✓ Data filters accurately
+  ✓ Immediate response
+  ✓ No errors
+
+User Experience:
+  ✓ Intuitive to use
+  ✓ Clear what mode is active
+  ✓ Smooth transitions
+
+================================================================================
+DOCUMENTATION
+================================================================================
+
+Complete docs available:
+  • FILTER_REDESIGN.md - Full implementation details
+  • MONTH_FILTER_GUIDE.txt - Visual guide
+  • COMPLETE_IMPLEMENTATION_SUMMARY.md - Overall summary
+
+================================================================================
+
+🎉 If all tests pass, the new Month Filter is working perfectly!
+
+================================================================================
