@@ -1,0 +1,1 @@
+![Jackal Adventures SDK](https://via.placeholder.com/800x200/3b82f6/FFFFFF?text=Jackal+Adventures+Mobile+SDK)

@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import type { PushToken } from '../types/notification';
@@ -19,8 +20,64 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
+
+/**
+ * Get the EAS project ID from app configuration
+ * Tries multiple sources in order of preference
+ */
+function getProjectId(): string | null {
+  try {
+    // Try easConfig first (preferred method)
+    const easProjectId = Constants.easConfig?.projectId;
+    if (easProjectId && isValidUUID(easProjectId)) {
+      console.log('[PushNotifications] Using projectId from Constants.easConfig');
+      return easProjectId;
+    }
+
+    // Fallback to expoConfig.extra.eas.projectId
+    const extraProjectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (extraProjectId && isValidUUID(extraProjectId)) {
+      console.log('[PushNotifications] Using projectId from Constants.expoConfig.extra.eas');
+      return extraProjectId;
+    }
+
+    console.error('[PushNotifications] No valid projectId found in app configuration');
+    return null;
+  } catch (error) {
+    console.error('[PushNotifications] Error reading projectId from configuration:', error);
+    return null;
+  }
+}
+
+/**
+ * Validate UUID format
+ */
+function isValidUUID(uuid: string): boolean {
+  if (!uuid || typeof uuid !== 'string') {
+    return false;
+  }
+
+  // Check for placeholder values
+  const placeholders = ['your-expo-project-id', 'your-project-id', 'PROJECT_ID'];
+  if (placeholders.includes(uuid)) {
+    console.error('[PushNotifications] Placeholder projectId detected. Please configure a valid UUID in app.json');
+    return false;
+  }
+
+  // Validate UUID format (8-4-4-4-12 hex characters)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isValid = uuidRegex.test(uuid);
+
+  if (!isValid) {
+    console.error('[PushNotifications] Invalid UUID format:', uuid);
+  }
+
+  return isValid;
+}
 
 /**
  * Register device for push notifications
@@ -35,6 +92,17 @@ export async function registerForPushNotifications(): Promise<string | null> {
       console.warn('[PushNotifications] Push notifications only work on physical devices');
       return null;
     }
+
+    // Get and validate project ID
+    const projectId = getProjectId();
+    if (!projectId) {
+      console.error('[PushNotifications] Cannot register for push notifications: Missing or invalid projectId');
+      console.error('[PushNotifications] Please configure a valid UUID in app.json under extra.eas.projectId');
+      console.error('[PushNotifications] Run "npx eas init" to generate a project ID, or use an existing one');
+      return null;
+    }
+
+    console.log('[PushNotifications] Using EAS projectId:', projectId);
 
     // Get existing notification permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -54,9 +122,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
     console.log('[PushNotifications] Permissions granted, getting push token...');
 
-    // Get the Expo push token
+    // Get the Expo push token with validated project ID
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'your-expo-project-id', // TODO: Replace with actual Expo project ID
+      projectId,
     });
 
     const token = tokenData.data;
@@ -77,6 +145,15 @@ export async function registerForPushNotifications(): Promise<string | null> {
     return token;
   } catch (error) {
     console.error('[PushNotifications] Error registering for push notifications:', error);
+
+    // Provide helpful error messages for common issues
+    if (error instanceof Error) {
+      if (error.message.includes('VALIDATION_ERROR') || error.message.includes('projectId')) {
+        console.error('[PushNotifications] This error is likely caused by an invalid or missing projectId');
+        console.error('[PushNotifications] Please ensure app.json has a valid UUID under extra.eas.projectId');
+      }
+    }
+
     return null;
   }
 }

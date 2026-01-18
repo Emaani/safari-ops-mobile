@@ -1,0 +1,43 @@
+===============================================================================
+  IMPORTANT: SAVE JACKAL ADVENTURES LOGO HERE
+===============================================================================
+
+LOCATION:
+  assets/branding/jackal-logo.png
+
+REQUIRED STEPS:
+  1. Save the attached Jackal Adventures logo (jackal head design)
+  2. Save it as: jackal-logo.png
+  3. Place in: assets/branding/ folder
+  4. Restart the app: npm run start-reset
+
+LOGO SPECIFICATIONS:
+  - Format: PNG
+  - Recommended size: 200x200 pixels or larger
+  - Background: Transparent (recommended)
+  - Will be displayed at: 40x40 pixels in app header
+
+CURRENT STATUS:
+  The Dashboard code is updated and ready.
+  The logo file is the ONLY missing piece.
+  Once you save the logo, the branding will be complete!
+
+VERIFICATION:
+  After saving the logo file, run:
+    npm run start-reset
+
+  Then open the app and you should see:
+  - Jackal Adventures logo in the header (top left)
+  - "Jackal Adventures" title next to the logo
+  - Professional, branded dashboard header
+
+TROUBLESHOOTING:
+  If you get "Unable to resolve module" error:
+  - Check the file name is exactly: jackal-logo.png
+  - Check the location is: assets/branding/jackal-logo.png
+  - Run: npm run start-reset
+  - Restart the app
+
+===============================================================================
+  For complete instructions, see: BRANDING_UPDATE_COMPLETE.md
+===============================================================================

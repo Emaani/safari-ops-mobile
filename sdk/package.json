@@ -1,0 +1,43 @@
+{
+  "name": "@jackaladventures/mobile-sdk",
+  "version": "1.0.0",
+  "description": "Jackal Adventures Mobile SDK - Complete SDK for iOS mobile applications with Push Notifications, Messaging, Live Updates, Offline Sync, and API Services",
+  "main": "index.ts",
+  "types": "index.ts",
+  "keywords": [
+    "react-native",
+    "expo",
+    "sdk",
+    "jackal-adventures",
+    "push-notifications",
+    "realtime",
+    "offline-sync",
+    "messaging",
+    "ios",
+    "mobile"
+  ],
+  "author": "Jackal Adventures",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jackaladventures/mobile-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jackaladventures/mobile-sdk/issues"
+  },
+  "homepage": "https://github.com/jackaladventures/mobile-sdk#readme",
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.89.0",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "expo": "~54.0.31",
+    "expo-device": "^8.0.10",
+    "expo-notifications": "^0.32.16",
+    "expo-constants": "^18.0.4",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

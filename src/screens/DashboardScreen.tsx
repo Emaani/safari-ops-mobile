@@ -10,6 +10,7 @@ import {
   Dimensions,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
@@ -46,7 +47,6 @@ import type { Currency } from '../types/dashboard';
 // ============================================================================
 
 type MonthFilter = number | 'all';
-type FilterMode = 'all-time' | 'per-month';
 
 // ============================================================================
 // CONSTANTS
@@ -204,10 +204,8 @@ export function DashboardScreen() {
   // STATE
   // ========================================================================
 
-  // Filter mode state ('all-time' or 'per-month')
-  const [filterMode, setFilterMode] = useState<FilterMode>('per-month');
-
-  // CRITICAL FIX: Default to current month instead of 'all' to match web Dashboard behavior
+  // Month filter state - simplified to single dropdown
+  // Default to current month for better UX
   const [dashboardMonthFilter, setDashboardMonthFilter] = useState<MonthFilter>(() => {
     const currentMonth = new Date().getMonth();
     console.log('[Dashboard] Initializing dashboardMonthFilter to current month:', currentMonth);
@@ -312,20 +310,8 @@ export function DashboardScreen() {
     setRefreshing(false);
   }, [refetch]);
 
-  const handleFilterModeChange = useCallback((mode: FilterMode) => {
-    setFilterMode(mode);
-    if (mode === 'all-time') {
-      setDashboardMonthFilter('all');
-      console.log('[Dashboard] Filter mode changed to All Time');
-    } else {
-      // When switching to per-month, default to current month
-      const currentMonth = new Date().getMonth();
-      setDashboardMonthFilter(currentMonth);
-      console.log('[Dashboard] Filter mode changed to Per Month, defaulting to month:', currentMonth);
-    }
-  }, []);
-
   const handleMonthChange = useCallback((value: MonthFilter) => {
+    console.log('[Dashboard] Month filter changed to:', value === 'all' ? 'All Months' : MONTHS.find(m => m.value === value)?.label);
     setDashboardMonthFilter(value);
   }, []);
 
@@ -364,6 +350,15 @@ export function DashboardScreen() {
 
   // KPI values
   const kpiData = calculations.kpis;
+
+  // Get current filter display text
+  const filterDisplayText = useMemo(() => {
+    if (dashboardMonthFilter === 'all') {
+      return `Showing data for all months in ${dashboardFilterYear}`;
+    }
+    const monthName = MONTHS.find(m => m.value === dashboardMonthFilter)?.label || 'Unknown';
+    return `Showing data for ${monthName} ${dashboardFilterYear}`;
+  }, [dashboardMonthFilter, dashboardFilterYear]);
 
   // Format KPI subtitles
   const revenueSubtitle = useMemo(() => {
@@ -445,7 +440,15 @@ export function DashboardScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Dashboard</Text>
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <Image
+                source={require('../../assets/branding/jackal-logo.png')}
+                style={styles.headerLogo}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
         </View>
         <ErrorMessage
           message={dataError.message || 'Failed to load dashboard data'}
@@ -463,9 +466,18 @@ export function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.headerTitle}>Dashboard</Text>
-            {user && <Text style={styles.headerSubtitle}>{user.email}</Text>}
+          <View style={styles.headerLeft}>
+            {/* Jackal Adventures Logo */}
+            <Image
+              source={require('../../assets/branding/jackal-logo.png')}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+            {user && (
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerSubtitle}>{user.email}</Text>
+              </View>
+            )}
           </View>
           <TouchableOpacity
             style={styles.logoutButton}
@@ -493,40 +505,25 @@ export function DashboardScreen() {
       >
         {/* Filter Section */}
         <View style={styles.filterContainer}>
-          {/* Filter by Month - Two-tier dropdown */}
+          {/* Filter by Month - Single dropdown with All Months option */}
           <View style={styles.pickerWrapper}>
             <Text style={styles.pickerLabel}>Filter by Month</Text>
             <View style={styles.pickerContainer}>
               <Picker
-                selectedValue={filterMode}
-                onValueChange={handleFilterModeChange}
+                selectedValue={dashboardMonthFilter}
+                onValueChange={handleMonthChange}
                 style={styles.picker}
                 dropdownIconColor={COLORS.textMuted}
               >
-                <Picker.Item label="All Time" value="all-time" />
-                <Picker.Item label="Per Month" value="per-month" />
+                {MONTHS.map((month) => (
+                  <Picker.Item
+                    key={String(month.value)}
+                    label={month.label}
+                    value={month.value}
+                  />
+                ))}
               </Picker>
             </View>
-
-            {/* Secondary month selector - only shown when Per Month is selected */}
-            {filterMode === 'per-month' && (
-              <View style={[styles.pickerContainer, styles.secondaryPicker]}>
-                <Picker
-                  selectedValue={dashboardMonthFilter}
-                  onValueChange={handleMonthChange}
-                  style={styles.picker}
-                  dropdownIconColor={COLORS.textMuted}
-                >
-                  {MONTHS.filter(m => m.value !== 'all').map((month) => (
-                    <Picker.Item
-                      key={String(month.value)}
-                      label={month.label}
-                      value={month.value}
-                    />
-                  ))}
-                </Picker>
-              </View>
-            )}
           </View>
 
           {/* Currency Picker */}
@@ -549,6 +546,11 @@ export function DashboardScreen() {
               </Picker>
             </View>
           </View>
+        </View>
+
+        {/* Filter Status Display */}
+        <View style={styles.filterStatusContainer}>
+          <Text style={styles.filterStatusText}>{filterDisplayText}</Text>
         </View>
 
         {/* KPI Cards - 2x2 Grid */}
@@ -692,13 +694,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerLogo: {
+    width: 40,
+    height: 40,
+  },
+  headerTextContainer: {
+    flexDirection: 'column',
+  },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.text,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textMuted,
     marginTop: 2,
   },
@@ -726,7 +740,7 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   pickerWrapper: {
     flex: 1,
@@ -746,15 +760,25 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     overflow: 'hidden',
   },
-  secondaryPicker: {
-    marginTop: 8,
-    borderColor: COLORS.primary,
-    borderWidth: 2,
-  },
   picker: {
     height: 48,
     color: COLORS.text,
     backgroundColor: 'transparent',
+  },
+  filterStatusContainer: {
+    backgroundColor: COLORS.primary + '15', // 15 = 8.5% opacity
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginBottom: 16,
+  },
+  filterStatusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.primary,
+    letterSpacing: 0.3,
   },
   kpiGrid: {
     marginBottom: 16,

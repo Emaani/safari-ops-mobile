@@ -18,6 +18,7 @@ import {
   addNotificationResponseListener,
   setBadgeCount,
 } from './src/services/notificationService';
+import { initializeSDK } from './src/sdk-init';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -30,6 +31,16 @@ const Stack = createStackNavigator();
  * Shows tab navigation when user is authenticated.
  */
 export default function App() {
+  useEffect(() => {
+    initializeSDK()
+      .then(() => {
+        console.log('SDK initialized successfully');
+      })
+      .catch((error) => {
+        console.error('SDK initialization failed:', error);
+      });
+  }, []);
+
   return (
     <AuthProvider>
       <StatusBar style="auto" />

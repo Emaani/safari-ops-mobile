@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Safari Ops Mobile",
+    "name": "Jackal Adventures",
     "slug": "safari-ops-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,13 +15,15 @@
     "notification": {
       "color": "#3b82f6",
       "androidMode": "default",
-      "androidCollapsedTitle": "Safari Ops"
+      "androidCollapsedTitle": "Jackal Adventures"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jackalwild.safariops",
+      "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -29,7 +31,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.jackalwild.safariops",
+      "package": "com.jackalwild.jackaladventures",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
@@ -51,9 +53,11 @@
       ]
     ],
     "extra": {
+      "__comment": "Run 'eas init' to generate and populate the EAS projectId here automatically",
       "eas": {
-        "projectId": "your-expo-project-id"
+        "projectId": "e5636e2d-1c32-44b8-b5ec-0d03b65d0f5c"
       }
-    }
+    },
+    "owner": "jackal-adventures"
   }
 }
