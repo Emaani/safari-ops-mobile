@@ -55,8 +55,22 @@ export async function registerForPushNotifications(): Promise<string | null> {
     console.log('[PushNotifications] Permissions granted, getting push token...');
 
     // Get the Expo push token
+    // Project ID is loaded from environment variable or app.json
+    const projectId = process.env.EXPO_PUBLIC_PROJECT_ID;
+
+    if (!projectId || projectId === 'your-expo-project-id') {
+      console.warn(
+        '[PushNotifications] EXPO_PUBLIC_PROJECT_ID not configured.\n' +
+        'To enable push notifications:\n' +
+        '1. Create a project at https://expo.dev\n' +
+        '2. Add your project ID to .env as EXPO_PUBLIC_PROJECT_ID\n' +
+        '3. Update app.json extra.eas.projectId'
+      );
+      return null;
+    }
+
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'your-expo-project-id', // TODO: Replace with actual Expo project ID
+      projectId,
     });
 
     const token = tokenData.data;

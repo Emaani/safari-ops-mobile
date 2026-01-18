@@ -41,6 +41,17 @@ const STATUS_FILTERS: { label: string; value: BookingStatus | 'all' }[] = [
   { label: 'Pending', value: 'Pending' },
 ];
 
+type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc' | 'client-asc' | 'client-desc';
+
+const SORT_OPTIONS: { label: string; value: SortOption }[] = [
+  { label: 'Newest First', value: 'date-desc' },
+  { label: 'Oldest First', value: 'date-asc' },
+  { label: 'Amount (High-Low)', value: 'amount-desc' },
+  { label: 'Amount (Low-High)', value: 'amount-asc' },
+  { label: 'Client (A-Z)', value: 'client-asc' },
+  { label: 'Client (Z-A)', value: 'client-desc' },
+];
+
 // ============================================================================
 // ICON COMPONENTS
 // ============================================================================
@@ -61,6 +72,26 @@ function CalendarIcon({ size = 20, color = COLORS.purple }: { size?: number; col
       <Path d="M16 2v4" />
       <Path d="M8 2v4" />
       <Path d="M3 10h18" />
+    </Svg>
+  );
+}
+
+function SortIcon({ size = 20, color = COLORS.textMuted }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
+      <Path d="M11 5h10" />
+      <Path d="M11 9h7" />
+      <Path d="M11 13h4" />
+      <Path d="M3 17l3 3 3-3" />
+      <Path d="M6 18V4" />
+    </Svg>
+  );
+}
+
+function ChevronDownIcon({ size = 16, color = COLORS.textMuted }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
+      <Path d="M6 9l6 6 6-6" />
     </Svg>
   );
 }
@@ -136,6 +167,8 @@ export function BookingsScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
+  const [sortOption, setSortOption] = useState<SortOption>('date-desc');
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -165,7 +198,7 @@ export function BookingsScreen() {
   }, [bookings]);
 
   const filteredBookings = useMemo(() => {
-    let result = bookings;
+    let result = [...bookings];
 
     // Apply status filter
     if (statusFilter !== 'all') {
@@ -182,10 +215,28 @@ export function BookingsScreen() {
       );
     }
 
-    console.log(`[BookingsScreen] Filtered ${result.length} bookings from ${bookings.length}`);
+    // Apply sorting
+    result.sort((a, b) => {
+      switch (sortOption) {
+        case 'date-desc':
+          return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+        case 'date-asc':
+          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+        case 'amount-desc':
+          return (b.total_amount || b.total_cost || 0) - (a.total_amount || a.total_cost || 0);
+        case 'amount-asc':
+          return (a.total_amount || a.total_cost || 0) - (b.total_amount || b.total_cost || 0);
+        case 'client-asc':
+          return (a.client?.company_name || '').localeCompare(b.client?.company_name || '');
+        case 'client-desc':
+          return (b.client?.company_name || '').localeCompare(a.client?.company_name || '');
+        default:
+          return 0;
+      }
+    });
 
     return result;
-  }, [bookings, statusFilter, searchQuery]);
+  }, [bookings, statusFilter, searchQuery, sortOption]);
 
   // ========================================================================
   // CALLBACKS
@@ -300,10 +351,50 @@ export function BookingsScreen() {
         />
       </View>
 
-      {/* Bookings List Header */}
-      <Text style={styles.listHeader}>
-        Bookings ({filteredBookings.length})
-      </Text>
+      {/* Bookings List Header with Sort */}
+      <View style={styles.listHeaderRow}>
+        <Text style={styles.listHeader}>
+          Bookings ({filteredBookings.length})
+        </Text>
+        <TouchableOpacity
+          style={styles.sortButton}
+          onPress={() => setShowSortMenu(!showSortMenu)}
+        >
+          <SortIcon size={18} color={COLORS.primary} />
+          <Text style={styles.sortButtonText}>
+            {SORT_OPTIONS.filter(o => o.value === sortOption)[0]?.label || 'Sort'}
+          </Text>
+          <ChevronDownIcon size={14} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Sort Menu Dropdown */}
+      {showSortMenu && (
+        <View style={styles.sortMenu}>
+          {SORT_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.sortMenuItem,
+                sortOption === option.value && styles.sortMenuItemActive,
+              ]}
+              onPress={() => {
+                setSortOption(option.value);
+                setShowSortMenu(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.sortMenuItemText,
+                  sortOption === option.value && styles.sortMenuItemTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </>
   );
 
@@ -323,10 +414,21 @@ export function BookingsScreen() {
     </View>
   );
 
+  // Added skeleton loader for smoother loading experience
+  function SkeletonLoader() {
+    return (
+      <View style={styles.skeletonContainer}>
+        {[...Array(5)].map((_, index) => (
+          <View key={index} style={styles.skeletonCard} />
+        ))}
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Loading Overlay */}
-      {loading && !refreshing && <LoadingOverlay />}
+      {/* Skeleton Loader */}
+      {loading && !refreshing && <SkeletonLoader />}
 
       {/* Header */}
       <View style={styles.header}>
@@ -460,12 +562,62 @@ const styles = StyleSheet.create({
   filterPillTextActive: {
     color: '#ffffff',
   },
+  listHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 8,
+  },
   listHeader: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.text,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    gap: 6,
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+  sortMenu: {
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     marginBottom: 12,
-    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sortMenuItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  sortMenuItemActive: {
+    backgroundColor: '#eff6ff',
+  },
+  sortMenuItemText: {
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  sortMenuItemTextActive: {
+    color: COLORS.primary,
+    fontWeight: '600',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -535,6 +687,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textMuted,
     textAlign: 'center',
+  },
+  skeletonContainer: {
+    padding: 16,
+  },
+  skeletonCard: {
+    height: 80,
+    backgroundColor: COLORS.border,
+    borderRadius: 8,
+    marginBottom: 12,
   },
 });
 
