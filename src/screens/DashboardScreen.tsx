@@ -74,6 +74,17 @@ const CURRENCIES: { label: string; value: Currency }[] = [
   { label: 'KES', value: 'KES' },
 ];
 
+// Generate years from 2020 to current year + 1
+const generateYears = (): { label: string; value: number }[] => {
+  const thisYear = new Date().getFullYear();
+  const years: { label: string; value: number }[] = [];
+  for (let year = thisYear + 1; year >= 2020; year--) {
+    years.push({ label: String(year), value: year });
+  }
+  return years;
+};
+const YEARS = generateYears();
+
 const COLORS = {
   primary: '#3b82f6',
   success: '#10b981',
@@ -319,6 +330,10 @@ export function DashboardScreen() {
     setCurrency(value);
   }, []);
 
+  const handleYearChange = useCallback((value: number) => {
+    setDashboardFilterYear(value);
+  }, []);
+
   const handleLogout = useCallback(async () => {
     Alert.alert(
       'Logout',
@@ -524,6 +539,47 @@ export function DashboardScreen() {
                 ))}
               </Picker>
             </View>
+<<<<<<< HEAD
+=======
+
+            {/* Secondary month and year selectors - only shown when Per Month is selected */}
+            {filterMode === 'per-month' && (
+              <View style={styles.monthYearRow}>
+                <View style={[styles.pickerContainer, styles.secondaryPicker, styles.monthPicker]}>
+                  <Picker
+                    selectedValue={dashboardMonthFilter}
+                    onValueChange={handleMonthChange}
+                    style={styles.picker}
+                    dropdownIconColor={COLORS.textMuted}
+                  >
+                    {MONTHS.filter(m => m.value !== 'all').map((month) => (
+                      <Picker.Item
+                        key={String(month.value)}
+                        label={month.label}
+                        value={month.value}
+                      />
+                    ))}
+                  </Picker>
+                </View>
+                <View style={[styles.pickerContainer, styles.secondaryPicker, styles.yearPicker]}>
+                  <Picker
+                    selectedValue={dashboardFilterYear}
+                    onValueChange={handleYearChange}
+                    style={styles.picker}
+                    dropdownIconColor={COLORS.textMuted}
+                  >
+                    {YEARS.map((year) => (
+                      <Picker.Item
+                        key={year.value}
+                        label={year.label}
+                        value={year.value}
+                      />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
+            )}
+>>>>>>> 8d0edfcad75599c0b99cbaf583b5a3805cdce6f1
           </View>
 
           {/* Currency Picker */}
@@ -760,6 +816,27 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     overflow: 'hidden',
   },
+<<<<<<< HEAD
+=======
+  secondaryPicker: {
+    marginTop: 8,
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+  },
+  monthYearRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  monthPicker: {
+    flex: 2,
+    marginTop: 0,
+  },
+  yearPicker: {
+    flex: 1,
+    marginTop: 0,
+  },
+>>>>>>> 8d0edfcad75599c0b99cbaf583b5a3805cdce6f1
   picker: {
     height: 48,
     color: COLORS.text,

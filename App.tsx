@@ -4,10 +4,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import Svg, { Rect, Path } from 'react-native-svg';
+import Svg, { Rect, Path, Circle } from 'react-native-svg';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import DashboardScreen from './src/screens/DashboardScreen';
+import BookingsScreen from './src/screens/BookingsScreen';
+import FleetScreen from './src/screens/FleetScreen';
+import FinanceScreen from './src/screens/FinanceScreen';
+import MoreScreen from './src/screens/MoreScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import { useNotifications } from './src/hooks/useNotifications';
@@ -174,7 +178,7 @@ function MainTabNavigator() {
           paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
         },
       }}
@@ -189,12 +193,46 @@ function MainTabNavigator() {
           ),
         }}
       />
-      {/* Future tabs can be added here:
-      <Tab.Screen name="Bookings" component={BookingsScreen} />
-      <Tab.Screen name="Fleet" component={FleetScreen} />
-      <Tab.Screen name="Finance" component={FinanceScreen} />
-      <Tab.Screen name="More" component={MoreScreen} />
-      */}
+      <Tab.Screen
+        name="Bookings"
+        component={BookingsScreen}
+        options={{
+          tabBarLabel: 'Bookings',
+          tabBarIcon: ({ color, size }) => (
+            <BookingsIcon color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Fleet"
+        component={FleetScreen}
+        options={{
+          tabBarLabel: 'Fleet',
+          tabBarIcon: ({ color, size }) => (
+            <FleetIcon color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Finance"
+        component={FinanceScreen}
+        options={{
+          tabBarLabel: 'Finance',
+          tabBarIcon: ({ color, size }) => (
+            <FinanceIcon color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="More"
+        component={MoreScreen}
+        options={{
+          tabBarLabel: 'More',
+          tabBarIcon: ({ color, size }) => (
+            <MoreIcon color={color} size={size} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -236,6 +274,51 @@ function DashboardIcon({ color, size }: { color: string; size: number }) {
       <Rect x="14" y="3" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
       <Rect x="3" y="14" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
       <Rect x="14" y="14" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
+    </Svg>
+  );
+}
+
+// Bookings tab icon (calendar)
+function BookingsIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <Path d="M16 2v4" />
+      <Path d="M8 2v4" />
+      <Path d="M3 10h18" />
+    </Svg>
+  );
+}
+
+// Fleet tab icon (truck)
+function FleetIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M1 3h15v13H1z" />
+      <Path d="M16 8h4l3 3v5h-7V8z" />
+      <Circle cx="5.5" cy="18.5" r="2.5" />
+      <Circle cx="18.5" cy="18.5" r="2.5" />
+    </Svg>
+  );
+}
+
+// Finance tab icon (dollar sign)
+function FinanceIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 2v20" />
+      <Path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </Svg>
+  );
+}
+
+// More tab icon (menu dots)
+function MoreIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="1" fill={color} />
+      <Circle cx="12" cy="5" r="1" fill={color} />
+      <Circle cx="12" cy="19" r="1" fill={color} />
     </Svg>
   );
 }
