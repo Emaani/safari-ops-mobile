@@ -1,6 +1,8 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { devLog } from '../lib/devLog';
+import { logRealtimeStatus } from '../lib/realtimeStatus';
 
 const DEBOUNCE_MS = 500;
 
@@ -11,6 +13,7 @@ const DEBOUNCE_MS = 500;
 export function useSafariRealtimeSync(onUpdate: () => void) {
   const channelsRef = useRef<RealtimeChannel[]>([]);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isCleaningUpRef = useRef(false);
 
   // Debounced update handler
   const debouncedUpdate = useCallback(() => {
@@ -19,13 +22,14 @@ export function useSafariRealtimeSync(onUpdate: () => void) {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      console.log('[Safari Realtime] Triggering data refetch...');
+      devLog('[Safari Realtime] Triggering data refetch...');
       onUpdate();
     }, DEBOUNCE_MS);
   }, [onUpdate]);
 
   useEffect(() => {
-    console.log('[Safari Realtime] Initializing subscriptions...');
+    isCleaningUpRef.current = false;
+    devLog('[Safari Realtime] Initializing subscriptions...');
 
     const tables = ['bookings', 'vehicles', 'clients'];
 
@@ -46,7 +50,7 @@ export function useSafariRealtimeSync(onUpdate: () => void) {
           }
         )
         .subscribe((status) => {
-          console.log(`[Safari Realtime] ${table} subscription status:`, status);
+          logRealtimeStatus('Safari Realtime', table, status, isCleaningUpRef.current);
         });
 
       return channel;
@@ -56,7 +60,8 @@ export function useSafariRealtimeSync(onUpdate: () => void) {
 
     // Cleanup on unmount
     return () => {
-      console.log('[Safari Realtime] Cleaning up subscriptions...');
+      isCleaningUpRef.current = true;
+      devLog('[Safari Realtime] Cleaning up subscriptions...');
 
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

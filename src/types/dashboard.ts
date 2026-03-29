@@ -92,6 +92,8 @@ export interface CashRequisition {
   date_completed?: string;
   created_at: string;
   amount_usd?: number;
+  description?: string;
+  requested_by?: string;
 }
 
 export interface SafariBooking {

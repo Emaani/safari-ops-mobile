@@ -1,4 +1,14 @@
 import SwiftUI
+import Foundation
+
+let fileManager = FileManager.default
+let applicationSupportDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+
+do {
+    try fileManager.createDirectory(at: applicationSupportDirectory, withIntermediateDirectories: true, attributes: nil)
+} catch {
+    print("Failed to create Application Support directory: \(error)")
+}
 
 struct DashboardView: View {
     @State private var selectedMonth: Int? = Calendar.current.component(.month, from: Date()) - 1

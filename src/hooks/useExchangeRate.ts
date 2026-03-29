@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { devLog } from '../lib/devLog';
 import type { ExchangeRate, Currency } from '../types/dashboard';
 
 // Default fallback rates (only used if database fetch fails)
@@ -27,7 +28,7 @@ export function useExchangeRate() {
       setLoading(true);
       setError(null);
 
-      console.log('[ExchangeRate] Fetching live exchange rates from database...');
+      devLog('[ExchangeRate] Fetching live exchange rates from database...');
 
       // Fetch all exchange rates - select all columns to handle different schema versions
       const { data, error: fetchError } = await supabase
@@ -77,20 +78,20 @@ export function useExchangeRate() {
       // Apply fetched rates
       if (latestRates.has('UGX')) {
         rates.UGX = latestRates.get('UGX')!;
-        console.log(`[ExchangeRate] UGX rate: ${rates.UGX} (from database)`);
+        devLog(`[ExchangeRate] UGX rate: ${rates.UGX} (from database)`);
       } else {
-        console.warn(`[ExchangeRate] UGX rate not found, using default: ${rates.UGX}`);
+        devLog(`[ExchangeRate] UGX rate not found, using default: ${rates.UGX}`);
       }
 
       if (latestRates.has('KES')) {
         rates.KES = latestRates.get('KES')!;
-        console.log(`[ExchangeRate] KES rate: ${rates.KES} (from database)`);
+        devLog(`[ExchangeRate] KES rate: ${rates.KES} (from database)`);
       } else {
-        console.warn(`[ExchangeRate] KES rate not found, using default: ${rates.KES}`);
+        devLog(`[ExchangeRate] KES rate not found, using default: ${rates.KES}`);
       }
 
       setExchangeRates(rates);
-      console.log('[ExchangeRate] Exchange rates updated successfully:', rates);
+      devLog('[ExchangeRate] Exchange rates updated successfully:', rates);
     } catch (err) {
       console.error('[ExchangeRate] Exchange rate fetch error:', err);
       setError(err as Error);
@@ -104,7 +105,7 @@ export function useExchangeRate() {
   useEffect(() => {
     fetchExchangeRate();
 
-    console.log('[ExchangeRate] Setting up real-time subscription...');
+    devLog('[ExchangeRate] Setting up real-time subscription...');
     const channel = supabase
       .channel('exchange-rates-changes')
       .on(
@@ -115,7 +116,7 @@ export function useExchangeRate() {
           table: 'exchange_rates',
         },
         () => {
-          console.log('[ExchangeRate] Exchange rate updated in database, refetching...');
+          devLog('[ExchangeRate] Exchange rate updated in database, refetching...');
           fetchExchangeRate();
         }
       )
@@ -123,12 +124,12 @@ export function useExchangeRate() {
 
     // Refresh hourly as backup
     const interval = setInterval(() => {
-      console.log('[ExchangeRate] Hourly refresh triggered');
+      devLog('[ExchangeRate] Hourly refresh triggered');
       fetchExchangeRate();
     }, REFRESH_INTERVAL);
 
     return () => {
-      console.log('[ExchangeRate] Cleaning up subscription and interval');
+      devLog('[ExchangeRate] Cleaning up subscription and interval');
       supabase.removeChannel(channel);
       clearInterval(interval);
     };

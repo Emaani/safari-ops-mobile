@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { devLog } from '../lib/devLog';
 import type {
   Notification,
   NotificationFilters,
@@ -75,7 +76,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
    */
   const fetchNotifications = useCallback(async () => {
     try {
-      console.log('[Notifications] Fetching notifications for user:', userId);
+      devLog('[Notifications] Fetching notifications for user:', userId);
 
       let query = supabase
         .from('notifications')
@@ -105,7 +106,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       if (fetchError) {
         // Check if table doesn't exist yet (notifications system not set up)
         if (fetchError.message?.includes('does not exist') || fetchError.code === '42P01') {
-          console.warn('[Notifications] Notifications table does not exist yet. Run database migration to enable notifications.');
+          devLog('[Notifications] Notifications table does not exist yet. Run database migration to enable notifications.');
           setNotifications([]);
           setError(null);
           setLoading(false);
@@ -116,7 +117,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       }
 
       const notifs = (data || []) as Notification[];
-      console.log(`[Notifications] Fetched ${notifs.length} notifications`);
+      devLog(`[Notifications] Fetched ${notifs.length} notifications`);
       setNotifications(notifs);
       setError(null);
     } catch (err: any) {
@@ -132,7 +133,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
    */
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
-      console.log('[Notifications] Marking as read:', notificationId);
+      devLog('[Notifications] Marking as read:', notificationId);
 
       const { error: updateError } = await supabase
         .from('notifications')
@@ -157,7 +158,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
         )
       );
 
-      console.log('[Notifications] Marked as read successfully');
+      devLog('[Notifications] Marked as read successfully');
     } catch (err: any) {
       console.error('[Notifications] Mark as read failed:', err);
       throw err;
@@ -169,7 +170,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
    */
   const markAllAsRead = useCallback(async () => {
     try {
-      console.log('[Notifications] Marking all as read');
+      devLog('[Notifications] Marking all as read');
 
       const { error: updateError } = await supabase
         .from('notifications')
@@ -194,7 +195,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
         )
       );
 
-      console.log('[Notifications] All marked as read successfully');
+      devLog('[Notifications] All marked as read successfully');
     } catch (err: any) {
       console.error('[Notifications] Mark all as read failed:', err);
       throw err;
@@ -206,7 +207,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
    */
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
-      console.log('[Notifications] Deleting notification:', notificationId);
+      devLog('[Notifications] Deleting notification:', notificationId);
 
       const { error: deleteError } = await supabase
         .from('notifications')
@@ -222,7 +223,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       // Update local state
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
 
-      console.log('[Notifications] Deleted successfully');
+      devLog('[Notifications] Deleted successfully');
     } catch (err: any) {
       console.error('[Notifications] Delete failed:', err);
       throw err;
@@ -234,7 +235,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
    */
   useEffect(() => {
     if (!userId) {
-      console.log('[Notifications] No user ID, skipping fetch');
+      devLog('[Notifications] No user ID, skipping fetch');
       return;
     }
 
@@ -242,7 +243,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
     fetchNotifications();
 
     // Set up real-time subscription
-    console.log('[Notifications] Setting up real-time subscription');
+    devLog('[Notifications] Setting up real-time subscription');
 
     const channel = supabase
       .channel('notifications-changes')
@@ -255,7 +256,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          console.log('[Notifications] Real-time update received:', payload.eventType);
+          devLog('[Notifications] Real-time update received:', payload.eventType);
 
           if (payload.eventType === 'INSERT') {
             const newNotif = payload.new as Notification;
@@ -277,7 +278,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
 
     // Cleanup
     return () => {
-      console.log('[Notifications] Cleaning up subscription');
+      devLog('[Notifications] Cleaning up subscription');
       if (subscriptionRef.current) {
         supabase.removeChannel(subscriptionRef.current);
       }

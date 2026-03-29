@@ -1,6 +1,8 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { devLog } from '../lib/devLog';
+import { logRealtimeStatus } from '../lib/realtimeStatus';
 
 const DEBOUNCE_MS = 500;
 
@@ -11,6 +13,7 @@ const DEBOUNCE_MS = 500;
 export function useFinanceRealtimeSync(onUpdate: () => void) {
   const channelsRef = useRef<RealtimeChannel[]>([]);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isCleaningUpRef = useRef(false);
 
   // Debounced update handler
   const debouncedUpdate = useCallback(() => {
@@ -19,13 +22,14 @@ export function useFinanceRealtimeSync(onUpdate: () => void) {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      console.log('[Finance Realtime] Triggering data refetch...');
+      devLog('[Finance Realtime] Triggering data refetch...');
       onUpdate();
     }, DEBOUNCE_MS);
   }, [onUpdate]);
 
   useEffect(() => {
-    console.log('[Finance Realtime] Initializing subscriptions...');
+    isCleaningUpRef.current = false;
+    devLog('[Finance Realtime] Initializing subscriptions...');
 
     const tables = ['financial_transactions', 'cash_requisitions', 'exchange_rates'];
 
@@ -46,7 +50,7 @@ export function useFinanceRealtimeSync(onUpdate: () => void) {
           }
         )
         .subscribe((status) => {
-          console.log(`[Finance Realtime] ${table} subscription status:`, status);
+          logRealtimeStatus('Finance Realtime', table, status, isCleaningUpRef.current);
         });
 
       return channel;
@@ -56,7 +60,8 @@ export function useFinanceRealtimeSync(onUpdate: () => void) {
 
     // Cleanup on unmount
     return () => {
-      console.log('[Finance Realtime] Cleaning up subscriptions...');
+      isCleaningUpRef.current = true;
+      devLog('[Finance Realtime] Cleaning up subscriptions...');
 
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

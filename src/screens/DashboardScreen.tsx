@@ -12,9 +12,9 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
+import { devLog } from '../lib/devLog';
 
 // Hooks
 import { useExchangeRate, getConversionRates } from '../hooks/useExchangeRate';
@@ -52,7 +52,7 @@ type MonthFilter = number | 'all';
 // CONSTANTS
 // ============================================================================
 
-const MONTHS = [
+const MONTHS: { label: string; value: MonthFilter }[] = [
   { label: 'All Months', value: 'all' },
   { label: 'January', value: 0 },
   { label: 'February', value: 1 },
@@ -86,16 +86,22 @@ const generateYears = (): { label: string; value: number }[] => {
 const YEARS = generateYears();
 
 const COLORS = {
-  primary: '#3b82f6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary: '#1f4d45',
+  primarySoft: '#dce8e3',
+  success: '#3d8f6a',
+  warning: '#b8883f',
+  danger: '#c96d4d',
+  purple: '#8366d7',
+  background: '#f6f2eb',
+  card: '#fffdf9',
+  cardAlt: '#efe6d8',
+  hero: '#171513',
+  heroMuted: '#b8ab95',
+  text: '#181512',
+  textMuted: '#7f7565',
+  border: '#e1d7c8',
+  gold: '#b78a43',
+  goldSoft: '#f2e5ca',
 };
 
 // ============================================================================
@@ -163,7 +169,45 @@ interface SectionHeaderProps {
 function SectionHeader({ title }: SectionHeaderProps) {
   return (
     <View style={styles.sectionHeader}>
+      <Text style={styles.sectionEyebrow}>Dashboard</Text>
       <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+}
+
+interface FilterChipProps {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
+function FilterChip({ label, selected, onPress }: FilterChipProps) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={[styles.filterChip, selected && styles.filterChipActive]}
+    >
+      <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function HeroStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.heroStat}>
+      <Text style={styles.heroStatLabel}>{label}</Text>
+      <Text style={styles.heroStatValue} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -219,12 +263,12 @@ export function DashboardScreen() {
   // Default to current month for better UX
   const [dashboardMonthFilter, setDashboardMonthFilter] = useState<MonthFilter>(() => {
     const currentMonth = new Date().getMonth();
-    console.log('[Dashboard] Initializing dashboardMonthFilter to current month:', currentMonth);
+    devLog('[Dashboard] Initializing dashboardMonthFilter to current month:', currentMonth);
     return currentMonth;
   });
   const [dashboardFilterYear, setDashboardFilterYear] = useState<number>(() => {
     const currentYear = new Date().getFullYear();
-    console.log('[Dashboard] Initializing dashboardFilterYear to current year:', currentYear);
+    devLog('[Dashboard] Initializing dashboardFilterYear to current year:', currentYear);
     return currentYear;
   });
   const [currency, setCurrency] = useState<Currency>('USD');
@@ -282,33 +326,71 @@ export function DashboardScreen() {
     dashboardFilterYear,
   });
 
+  const loading = dataLoading || exchangeRateLoading;
+
   // CRITICAL DEBUG: Log KPI values whenever they change
   React.useEffect(() => {
-    console.log('[Dashboard] ========== KPI VALUES ==========');
-    console.log('[Dashboard] Total Revenue:', calculations.kpis.totalRevenue);
-    console.log('[Dashboard] Total Expenses:', calculations.kpis.totalExpenses);
-    console.log('[Dashboard] Active Bookings:', calculations.kpis.activeBookings);
-    console.log('[Dashboard] Fleet Utilization:', calculations.kpis.fleetUtilization + '%');
-    console.log('[Dashboard] Revenue MTD:', calculations.kpis.revenueMTD);
-    console.log('[Dashboard] Revenue YTD:', calculations.kpis.revenueYTD);
-    console.log('[Dashboard] Confirmed Bookings:', calculations.kpis.confirmedBookings);
-    console.log('[Dashboard] Pending Bookings:', calculations.kpis.pendingBookings);
-    console.log('[Dashboard] Completed Bookings:', calculations.kpis.completedBookings);
-    console.log('[Dashboard] Outstanding Payments:', calculations.kpis.outstandingPaymentsTotal, '(' + calculations.kpis.outstandingPaymentsCount + ' bookings)');
-    console.log('[Dashboard] =====================================');
+    devLog('[Dashboard] ========== KPI VALUES ==========');
+    devLog('[Dashboard] Total Revenue:', calculations.kpis.totalRevenue);
+    devLog('[Dashboard] Total Expenses:', calculations.kpis.totalExpenses);
+    devLog('[Dashboard] Active Bookings:', calculations.kpis.activeBookings);
+    devLog('[Dashboard] Fleet Utilization:', calculations.kpis.fleetUtilization + '%');
+    devLog('[Dashboard] Revenue MTD:', calculations.kpis.revenueMTD);
+    devLog('[Dashboard] Revenue YTD:', calculations.kpis.revenueYTD);
+    devLog('[Dashboard] Confirmed Bookings:', calculations.kpis.confirmedBookings);
+    devLog('[Dashboard] Pending Bookings:', calculations.kpis.pendingBookings);
+    devLog('[Dashboard] Completed Bookings:', calculations.kpis.completedBookings);
+    devLog(
+      '[Dashboard] Outstanding Payments:',
+      calculations.kpis.outstandingPaymentsTotal,
+      '(' + calculations.kpis.outstandingPaymentsCount + ' bookings)'
+    );
+    devLog('[Dashboard] =====================================');
 
-    // CRITICAL: Log if KPIs are all zero (indicates data issue)
-    if (calculations.kpis.totalRevenue === 0 && calculations.kpis.totalExpenses === 0 && calculations.kpis.activeBookings === 0) {
+    const hasLoadedCollections =
+      !loading &&
+      !dataError &&
+      (vehicles.length > 0 ||
+        bookings.length > 0 ||
+        repairs.length > 0 ||
+        financialTransactions.length > 0 ||
+        cashRequisitions.length > 0 ||
+        safariBookings.length > 0);
+
+    if (
+      hasLoadedCollections &&
+      calculations.kpis.totalRevenue === 0 &&
+      calculations.kpis.totalExpenses === 0 &&
+      calculations.kpis.activeBookings === 0
+    ) {
       console.warn('[Dashboard] WARNING: All KPIs are zero! This suggests data is not being fetched or calculated correctly.');
-      console.warn('[Dashboard] Input data counts - Vehicles:', vehicles.length, 'Bookings:', bookings.length, 'Transactions:', financialTransactions.length, 'CRs:', cashRequisitions.length);
+      console.warn(
+        '[Dashboard] Input data counts - Vehicles:',
+        vehicles.length,
+        'Bookings:',
+        bookings.length,
+        'Transactions:',
+        financialTransactions.length,
+        'CRs:',
+        cashRequisitions.length
+      );
     }
-  }, [calculations.kpis, vehicles.length, bookings.length, financialTransactions.length, cashRequisitions.length]);
+  }, [
+    calculations.kpis,
+    loading,
+    dataError,
+    vehicles.length,
+    bookings.length,
+    repairs.length,
+    financialTransactions.length,
+    cashRequisitions.length,
+    safariBookings.length,
+  ]);
 
   // ========================================================================
   // DERIVED STATE
   // ========================================================================
 
-  const loading = dataLoading || exchangeRateLoading;
   const screenWidth = Dimensions.get('window').width;
 
   // ========================================================================
@@ -322,7 +404,10 @@ export function DashboardScreen() {
   }, [refetch]);
 
   const handleMonthChange = useCallback((value: MonthFilter) => {
-    console.log('[Dashboard] Month filter changed to:', value === 'all' ? 'All Months' : MONTHS.find(m => m.value === value)?.label);
+    devLog(
+      '[Dashboard] Month filter changed to:',
+      value === 'all' ? 'All Months' : MONTHS.find(m => m.value === value)?.label
+    );
     setDashboardMonthFilter(value);
   }, []);
 
@@ -482,24 +567,23 @@ export function DashboardScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            {/* Jackal Adventures Logo */}
             <Image
               source={require('../../assets/branding/jackal-logo.png')}
               style={styles.headerLogo}
               resizeMode="contain"
             />
-            {user && (
-              <View style={styles.headerTextContainer}>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>Operations snapshot</Text>
+              {user && (
                 <Text style={styles.headerSubtitle}>{user.email}</Text>
-              </View>
-            )}
+              )}
+            </View>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={handleLogout}
           >
-            <LogoutIcon size={20} color="#fff" />
-            <Text style={styles.logoutButtonText}>Logout</Text>
+            <LogoutIcon size={18} color={COLORS.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -518,95 +602,99 @@ export function DashboardScreen() {
           />
         }
       >
-        {/* Filter Section */}
-        <View style={styles.filterContainer}>
-          {/* Filter by Month - Single dropdown with All Months option */}
-          <View style={styles.pickerWrapper}>
-            <Text style={styles.pickerLabel}>Filter by Month</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={dashboardMonthFilter}
-                onValueChange={handleMonthChange}
-                style={styles.picker}
-                dropdownIconColor={COLORS.textMuted}
-              >
-                {MONTHS.map((month) => (
-                  <Picker.Item
-                    key={String(month.value)}
-                    label={month.label}
-                    value={month.value}
-                  />
-                ))}
-              </Picker>
+        <View style={styles.heroCard}>
+          <View style={styles.heroGlowLeft} />
+          <View style={styles.heroGlowRight} />
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroTextBlock}>
+              <Text style={styles.heroEyebrow}>Jackal Adventures</Text>
+              <Text style={styles.heroTitle}>
+                {dashboardMonthFilter === 'all'
+                  ? 'All months at a glance'
+                  : `${MONTHS.find((month) => month.value === dashboardMonthFilter)?.label} pulse`}
+              </Text>
+              <Text style={styles.heroSubtitle}>{filterDisplayText}</Text>
             </View>
-<<<<<<< HEAD
-=======
-
-            {/* Secondary month and year selectors - only shown when Per Month is selected */}
-            {filterMode === 'per-month' && (
-              <View style={styles.monthYearRow}>
-                <View style={[styles.pickerContainer, styles.secondaryPicker, styles.monthPicker]}>
-                  <Picker
-                    selectedValue={dashboardMonthFilter}
-                    onValueChange={handleMonthChange}
-                    style={styles.picker}
-                    dropdownIconColor={COLORS.textMuted}
-                  >
-                    {MONTHS.filter(m => m.value !== 'all').map((month) => (
-                      <Picker.Item
-                        key={String(month.value)}
-                        label={month.label}
-                        value={month.value}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-                <View style={[styles.pickerContainer, styles.secondaryPicker, styles.yearPicker]}>
-                  <Picker
-                    selectedValue={dashboardFilterYear}
-                    onValueChange={handleYearChange}
-                    style={styles.picker}
-                    dropdownIconColor={COLORS.textMuted}
-                  >
-                    {YEARS.map((year) => (
-                      <Picker.Item
-                        key={year.value}
-                        label={year.label}
-                        value={year.value}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
-            )}
->>>>>>> 8d0edfcad75599c0b99cbaf583b5a3805cdce6f1
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{currency}</Text>
+            </View>
           </View>
 
-          {/* Currency Picker */}
-          <View style={styles.pickerWrapper}>
-            <Text style={styles.pickerLabel}>Currency</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={currency}
-                onValueChange={handleCurrencyChange}
-                style={styles.picker}
-                dropdownIconColor={COLORS.textMuted}
-              >
-                {CURRENCIES.map((curr) => (
-                  <Picker.Item
-                    key={curr.value}
-                    label={curr.label}
-                    value={curr.value}
-                  />
-                ))}
-              </Picker>
-            </View>
+          <Text style={styles.heroValue}>{formatCurrency(kpiData.totalRevenue, currency)}</Text>
+          <Text style={styles.heroCaption}>Revenue in focus for the selected period</Text>
+
+          <View style={styles.heroStatsRow}>
+            <HeroStat
+              label="Costs"
+              value={formatCurrency(kpiData.totalExpenses, currency)}
+            />
+            <HeroStat
+              label="Due"
+              value={formatCurrency(kpiData.outstandingPaymentsTotal, currency)}
+            />
+            <HeroStat
+              label="Fleet"
+              value={`${kpiData.fleetUtilization}%`}
+            />
           </View>
         </View>
 
-        {/* Filter Status Display */}
-        <View style={styles.filterStatusContainer}>
-          <Text style={styles.filterStatusText}>{filterDisplayText}</Text>
+        <View style={styles.controlsCard}>
+          <View style={styles.controlsHeader}>
+            <View>
+              <Text style={styles.controlsEyebrow}>Filters</Text>
+              <Text style={styles.controlsTitle}>Refine the snapshot</Text>
+            </View>
+            <Text style={styles.controlsHint}>Tap to switch</Text>
+          </View>
+
+          <Text style={styles.filterLabel}>Month</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {MONTHS.map((month) => (
+              <FilterChip
+                key={String(month.value)}
+                label={month.label}
+                selected={dashboardMonthFilter === month.value}
+                onPress={() => handleMonthChange(month.value)}
+              />
+            ))}
+          </ScrollView>
+
+          <Text style={styles.filterLabel}>Year</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {YEARS.map((year) => (
+              <FilterChip
+                key={year.label}
+                label={year.label}
+                selected={dashboardFilterYear === year.value}
+                onPress={() => handleYearChange(year.value)}
+              />
+            ))}
+          </ScrollView>
+
+          <Text style={styles.filterLabel}>Currency</Text>
+          <View style={styles.currencyRow}>
+            {CURRENCIES.map((curr) => (
+              <FilterChip
+                key={curr.value}
+                label={curr.label}
+                selected={currency === curr.value}
+                onPress={() => handleCurrencyChange(curr.value)}
+              />
+            ))}
+          </View>
+
+          <View style={styles.filterStatusContainer}>
+            <Text style={styles.filterStatusText}>{filterDisplayText}</Text>
+          </View>
         </View>
 
         {/* KPI Cards - 2x2 Grid */}
@@ -734,16 +822,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    backgroundColor: COLORS.card,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -753,112 +835,254 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   headerLogo: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
   },
   headerTextContainer: {
     flexDirection: 'column',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
     color: COLORS.text,
+    letterSpacing: -0.8,
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: 4,
   },
   logoutButton: {
-    flexDirection: 'row',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
-    backgroundColor: COLORS.danger,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    gap: 6,
-  },
-  logoutButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    justifyContent: 'center',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 110,
   },
-  filterContainer: {
+  heroCard: {
+    backgroundColor: COLORS.hero,
+    borderRadius: 28,
+    padding: 24,
+    overflow: 'hidden',
+    marginBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 9,
+  },
+  heroGlowLeft: {
+    position: 'absolute',
+    top: -24,
+    left: -10,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#264a42',
+    opacity: 0.36,
+  },
+  heroGlowRight: {
+    position: 'absolute',
+    right: -34,
+    bottom: -18,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: '#6c5228',
+    opacity: 0.22,
+  },
+  heroTopRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 26,
     gap: 12,
-    marginBottom: 12,
   },
-  pickerWrapper: {
+  heroTextBlock: {
     flex: 1,
   },
-  pickerLabel: {
+  heroEyebrow: {
     fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.textMuted,
-    marginBottom: 4,
+    fontWeight: '600',
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: COLORS.heroMuted,
+    marginBottom: 10,
   },
-  pickerContainer: {
+  heroTitle: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '700',
+    letterSpacing: -1.2,
+    color: '#fffaf3',
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#d3c7b5',
+  },
+  heroBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  heroBadgeText: {
+    color: '#fff8ef',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  heroValue: {
+    fontSize: 42,
+    lineHeight: 46,
+    fontWeight: '800',
+    letterSpacing: -1.8,
+    color: '#fffaf3',
+    marginBottom: 8,
+  },
+  heroCaption: {
+    fontSize: 14,
+    color: '#cbbca7',
+    marginBottom: 18,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  heroStat: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  heroStatLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b8ab95',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  heroStatValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fffaf3',
+  },
+  controlsCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 8,
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: 'hidden',
+    marginBottom: 18,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    elevation: 2,
   },
-<<<<<<< HEAD
-=======
-  secondaryPicker: {
-    marginTop: 8,
-    borderColor: COLORS.primary,
-    borderWidth: 2,
-  },
-  monthYearRow: {
+  controlsHeader: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 16,
   },
-  monthPicker: {
-    flex: 2,
-    marginTop: 0,
+  controlsEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
   },
-  yearPicker: {
-    flex: 1,
-    marginTop: 0,
-  },
->>>>>>> 8d0edfcad75599c0b99cbaf583b5a3805cdce6f1
-  picker: {
-    height: 48,
+  controlsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.8,
     color: COLORS.text,
-    backgroundColor: 'transparent',
+  },
+  controlsHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: COLORS.textMuted,
+    marginBottom: 10,
+  },
+  chipRow: {
+    paddingBottom: 10,
+    gap: 10,
+  },
+  currencyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  filterChip: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.cardAlt,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.text,
+    borderColor: COLORS.text,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  filterChipTextActive: {
+    color: '#fffdf7',
   },
   filterStatusContainer: {
-    backgroundColor: COLORS.primary + '15', // 15 = 8.5% opacity
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginBottom: 16,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: COLORS.primarySoft,
   },
   filterStatusText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     color: COLORS.primary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   kpiGrid: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   kpiRow: {
     flexDirection: 'row',
@@ -869,18 +1093,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   sectionHeader: {
     marginBottom: 12,
   },
+  sectionEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    color: COLORS.gold,
+    marginBottom: 4,
+  },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: COLORS.text,
+    letterSpacing: -0.7,
   },
   bottomSpacer: {
-    height: 32,
+    height: 16,
   },
   // Loading overlay styles
   loadingOverlay: {

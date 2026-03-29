@@ -8,6 +8,7 @@ import {
   AuthSession,
   AuthError,
 } from '../services/authService';
+import { devLog } from '../lib/devLog';
 
 /**
  * Authentication Context
@@ -20,6 +21,7 @@ interface AuthContextType {
   user: User | null;
   session: AuthSession | null;
   loading: boolean;
+  authOrigin: 'restored' | 'password' | 'signed_out' | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
@@ -35,20 +37,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authOrigin, setAuthOrigin] = useState<AuthContextType['authOrigin']>(null);
 
   // Initialize auth state on mount
   useEffect(() => {
-    console.log('[AuthContext] Initializing auth state');
+    devLog('[AuthContext] Initializing auth state');
 
     // Check for existing session
     getCurrentSession()
       .then((currentSession) => {
         if (currentSession) {
-          console.log('[AuthContext] Restored session:', currentSession.user.email);
+          devLog('[AuthContext] Restored session:', currentSession.user.email);
           setUser(currentSession.user);
           setSession(currentSession);
+          setAuthOrigin('restored');
         } else {
-          console.log('[AuthContext] No existing session');
+          devLog('[AuthContext] No existing session');
+          setAuthOrigin('signed_out');
         }
       })
       .catch((error) => {
@@ -60,7 +65,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Listen for auth state changes
     const unsubscribe = onAuthStateChange((authSession) => {
-      console.log('[AuthContext] Auth state changed');
+      devLog('[AuthContext] Auth state changed');
 
       if (authSession) {
         setUser(authSession.user);
@@ -68,6 +73,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         setUser(null);
         setSession(null);
+        setAuthOrigin('signed_out');
       }
     });
 
@@ -78,7 +84,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Sign in function
   const signIn = async (email: string, password: string): Promise<void> => {
-    console.log('[AuthContext] Sign in requested for:', email);
+    devLog('[AuthContext] Sign in requested for:', email);
 
     try {
       setLoading(true);
@@ -87,8 +93,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setUser(authSession.user);
       setSession(authSession);
+      setAuthOrigin('password');
 
-      console.log('[AuthContext] Sign in successful');
+      devLog('[AuthContext] Sign in successful');
     } catch (error: any) {
       console.error('[AuthContext] Sign in failed:', error);
       throw error as AuthError;
@@ -99,7 +106,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Sign out function
   const signOut = async (): Promise<void> => {
-    console.log('[AuthContext] Sign out requested');
+    devLog('[AuthContext] Sign out requested');
 
     try {
       setLoading(true);
@@ -108,8 +115,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setUser(null);
       setSession(null);
+      setAuthOrigin('signed_out');
 
-      console.log('[AuthContext] Sign out successful');
+      devLog('[AuthContext] Sign out successful');
     } catch (error: any) {
       console.error('[AuthContext] Sign out failed:', error);
       throw error as AuthError;
@@ -122,6 +130,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     session,
     loading,
+    authOrigin,
     signIn,
     signOut,
     isAuthenticated: user !== null,

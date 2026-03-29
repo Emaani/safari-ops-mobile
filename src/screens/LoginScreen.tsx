@@ -1,37 +1,45 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
+  Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
-  Image,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { SegmentedControl } from '../components/system/SegmentedControl';
 import { useAuth } from '../contexts/AuthContext';
-import { AuthError } from '../services/authService';
+import {
+  type AppLanguage,
+  useAppPreferences,
+} from '../contexts/AppPreferencesContext';
+import type { AuthError } from '../services/authService';
 
-/**
- * LoginScreen Component
- *
- * Professional login interface for Safari Ops Mobile App.
- * Uses existing Supabase authentication - no account creation needed.
- *
- * Features:
- * - Email and password inputs with validation
- * - Show/hide password toggle
- * - Loading states during authentication
- * - Error handling with user-friendly messages
- * - Responsive layout for all screen sizes
- * - Keyboard-aware scrolling
- */
+type LoginScreenMode = 'login' | 'unlock';
 
-export default function LoginScreen() {
+interface LoginScreenProps {
+  mode?: LoginScreenMode;
+}
+
+export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
   const { signIn, loading } = useAuth();
+  const {
+    theme,
+    isRTL,
+    t,
+    language,
+    setLanguage,
+    biometricAvailable,
+    biometricEnabled,
+    biometricLabel,
+    setBiometricEnabled,
+  } = useAppPreferences();
+  const styles = useMemo(() => createStyles(theme, isRTL), [theme, isRTL]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,38 +47,29 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Validate form inputs
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
 
-    // Email validation
     if (!email.trim()) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('login.emailRequired');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = t('login.invalidEmail');
     }
 
-    // Password validation
     if (!password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = t('login.passwordRequired');
     } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = t('login.passwordLength');
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle login submission
   const handleLogin = async () => {
-    console.log('[LoginScreen] Login attempt for:', email);
-
-    // Clear previous errors
     setErrors({});
 
-    // Validate inputs
     if (!validateForm()) {
-      console.log('[LoginScreen] Validation failed');
       return;
     }
 
@@ -78,29 +77,51 @@ export default function LoginScreen() {
 
     try {
       await signIn(email.trim(), password);
-      console.log('[LoginScreen] Login successful');
-      // Navigation handled by App.tsx based on auth state
-    } catch (error: any) {
-      console.error('[LoginScreen] Login failed:', error);
 
+      if (biometricAvailable && !biometricEnabled) {
+        Alert.alert(
+          t('login.enableBiometricTitle'),
+          t('login.enableBiometricMessage', { label: biometricLabel }),
+          [
+            {
+              text: t('common.cancel'),
+              style: 'cancel',
+            },
+            {
+              text: t('common.enabled'),
+              onPress: () => {
+                void setBiometricEnabled(true);
+              },
+            },
+          ]
+        );
+      }
+    } catch (error: unknown) {
       const authError = error as AuthError;
 
-      // Handle specific error cases
       if (authError.code === 'ROLE_NOT_ALLOWED') {
-        setErrors({
-          general: authError.message,
-        });
+        setErrors({ general: authError.message });
       } else if (authError.message.includes('Invalid login credentials')) {
         setErrors({
-          general: 'Invalid email or password. Please try again.',
+          general:
+            language === 'ar'
+              ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
+              : 'Invalid email or password. Please try again.',
         });
       } else if (authError.message.includes('Email not confirmed')) {
         setErrors({
-          general: 'Please verify your email address before logging in.',
+          general:
+            language === 'ar'
+              ? 'يرجى تأكيد بريدك الإلكتروني قبل تسجيل الدخول.'
+              : 'Please verify your email address before logging in.',
         });
       } else {
         setErrors({
-          general: authError.message || 'Login failed. Please try again.',
+          general:
+            authError.message ||
+            (language === 'ar'
+              ? 'فشل تسجيل الدخول. حاول مرة أخرى.'
+              : 'Login failed. Please try again.'),
         });
       }
     } finally {
@@ -108,262 +129,318 @@ export default function LoginScreen() {
     }
   };
 
-  // Handle forgot password
   const handleForgotPassword = () => {
     Alert.alert(
-      'Reset Password',
-      'Please contact your administrator to reset your password.',
+      language === 'ar' ? 'إعادة تعيين كلمة المرور' : 'Reset Password',
+      language === 'ar'
+        ? 'يرجى التواصل مع المسؤول لإعادة تعيين كلمة المرور.'
+        : 'Please contact your administrator to reset your password.',
       [{ text: 'OK' }]
     );
   };
 
+  const languageOptions: { label: string; value: AppLanguage }[] = [
+    { label: 'English', value: 'en' },
+    { label: 'العربية', value: 'ar' },
+  ];
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Logo/Brand Section */}
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require('../../assets/jackal-logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-        </View>
-
-        {/* Login Form */}
-        <View style={styles.form}>
-          {/* General Error Message */}
-          {errors.general && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{errors.general}</Text>
-            </View>
-          )}
-
-          {/* Email Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
-            <TextInput
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="your.email@example.com"
-              placeholderTextColor="#999"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setErrors((prev) => ({ ...prev, email: undefined, general: undefined }));
-              }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              editable={!isSubmitting}
-            />
-            {errors.email && <Text style={styles.fieldError}>{errors.email}</Text>}
-          </View>
-
-          {/* Password Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={[styles.passwordInput, errors.password && styles.inputError]}
-                placeholder="Enter your password"
-                placeholderTextColor="#999"
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setErrors((prev) => ({ ...prev, password: undefined, general: undefined }));
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View style={styles.languageWrap}>
+              <SegmentedControl
+                options={languageOptions}
+                value={language}
+                onChange={(value) => {
+                  void setLanguage(value as AppLanguage);
                 }}
-                secureTextEntry={!showPassword}
+                compact
+              />
+            </View>
+
+            <View style={styles.logoShell}>
+              <Image
+                source={require('../../assets/branding/jackal-logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+
+            <Text style={styles.title}>
+              {mode === 'unlock' ? t('login.usePassword') : t('login.welcome')}
+            </Text>
+            <Text style={styles.subtitle}>
+              {mode === 'unlock' ? t('biometric.fallback') : t('login.subtitle')}
+            </Text>
+          </View>
+
+          <View style={styles.formCard}>
+            {errors.general && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{errors.general}</Text>
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t('login.email')}</Text>
+              <TextInput
+                style={[styles.input, errors.email && styles.inputError]}
+                placeholder="name@jackaladventures.com"
+                placeholderTextColor={theme.colors.textSoft}
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setErrors((prev) => ({ ...prev, email: undefined, general: undefined }));
+                }}
                 autoCapitalize="none"
                 autoCorrect={false}
+                keyboardType="email-address"
                 editable={!isSubmitting}
+                textAlign={isRTL ? 'right' : 'left'}
               />
-              <TouchableOpacity
-                style={styles.showPasswordButton}
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.showPasswordText}>{showPassword ? 'Hide' : 'Show'}</Text>
-              </TouchableOpacity>
+              {errors.email && <Text style={styles.fieldError}>{errors.email}</Text>}
             </View>
-            {errors.password && <Text style={styles.fieldError}>{errors.password}</Text>}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t('login.password')}</Text>
+              <View style={[styles.passwordContainer, errors.password && styles.inputError]}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder={t('login.password')}
+                  placeholderTextColor={theme.colors.textSoft}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setErrors((prev) => ({ ...prev, password: undefined, general: undefined }));
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isSubmitting}
+                  textAlign={isRTL ? 'right' : 'left'}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((current) => !current)}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.showPasswordText}>
+                    {showPassword ? t('login.hide') : t('login.show')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {errors.password && <Text style={styles.fieldError}>{errors.password}</Text>}
+            </View>
+
+            <TouchableOpacity onPress={handleForgotPassword} disabled={isSubmitting}>
+              <Text style={styles.linkText}>{t('login.forgotPassword')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+              onPress={handleLogin}
+              disabled={isSubmitting || loading}
+            >
+              <Text style={styles.primaryButtonText}>{t('login.signIn')}</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Forgot Password Link */}
-          <TouchableOpacity
-            style={styles.forgotPasswordButton}
-            onPress={handleForgotPassword}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          {/* Login Button */}
-          <TouchableOpacity
-            style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={isSubmitting || loading}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginButtonText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Footer Info */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Use your existing Jackal Wild Adventures credentials
-          </Text>
-          <Text style={styles.footerSubtext}>
-            Only administrators and staff can access the mobile app
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={styles.footerCard}>
+            <Text style={styles.footerTitle}>{t('app.name')}</Text>
+            <Text style={styles.footerText}>{t('login.footer')}</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
-  logoContainer: {
-    width: 200,
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logo: {
-    width: '100%',
-    height: '100%',
-  },
-  form: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  errorContainer: {
-    backgroundColor: '#fee',
-    borderLeftWidth: 4,
-    borderLeftColor: '#c00',
-    padding: 12,
-    borderRadius: 4,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#c00',
-    fontSize: 14,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: '#fff',
-  },
-  inputError: {
-    borderColor: '#c00',
-  },
-  fieldError: {
-    color: '#c00',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  passwordInput: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: '#fff',
-  },
-  showPasswordButton: {
-    position: 'absolute',
-    right: 12,
-    padding: 8,
-  },
-  showPasswordText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  forgotPasswordButton: {
-    alignSelf: 'flex-end',
-    marginBottom: 24,
-  },
-  forgotPasswordText: {
-    color: '#007AFF',
-    fontSize: 14,
-  },
-  loginButton: {
-    height: 48,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loginButtonDisabled: {
-    opacity: 0.6,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  footerSubtext: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
-  },
-});
+function createStyles(
+  theme: ReturnType<typeof useAppPreferences>['theme'],
+  isRTL: boolean
+) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    flex: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: 20,
+      paddingBottom: 28,
+      justifyContent: 'center',
+    },
+    header: {
+      paddingTop: 16,
+      marginBottom: 20,
+    },
+    languageWrap: {
+      alignSelf: isRTL ? 'flex-start' : 'flex-end',
+      width: 170,
+      marginBottom: 24,
+    },
+    logoShell: {
+      width: 88,
+      height: 88,
+      borderRadius: 28,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: theme.colors.shadow,
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: theme.dark ? 0.28 : 0.1,
+      shadowRadius: 24,
+      elevation: 8,
+      alignSelf: isRTL ? 'flex-end' : 'flex-start',
+      marginBottom: 18,
+    },
+    logo: {
+      width: 58,
+      height: 58,
+    },
+    title: {
+      fontSize: 30,
+      fontWeight: '800',
+      color: theme.colors.text,
+      textAlign: isRTL ? 'right' : 'left',
+      letterSpacing: -1,
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: theme.colors.textMuted,
+      textAlign: isRTL ? 'right' : 'left',
+    },
+    formCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: 20,
+      marginBottom: 16,
+      shadowColor: theme.colors.shadow,
+      shadowOffset: { width: 0, height: 18 },
+      shadowOpacity: theme.dark ? 0.3 : 0.08,
+      shadowRadius: 28,
+      elevation: 6,
+    },
+    errorContainer: {
+      backgroundColor: theme.colors.dangerSoft,
+      borderRadius: 18,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 16,
+    },
+    errorText: {
+      color: theme.colors.danger,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: isRTL ? 'right' : 'left',
+    },
+    inputGroup: {
+      marginBottom: 14,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      marginBottom: 8,
+      textAlign: isRTL ? 'right' : 'left',
+    },
+    input: {
+      minHeight: 54,
+      borderRadius: 18,
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 16,
+      color: theme.colors.text,
+      fontSize: 15,
+    },
+    inputError: {
+      borderColor: theme.colors.danger,
+    },
+    passwordContainer: {
+      minHeight: 54,
+      borderRadius: 18,
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: isRTL ? 'row-reverse' : 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      gap: 12,
+    },
+    passwordInput: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 15,
+      minHeight: 52,
+    },
+    showPasswordText: {
+      color: theme.colors.accent,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    fieldError: {
+      marginTop: 6,
+      color: theme.colors.danger,
+      fontSize: 12,
+      textAlign: isRTL ? 'right' : 'left',
+    },
+    linkText: {
+      color: theme.colors.accent,
+      fontSize: 13,
+      fontWeight: '700',
+      textAlign: isRTL ? 'left' : 'right',
+      marginBottom: 18,
+    },
+    primaryButton: {
+      minHeight: 56,
+      borderRadius: 18,
+      backgroundColor: theme.colors.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryButtonDisabled: {
+      opacity: 0.6,
+    },
+    primaryButtonText: {
+      color: theme.colors.accentContrast,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    footerCard: {
+      backgroundColor: theme.colors.hero,
+      borderRadius: 24,
+      padding: 20,
+    },
+    footerTitle: {
+      color: theme.colors.accentContrast,
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 8,
+      textAlign: isRTL ? 'right' : 'left',
+    },
+    footerText: {
+      color: theme.colors.textMuted,
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: isRTL ? 'right' : 'left',
+    },
+  });
+}

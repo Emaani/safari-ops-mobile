@@ -1,6 +1,8 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { devLog } from '../lib/devLog';
+import { logRealtimeStatus } from '../lib/realtimeStatus';
 
 const DEBOUNCE_MS = 500;
 
@@ -11,6 +13,7 @@ const DEBOUNCE_MS = 500;
 export function useDashboardRealtimeSync(onUpdate: () => void) {
   const channelsRef = useRef<RealtimeChannel[]>([]);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isCleaningUpRef = useRef(false);
 
   // Debounced update handler
   const debouncedUpdate = useCallback(() => {
@@ -19,13 +22,14 @@ export function useDashboardRealtimeSync(onUpdate: () => void) {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      console.log('[Dashboard Realtime] Triggering data refetch...');
+      devLog('[Dashboard Realtime] Triggering data refetch...');
       onUpdate();
     }, DEBOUNCE_MS);
   }, [onUpdate]);
 
   useEffect(() => {
-    console.log('[Dashboard Realtime] Initializing subscriptions...');
+    isCleaningUpRef.current = false;
+    devLog('[Dashboard Realtime] Initializing subscriptions...');
 
     const tables = [
       'bookings',
@@ -54,7 +58,7 @@ export function useDashboardRealtimeSync(onUpdate: () => void) {
           }
         )
         .subscribe((status) => {
-          console.log(`[Dashboard Realtime] ${table} subscription status:`, status);
+          logRealtimeStatus('Dashboard Realtime', table, status, isCleaningUpRef.current);
         });
 
       return channel;
@@ -64,7 +68,8 @@ export function useDashboardRealtimeSync(onUpdate: () => void) {
 
     // Cleanup on unmount
     return () => {
-      console.log('[Dashboard Realtime] Cleaning up subscriptions...');
+      isCleaningUpRef.current = true;
+      devLog('[Dashboard Realtime] Cleaning up subscriptions...');
 
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

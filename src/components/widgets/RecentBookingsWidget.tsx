@@ -186,42 +186,45 @@ export function RecentBookingsWidget({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
+    backgroundColor: '#fffdf9',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#e1d7c8',
+    shadowColor: '#201a13',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 12,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#efe6d8',
   },
   title: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#181512',
+    letterSpacing: -0.6,
   },
   countBadge: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f1eadf',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
   countText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#3b82f6',
+    color: '#7d7465',
   },
   scrollView: {
     maxHeight: 300,
@@ -237,7 +240,7 @@ const styles = StyleSheet.create({
   },
   bookingItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#efe6d8',
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -248,7 +251,7 @@ const styles = StyleSheet.create({
   bookingNumber: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: '#181512',
   },
   statusBadge: {
     paddingHorizontal: 8,

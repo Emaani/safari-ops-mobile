@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { normalizeCashRequisition } from '../lib/cashRequisition';
 import type { FinancialTransaction, CashRequisition, Currency } from '../types/dashboard';
 
 interface FinanceDataState {
@@ -63,7 +64,7 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
 
     const { data: crs, error } = await supabase
       .from('cash_requisitions')
-      .select('id, cr_number, total_cost, currency, status, date_needed, expense_category, date_completed, created_at, amount_usd, description, requested_by')
+      .select('*')
       .eq('soft_deleted', false)
       .not('status', 'in', '(Declined,Rejected)')
       .order('created_at', { ascending: false })
@@ -74,7 +75,9 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
       throw error;
     }
 
-    const result = (crs || []) as CashRequisition[];
+    const result = (crs || []).map((record) =>
+      normalizeCashRequisition(record as Record<string, unknown>)
+    ) as CashRequisition[];
     console.log(`[FinanceData #${fetchId}] Fetched ${result.length} CRs`);
 
     if (result.length > 0) {

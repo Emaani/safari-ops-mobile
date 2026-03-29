@@ -1,39 +1,48 @@
-import React, { useEffect, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationDefaultTheme,
+  NavigationContainer,
+} from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import Svg, { Rect, Path, Circle } from 'react-native-svg';
-import * as Notifications from 'expo-notifications';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import {
+  AppPreferencesProvider,
+  useAppPreferences,
+} from './src/contexts/AppPreferencesContext';
+import { AppLoadingScreen, BiometricGateScreen } from './src/components/system/AuthScreens';
+import { useNotifications } from './src/hooks/useNotifications';
 import DashboardScreen from './src/screens/DashboardScreen';
 import BookingsScreen from './src/screens/BookingsScreen';
 import FleetScreen from './src/screens/FleetScreen';
 import FinanceScreen from './src/screens/FinanceScreen';
-import MoreScreen from './src/screens/MoreScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import MoreScreen from './src/screens/MoreScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
-import { useNotifications } from './src/hooks/useNotifications';
+import { initializeSDK } from './src/sdk-init';
 import {
-  registerForPushNotifications,
-  savePushToken,
   addNotificationReceivedListener,
   addNotificationResponseListener,
+  registerForPushNotifications,
+  savePushToken,
   setBadgeCount,
 } from './src/services/notificationService';
-import { initializeSDK } from './src/sdk-init';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-/**
- * Main App Component
- *
- * Wraps the entire app in AuthProvider to provide global authentication state.
- * Shows LoginScreen when user is not authenticated.
- * Shows tab navigation when user is authenticated.
- */
+type TabScreenConfig = {
+  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'More';
+  component: React.ComponentType<any>;
+  labelKey: string;
+  icon: ({ color, size }: { color: string; size: number }) => React.JSX.Element;
+};
+
 export default function App() {
   useEffect(() => {
     initializeSDK()
@@ -46,58 +55,88 @@ export default function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <StatusBar style="auto" />
-      <AppNavigator />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <AppPreferencesProvider>
+          <AppShell />
+        </AppPreferencesProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
-/**
- * App Navigator Component
- *
- * Handles routing based on authentication state.
- * Must be inside AuthProvider to access auth context.
- */
+function AppShell() {
+  const { theme } = useAppPreferences();
+
+  return (
+    <>
+      <StatusBar style={theme.statusBarStyle} />
+      <AppNavigator />
+    </>
+  );
+}
+
 function AppNavigator() {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, authOrigin } = useAuth();
+  const {
+    ready,
+    theme,
+    t,
+    isRTL,
+    biometricEnabled,
+    biometricAvailable,
+    biometricLabel,
+    authenticateWithBiometrics,
+  } = useAppPreferences();
   const notificationListener = useRef<(() => void) | null>(null);
   const responseListener = useRef<(() => void) | null>(null);
+  const [biometricUnlocked, setBiometricUnlocked] = useState(false);
+  const [usePasswordFallback, setUsePasswordFallback] = useState(false);
 
-  // Initialize push notifications when authenticated
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated) {
+      setBiometricUnlocked(false);
+      setUsePasswordFallback(false);
+      return;
+    }
+
+    if (!biometricEnabled || !biometricAvailable || authOrigin === 'password') {
+      setBiometricUnlocked(true);
+      setUsePasswordFallback(false);
+      return;
+    }
+
+    setBiometricUnlocked(false);
+    setUsePasswordFallback(false);
+  }, [authOrigin, biometricAvailable, biometricEnabled, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      return undefined;
+    }
 
     console.log('[App] Initializing push notifications for user:', user.id);
 
-    // Register for push notifications
     registerForPushNotifications()
       .then((token) => {
         if (token) {
           console.log('[App] Push token obtained, saving to database');
           return savePushToken(user.id, token);
         }
+        return undefined;
       })
       .catch((error) => {
         console.error('[App] Error setting up push notifications:', error);
       });
 
-    // Listen for notifications while app is foregrounded
     notificationListener.current = addNotificationReceivedListener((notification) => {
       console.log('[App] Notification received:', notification);
     });
 
-    // Listen for user tapping notification
     responseListener.current = addNotificationResponseListener((response) => {
       console.log('[App] Notification response:', response);
-      // Handle navigation based on notification data
-      const data = response.notification.request.content.data;
-      if (data?.screen) {
-        // Navigation will be handled by NotificationsScreen
-      }
     });
 
-    // Cleanup
     return () => {
       if (notificationListener.current) {
         notificationListener.current();
@@ -108,34 +147,72 @@ function AppNavigator() {
     };
   }, [isAuthenticated, user]);
 
-  // Show loading spinner while checking auth state
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
+  const navigationTheme = useMemo(() => {
+    const baseTheme = theme.dark ? NavigationDarkTheme : NavigationDefaultTheme;
+
+    return {
+      ...baseTheme,
+      colors: {
+        ...baseTheme.colors,
+        background: theme.colors.background,
+        card: theme.colors.surface,
+        primary: theme.colors.accent,
+        text: theme.colors.text,
+        border: theme.colors.border,
+        notification: theme.colors.danger,
+      },
+    };
+  }, [theme]);
+
+  if (loading || !ready) {
+    return <AppLoadingScreen />;
   }
 
-  // Show login screen if not authenticated
   if (!isAuthenticated) {
     return <LoginScreen />;
   }
 
-  // Show main app navigation if authenticated
+  if (biometricEnabled && biometricAvailable && !biometricUnlocked) {
+    if (usePasswordFallback) {
+      return <LoginScreen mode="unlock" />;
+    }
+
+    return (
+      <BiometricGateScreen
+        title={t('biometric.title')}
+        subtitle={t('biometric.subtitle')}
+        actionLabel={t('login.biometric', { label: biometricLabel })}
+        fallbackLabel={t('biometric.fallback')}
+        onAuthenticate={async () => {
+          const success = await authenticateWithBiometrics();
+          if (success) {
+            setBiometricUnlocked(true);
+          }
+        }}
+        onFallback={() => setUsePasswordFallback(true)}
+      />
+    );
+  }
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#ffffff',
-            elevation: 2,
-            shadowOpacity: 0.1,
+            backgroundColor: theme.colors.surface,
+            elevation: 0,
+            shadowOpacity: 0,
           },
-          headerTintColor: '#111827',
+          headerShadowVisible: false,
+          headerTintColor: theme.colors.text,
           headerTitleStyle: {
-            fontWeight: '600',
-            fontSize: 18,
+            fontWeight: '700',
+            fontSize: 22,
+            letterSpacing: -0.6,
+          },
+          headerTitleAlign: 'center',
+          contentStyle: {
+            backgroundColor: theme.colors.background,
           },
         }}
       >
@@ -143,15 +220,20 @@ function AppNavigator() {
           name="MainTabs"
           component={MainTabNavigator}
           options={({ navigation }) => ({
-            title: 'Safari Ops',
-            headerRight: () => <NotificationBell navigation={navigation} userId={user?.id || ''} />,
+            title: t('app.name'),
+            headerRight: isRTL
+              ? undefined
+              : () => <NotificationBell navigation={navigation} userId={user?.id || ''} />,
+            headerLeft: isRTL
+              ? () => <NotificationBell navigation={navigation} userId={user?.id || ''} />
+              : undefined,
           })}
         />
         <Stack.Screen
           name="Notifications"
           component={NotificationsScreen}
           options={{
-            title: 'Notifications',
+            title: t('common.notifications'),
           }}
         />
       </Stack.Navigator>
@@ -159,114 +241,124 @@ function AppNavigator() {
   );
 }
 
-/**
- * Main Tab Navigator
- */
 function MainTabNavigator() {
+  const { theme, t, isRTL } = useAppPreferences();
+
+  const tabs = useMemo<TabScreenConfig[]>(() => {
+    const items: TabScreenConfig[] = [
+      {
+        name: 'Dashboard',
+        component: DashboardScreen,
+        labelKey: 'common.dashboard',
+        icon: DashboardIcon,
+      },
+      {
+        name: 'Bookings',
+        component: BookingsScreen,
+        labelKey: 'common.bookings',
+        icon: BookingsIcon,
+      },
+      {
+        name: 'Fleet',
+        component: FleetScreen,
+        labelKey: 'common.fleet',
+        icon: FleetIcon,
+      },
+      {
+        name: 'Finance',
+        component: FinanceScreen,
+        labelKey: 'common.finance',
+        icon: FinanceIcon,
+      },
+      {
+        name: 'More',
+        component: MoreScreen,
+        labelKey: 'common.more',
+        icon: MoreIcon,
+      },
+    ];
+
+    return isRTL ? [...items].reverse() : items;
+  }, [isRTL]);
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#3b82f6',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: theme.colors.accent,
+        tabBarInactiveTintColor: theme.colors.textSoft,
         tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: '#e5e7eb',
-          backgroundColor: '#ffffff',
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: 16,
+          borderTopWidth: 0,
+          backgroundColor: theme.colors.surface,
+          height: 74,
+          paddingBottom: 10,
+          paddingTop: 10,
+          borderRadius: 24,
+          shadowColor: theme.colors.shadow,
+          shadowOffset: { width: 0, height: 14 },
+          shadowOpacity: theme.dark ? 0.35 : 0.12,
+          shadowRadius: 20,
+          elevation: 10,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: '700',
+        },
+        tabBarItemStyle: {
+          borderRadius: 18,
+          marginHorizontal: 4,
         },
       }}
     >
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          tabBarLabel: 'Dashboard',
-          tabBarIcon: ({ color, size }) => (
-            <DashboardIcon color={color} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Bookings"
-        component={BookingsScreen}
-        options={{
-          tabBarLabel: 'Bookings',
-          tabBarIcon: ({ color, size }) => (
-            <BookingsIcon color={color} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Fleet"
-        component={FleetScreen}
-        options={{
-          tabBarLabel: 'Fleet',
-          tabBarIcon: ({ color, size }) => (
-            <FleetIcon color={color} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Finance"
-        component={FinanceScreen}
-        options={{
-          tabBarLabel: 'Finance',
-          tabBarIcon: ({ color, size }) => (
-            <FinanceIcon color={color} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="More"
-        component={MoreScreen}
-        options={{
-          tabBarLabel: 'More',
-          tabBarIcon: ({ color, size }) => (
-            <MoreIcon color={color} size={size} />
-          ),
-        }}
-      />
+      {tabs.map((tab) => (
+        <Tab.Screen
+          key={tab.name}
+          name={tab.name}
+          component={tab.component}
+          options={{
+            tabBarLabel: t(tab.labelKey),
+            tabBarIcon: ({ color, size }) => tab.icon({ color, size }),
+          }}
+        />
+      ))}
     </Tab.Navigator>
   );
 }
 
-/**
- * Notification Bell Icon with Badge
- */
 function NotificationBell({ navigation, userId }: { navigation: any; userId: string }) {
   const { summary } = useNotifications(userId);
+  const { theme } = useAppPreferences();
 
-  // Update app badge count
   useEffect(() => {
     setBadgeCount(summary.unread);
   }, [summary.unread]);
 
   return (
     <TouchableOpacity
-      style={styles.notificationButton}
+      style={[
+        styles.notificationButton,
+        {
+          backgroundColor: theme.colors.surfaceMuted,
+          borderColor: theme.colors.border,
+        },
+      ]}
       onPress={() => navigation.navigate('Notifications')}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
     >
-      <BellIcon size={24} color="#111827" />
+      <BellIcon size={22} color={theme.colors.text} />
       {summary.unread > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>
-            {summary.unread > 99 ? '99+' : summary.unread}
-          </Text>
+        <View style={[styles.badge, { backgroundColor: theme.colors.danger }]}>
+          <Text style={styles.badgeText}>{summary.unread > 99 ? '99+' : summary.unread}</Text>
         </View>
       )}
     </TouchableOpacity>
   );
 }
 
-// Dashboard tab icon
 function DashboardIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -278,10 +370,18 @@ function DashboardIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// Bookings tab icon (calendar)
 function BookingsIcon({ color, size }: { color: string; size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <Rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <Path d="M16 2v4" />
       <Path d="M8 2v4" />
@@ -290,10 +390,18 @@ function BookingsIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// Fleet tab icon (truck)
 function FleetIcon({ color, size }: { color: string; size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <Path d="M1 3h15v13H1z" />
       <Path d="M16 8h4l3 3v5h-7V8z" />
       <Circle cx="5.5" cy="18.5" r="2.5" />
@@ -302,20 +410,36 @@ function FleetIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// Finance tab icon (dollar sign)
 function FinanceIcon({ color, size }: { color: string; size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <Path d="M12 2v20" />
       <Path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </Svg>
   );
 }
 
-// More tab icon (menu dots)
 function MoreIcon({ color, size }: { color: string; size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <Circle cx="12" cy="12" r="1" fill={color} />
       <Circle cx="12" cy="5" r="1" fill={color} />
       <Circle cx="12" cy="19" r="1" fill={color} />
@@ -323,10 +447,18 @@ function MoreIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
-// Bell icon for notifications
 function BellIcon({ size, color }: { size: number; color: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <Path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </Svg>
@@ -334,22 +466,17 @@ function BellIcon({ size, color }: { size: number; color: string }) {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
   notificationButton: {
     position: 'relative',
-    marginRight: 16,
-    padding: 8,
+    marginHorizontal: 8,
+    padding: 10,
+    borderRadius: 18,
+    borderWidth: 1,
   },
   badge: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#ef4444',
     borderRadius: 10,
     minWidth: 20,
     height: 20,

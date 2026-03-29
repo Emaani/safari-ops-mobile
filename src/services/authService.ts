@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import { devLog } from '../lib/devLog';
 
 /**
  * Authentication Service
@@ -32,7 +33,7 @@ export interface AuthError {
  * @throws AuthError if sign in fails
  */
 export async function signIn(email: string, password: string): Promise<AuthSession> {
-  console.log('[AuthService] Signing in user:', email);
+  devLog('[AuthService] Signing in user:', email);
 
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -64,7 +65,7 @@ export async function signIn(email: string, password: string): Promise<AuthSessi
 
     if (profileError) {
       console.warn('[AuthService] Error fetching user profile:', profileError);
-      console.log('[AuthService] Continuing without profile - user may not have a profile yet');
+      devLog('[AuthService] Continuing without profile - user may not have a profile yet');
       // Don't fail auth if profile fetch fails - they may not have a profile yet
     }
 
@@ -96,7 +97,7 @@ export async function signIn(email: string, password: string): Promise<AuthSessi
     }
     */
 
-    console.log('[AuthService] Sign in successful:', {
+    devLog('[AuthService] Sign in successful:', {
       userId: data.user.id,
       email: data.user.email,
       hasProfile: profile !== null,
@@ -126,7 +127,7 @@ export async function signIn(email: string, password: string): Promise<AuthSessi
  * Clears session from AsyncStorage and Supabase
  */
 export async function signOut(): Promise<void> {
-  console.log('[AuthService] Signing out user');
+  devLog('[AuthService] Signing out user');
 
   try {
     const { error } = await supabase.auth.signOut();
@@ -138,7 +139,7 @@ export async function signOut(): Promise<void> {
       } as AuthError;
     }
 
-    console.log('[AuthService] Sign out successful');
+    devLog('[AuthService] Sign out successful');
   } catch (error: any) {
     console.error('[AuthService] Unexpected error during sign out:', error);
     throw {
@@ -153,7 +154,7 @@ export async function signOut(): Promise<void> {
  * @returns AuthSession if user is signed in, null otherwise
  */
 export async function getCurrentSession(): Promise<AuthSession | null> {
-  console.log('[AuthService] Getting current session');
+  devLog('[AuthService] Getting current session');
 
   try {
     const { data, error } = await supabase.auth.getSession();
@@ -164,11 +165,11 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
     }
 
     if (!data.session) {
-      console.log('[AuthService] No active session');
+      devLog('[AuthService] No active session');
       return null;
     }
 
-    console.log('[AuthService] Active session found:', {
+    devLog('[AuthService] Active session found:', {
       userId: data.session.user.id,
       email: data.session.user.email,
     });
@@ -209,7 +210,7 @@ export async function isAuthenticated(): Promise<boolean> {
  * @param email - User's email address
  */
 export async function requestPasswordReset(email: string): Promise<void> {
-  console.log('[AuthService] Requesting password reset for:', email);
+  devLog('[AuthService] Requesting password reset for:', email);
 
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
@@ -223,7 +224,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
       } as AuthError;
     }
 
-    console.log('[AuthService] Password reset email sent');
+    devLog('[AuthService] Password reset email sent');
   } catch (error: any) {
     console.error('[AuthService] Unexpected error requesting password reset:', error);
     throw {
@@ -239,10 +240,10 @@ export async function requestPasswordReset(email: string): Promise<void> {
  * @returns Unsubscribe function
  */
 export function onAuthStateChange(callback: (session: AuthSession | null) => void) {
-  console.log('[AuthService] Setting up auth state listener');
+  devLog('[AuthService] Setting up auth state listener');
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    console.log('[AuthService] Auth state changed:', _event);
+    devLog('[AuthService] Auth state changed:', _event);
 
     if (session) {
       callback({
@@ -255,7 +256,7 @@ export function onAuthStateChange(callback: (session: AuthSession | null) => voi
   });
 
   return () => {
-    console.log('[AuthService] Removing auth state listener');
+    devLog('[AuthService] Removing auth state listener');
     subscription.unsubscribe();
   };
 }
