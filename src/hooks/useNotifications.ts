@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { devLog } from '../lib/devLog';
 import type {
@@ -11,19 +11,14 @@ import type {
 /**
  * Notification Hook
  *
- * Provides real-time notifications for the authenticated user.
- * Includes automatic subscription to database changes.
- *
- * Features:
- * - Real-time updates via Supabase subscriptions
- * - Filtering by status, type, priority
- * - Mark as read/unread
- * - Delete notifications
- * - Summary with unread counts
+ * Fetches ALL notifications once and filters client-side.
+ * This eliminates the loading flash when switching filter tabs.
+ * Real-time subscription keeps the list live without re-fetching.
  */
 
 interface UseNotificationsReturn {
   notifications: Notification[];
+  allNotifications: Notification[];
   summary: NotificationSummary;
   loading: boolean;
   error: Error | null;
@@ -35,218 +30,191 @@ interface UseNotificationsReturn {
   setFilters: (filters: NotificationFilters) => void;
 }
 
-export function useNotifications(userId: string): UseNotificationsReturn {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+type NotificationInsertHandler = (notification: Notification) => void;
+
+function calculateSummary(notifs: Notification[]): NotificationSummary {
+  const summary: NotificationSummary = {
+    total: notifs.length,
+    unread: notifs.filter((n) => n.status === 'unread').length,
+    byType: {} as any,
+    byPriority: {} as any,
+  };
+
+  notifs.forEach((notif) => {
+    summary.byType[notif.type] = (summary.byType[notif.type] || 0) + 1;
+    summary.byPriority[notif.priority] = (summary.byPriority[notif.priority] || 0) + 1;
+  });
+
+  return summary;
+}
+
+export function useNotifications(
+  userId: string,
+  onNotificationInsert?: NotificationInsertHandler,
+): UseNotificationsReturn {
+  // Always holds the FULL unfiltered list fetched from DB
+  const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [filters, setFilters] = useState<NotificationFilters>({ status: 'unread' });
+  // Client-side filter — no DB round-trip on tab switch
+  const [filters, setFilters] = useState<NotificationFilters>({});
 
-  const subscriptionRef = useRef<any>(null);
+  const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const hasFetchedRef = useRef(false);
 
-  /**
-   * Calculate notification summary
-   */
-  const calculateSummary = useCallback((notifs: Notification[]): NotificationSummary => {
-    const summary: NotificationSummary = {
-      total: notifs.length,
-      unread: notifs.filter(n => n.status === 'unread').length,
-      byType: {} as any,
-      byPriority: {} as any,
-    };
-
-    notifs.forEach(notif => {
-      // Count by type
-      if (!summary.byType[notif.type]) {
-        summary.byType[notif.type] = 0;
-      }
-      summary.byType[notif.type]++;
-
-      // Count by priority
-      if (!summary.byPriority[notif.priority]) {
-        summary.byPriority[notif.priority] = 0;
-      }
-      summary.byPriority[notif.priority]++;
-    });
-
-    return summary;
-  }, []);
-
-  /**
-   * Fetch notifications from database
-   */
+  // ── Fetch ALL notifications (called once on mount, and on manual refresh) ──
   const fetchNotifications = useCallback(async () => {
+    if (!userId) return;
     try {
-      devLog('[Notifications] Fetching notifications for user:', userId);
+      devLog('[Notifications] Fetching all notifications for user:', userId);
 
-      let query = supabase
+      const { data, error: fetchError } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      // Apply filters
-      if (filters.status) {
-        query = query.eq('status', filters.status);
-      }
-      if (filters.type) {
-        query = query.eq('type', filters.type);
-      }
-      if (filters.priority) {
-        query = query.eq('priority', filters.priority);
-      }
-      if (filters.startDate) {
-        query = query.gte('created_at', filters.startDate.toISOString());
-      }
-      if (filters.endDate) {
-        query = query.lte('created_at', filters.endDate.toISOString());
-      }
-
-      const { data, error: fetchError } = await query;
-
       if (fetchError) {
-        // Check if table doesn't exist yet (notifications system not set up)
+        // Table doesn't exist yet
         if (fetchError.message?.includes('does not exist') || fetchError.code === '42P01') {
-          devLog('[Notifications] Notifications table does not exist yet. Run database migration to enable notifications.');
-          setNotifications([]);
+          devLog('[Notifications] Notifications table not set up yet.');
+          setAllNotifications([]);
           setError(null);
           setLoading(false);
           return;
         }
-        console.error('[Notifications] Error fetching notifications:', fetchError);
         throw fetchError;
       }
 
       const notifs = (data || []) as Notification[];
       devLog(`[Notifications] Fetched ${notifs.length} notifications`);
-      setNotifications(notifs);
+      setAllNotifications(notifs);
       setError(null);
     } catch (err: any) {
       console.error('[Notifications] Fetch failed:', err);
       setError(err);
     } finally {
       setLoading(false);
+      hasFetchedRef.current = true;
     }
-  }, [userId, filters]);
+  }, [userId]);
 
-  /**
-   * Mark notification as read
-   */
+  // ── Apply client-side filters (instant — no loading) ──
+  const notifications = useMemo(() => {
+    let result = allNotifications;
+    if (filters.status) {
+      result = result.filter((n) => n.status === filters.status);
+    }
+    if (filters.type) {
+      result = result.filter((n) => n.type === filters.type);
+    }
+    if (filters.priority) {
+      result = result.filter((n) => n.priority === filters.priority);
+    }
+    if (filters.startDate) {
+      result = result.filter((n) => new Date(n.created_at) >= filters.startDate!);
+    }
+    if (filters.endDate) {
+      result = result.filter((n) => new Date(n.created_at) <= filters.endDate!);
+    }
+    return result;
+  }, [allNotifications, filters]);
+
+  // Summary is always computed from ALL notifications (not the filtered view)
+  // so the bell badge always reflects the real unread count
+  const summary = useMemo(() => calculateSummary(allNotifications), [allNotifications]);
+
+  // ── Mark as read ──
   const markAsRead = useCallback(async (notificationId: string) => {
-    try {
-      devLog('[Notifications] Marking as read:', notificationId);
+    // Optimistic update — instant UI, no loading
+    const now = new Date().toISOString();
+    setAllNotifications((prev) =>
+      prev.map((n) =>
+        n.id === notificationId
+          ? { ...n, status: 'read' as NotificationStatus, read_at: now }
+          : n
+      )
+    );
 
+    try {
       const { error: updateError } = await supabase
         .from('notifications')
-        .update({
-          status: 'read',
-          read_at: new Date().toISOString(),
-        })
+        .update({ status: 'read', read_at: now })
         .eq('id', notificationId)
         .eq('user_id', userId);
 
-      if (updateError) {
-        console.error('[Notifications] Error marking as read:', updateError);
-        throw updateError;
-      }
-
-      // Update local state
-      setNotifications(prev =>
-        prev.map(n =>
+      if (updateError) throw updateError;
+    } catch (err: any) {
+      // Roll back on failure
+      setAllNotifications((prev) =>
+        prev.map((n) =>
           n.id === notificationId
-            ? { ...n, status: 'read' as NotificationStatus, read_at: new Date().toISOString() }
+            ? { ...n, status: 'unread' as NotificationStatus, read_at: undefined }
             : n
         )
       );
-
-      devLog('[Notifications] Marked as read successfully');
-    } catch (err: any) {
-      console.error('[Notifications] Mark as read failed:', err);
       throw err;
     }
   }, [userId]);
 
-  /**
-   * Mark all notifications as read
-   */
+  // ── Mark all as read ──
   const markAllAsRead = useCallback(async () => {
-    try {
-      devLog('[Notifications] Marking all as read');
+    const now = new Date().toISOString();
+    // Optimistic
+    setAllNotifications((prev) =>
+      prev.map((n) =>
+        n.status === 'unread'
+          ? { ...n, status: 'read' as NotificationStatus, read_at: now }
+          : n
+      )
+    );
 
+    try {
       const { error: updateError } = await supabase
         .from('notifications')
-        .update({
-          status: 'read',
-          read_at: new Date().toISOString(),
-        })
+        .update({ status: 'read', read_at: now })
         .eq('user_id', userId)
         .eq('status', 'unread');
 
-      if (updateError) {
-        console.error('[Notifications] Error marking all as read:', updateError);
-        throw updateError;
-      }
-
-      // Update local state
-      setNotifications(prev =>
-        prev.map(n =>
-          n.status === 'unread'
-            ? { ...n, status: 'read' as NotificationStatus, read_at: new Date().toISOString() }
-            : n
-        )
-      );
-
-      devLog('[Notifications] All marked as read successfully');
+      if (updateError) throw updateError;
     } catch (err: any) {
-      console.error('[Notifications] Mark all as read failed:', err);
+      // Refresh to restore true state
+      fetchNotifications();
       throw err;
     }
-  }, [userId]);
+  }, [userId, fetchNotifications]);
 
-  /**
-   * Delete notification
-   */
+  // ── Delete notification ──
   const deleteNotification = useCallback(async (notificationId: string) => {
-    try {
-      devLog('[Notifications] Deleting notification:', notificationId);
+    // Optimistic
+    setAllNotifications((prev) => prev.filter((n) => n.id !== notificationId));
 
+    try {
       const { error: deleteError } = await supabase
         .from('notifications')
         .delete()
         .eq('id', notificationId)
         .eq('user_id', userId);
 
-      if (deleteError) {
-        console.error('[Notifications] Error deleting notification:', deleteError);
-        throw deleteError;
-      }
-
-      // Update local state
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
-
-      devLog('[Notifications] Deleted successfully');
+      if (deleteError) throw deleteError;
     } catch (err: any) {
-      console.error('[Notifications] Delete failed:', err);
+      fetchNotifications();
       throw err;
     }
-  }, [userId]);
+  }, [userId, fetchNotifications]);
 
-  /**
-   * Initialize notifications and set up real-time subscription
-   */
+  // ── Initial fetch + realtime subscription ──
   useEffect(() => {
     if (!userId) {
-      devLog('[Notifications] No user ID, skipping fetch');
+      setLoading(false);
       return;
     }
 
-    // Initial fetch
     fetchNotifications();
 
-    // Set up real-time subscription
-    devLog('[Notifications] Setting up real-time subscription');
-
+    devLog('[Notifications] Setting up realtime subscription');
     const channel = supabase
-      .channel('notifications-changes')
+      .channel(`notifications-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -256,19 +224,26 @@ export function useNotifications(userId: string): UseNotificationsReturn {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          devLog('[Notifications] Real-time update received:', payload.eventType);
+          devLog('[Notifications] Realtime:', payload.eventType);
 
           if (payload.eventType === 'INSERT') {
             const newNotif = payload.new as Notification;
-            setNotifications(prev => [newNotif, ...prev]);
+            setAllNotifications((prev) => {
+              // Avoid duplicates
+              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              return [newNotif, ...prev];
+            });
+            onNotificationInsert?.(newNotif);
           } else if (payload.eventType === 'UPDATE') {
-            const updatedNotif = payload.new as Notification;
-            setNotifications(prev =>
-              prev.map(n => (n.id === updatedNotif.id ? updatedNotif : n))
+            const updated = payload.new as Notification;
+            setAllNotifications((prev) =>
+              prev.map((n) => (n.id === updated.id ? updated : n))
             );
           } else if (payload.eventType === 'DELETE') {
-            const deletedId = payload.old.id;
-            setNotifications(prev => prev.filter(n => n.id !== deletedId));
+            const deletedId = (payload.old as Partial<Notification>).id;
+            if (deletedId) {
+              setAllNotifications((prev) => prev.filter((n) => n.id !== deletedId));
+            }
           }
         }
       )
@@ -276,28 +251,18 @@ export function useNotifications(userId: string): UseNotificationsReturn {
 
     subscriptionRef.current = channel;
 
-    // Cleanup
     return () => {
       devLog('[Notifications] Cleaning up subscription');
       if (subscriptionRef.current) {
         supabase.removeChannel(subscriptionRef.current);
+        subscriptionRef.current = null;
       }
     };
-  }, [userId, fetchNotifications]);
-
-  /**
-   * Refresh when filters change
-   */
-  useEffect(() => {
-    if (!loading) {
-      fetchNotifications();
-    }
-  }, [filters]);
-
-  const summary = calculateSummary(notifications);
+  }, [userId, fetchNotifications, onNotificationInsert]);
 
   return {
     notifications,
+    allNotifications,
     summary,
     loading,
     error,

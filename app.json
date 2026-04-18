@@ -2,7 +2,7 @@
   "expo": {
     "name": "Jackal Adventures",
     "slug": "safari-ops-mobile",
-    "version": "1.0.0",
+    "version": "1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -13,18 +13,26 @@
       "backgroundColor": "#ffffff"
     },
     "notification": {
-      "color": "#3b82f6",
+      "color": "#1e40af",
       "androidMode": "default",
       "androidCollapsedTitle": "Jackal Adventures"
     },
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "3.5",
       "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "Allow Jackal Adventures to use Face ID for quick and secure sign-in.",
+        "NSCameraUsageDescription": "Jackal Adventures does not use the camera.",
+        "NSPhotoLibraryUsageDescription": "Jackal Adventures does not access your photo library.",
+        "NSMicrophoneUsageDescription": "Jackal Adventures does not use the microphone.",
+        "NSLocationWhenInUseUsageDescription": "Jackal Adventures does not use your location.",
+        "NSContactsUsageDescription": "Jackal Adventures does not access your contacts.",
+        "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
@@ -36,7 +44,7 @@
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "NOTIFICATIONS"
+        "POST_NOTIFICATIONS"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -49,18 +57,18 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Allow Jackal Adventures to use Face ID for quick and secure access."
+          "faceIDPermission": "Allow Jackal Adventures to use Face ID for quick and secure sign-in."
         }
       ],
       [
         "expo-notifications",
         {
-          "color": "#3b82f6"
+          "color": "#1e40af",
+          "defaultChannel": "default"
         }
       ]
     ],
     "extra": {
-      "__comment": "Run 'eas init' to generate and populate the EAS projectId here automatically",
       "eas": {
         "projectId": "e5636e2d-1c32-44b8-b5ec-0d03b65d0f5c"
       }

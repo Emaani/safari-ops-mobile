@@ -9,12 +9,22 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withDelay,
+  withSpring,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { FadeSlideIn } from '../components/ui';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { useFinanceData } from '../hooks/useFinanceData';
+import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
 import { useFinanceRealtimeSync } from '../hooks/useFinanceRealtimeSync';
-import { TransactionCard, CRCard, TransactionDetailModal } from '../components/finance';
+import { TransactionDetailModal } from '../components/finance';
 import type { FinancialTransaction, CashRequisition, Currency } from '../types/dashboard';
 import { formatCurrency } from '../lib/utils';
 
@@ -23,31 +33,32 @@ import { formatCurrency } from '../lib/utils';
 // ============================================================================
 
 const COLORS = {
-  primary: '#3b82f6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  income: '#059669',
-  expense: '#dc2626',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#1f4d45',
+  success:    '#3d8f6a',
+  warning:    '#b8883f',
+  danger:     '#c96d4d',
+  income:     '#3d8f6a',
+  expense:    '#c96d4d',
+  background: '#f6f2eb',
+  card:       '#fffdf9',
+  text:       '#181512',
+  textMuted:  '#7f7565',
+  border:     '#e1d7c8',
+  revenueBg:  '#ddf0e8',
+  expenseBg:  '#fdf0ec',
 };
 
 const CURRENCIES: { label: string; value: Currency }[] = [
   { label: 'USD ($)', value: 'USD' },
-  { label: 'UGX', value: 'UGX' },
-  { label: 'KES', value: 'KES' },
+  { label: 'UGX',     value: 'UGX' },
+  { label: 'KES',     value: 'KES' },
 ];
 
 // ============================================================================
 // ICON COMPONENTS
 // ============================================================================
 
-function SearchIcon({ size = 20, color = COLORS.textMuted }: { size?: number; color?: string }) {
+function SearchIcon({ size = 18, color = COLORS.textMuted }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
       <Circle cx="11" cy="11" r="8" />
@@ -56,39 +67,155 @@ function SearchIcon({ size = 20, color = COLORS.textMuted }: { size?: number; co
   );
 }
 
-function DollarIcon({ size = 20, color = COLORS.success }: { size?: number; color?: string }) {
+function TrendUpIcon({ size = 14, color = COLORS.income }: { size?: number; color?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
-      <Path d="M12 2v20" />
-      <Path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5}>
+      <Path d="M22 7l-8.5 8.5-5-5L2 17" />
+      <Path d="M16 7h6v6" />
+    </Svg>
+  );
+}
+
+function TrendDownIcon({ size = 14, color = COLORS.expense }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5}>
+      <Path d="M22 17l-8.5-8.5-5 5L2 7" />
+      <Path d="M16 17h6v-6" />
     </Svg>
   );
 }
 
 // ============================================================================
-// KPI CARD COMPONENT
+// KPI CARDS
 // ============================================================================
 
 interface KPICardProps {
   title: string;
   value: string;
-  subtitle?: string;
-  color: string;
-  bgColor: string;
+  isPositive?: boolean;
+  icon: React.ReactNode;
+  accent: string;
+  bg: string;
 }
 
-function KPICard({ title, value, subtitle, color, bgColor }: KPICardProps) {
+function KPICard({ title, value, isPositive, icon, accent, bg, delay = 0 }: KPICardProps & { delay?: number }) {
+  const opacity = useSharedValue(0);
+  const scale   = useSharedValue(0.88);
+  React.useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) }));
+    scale.value   = withDelay(delay, withSpring(1, { damping: 18, stiffness: 220 }));
+  }, [delay]);
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
   return (
-    <View style={[styles.kpiCard, { backgroundColor: bgColor }]}>
+    <Animated.View style={[styles.kpiCard, { backgroundColor: bg }, animStyle]}>
+      <View style={[styles.kpiIconWrap, { backgroundColor: accent + '22' }]}>{icon}</View>
       <Text style={styles.kpiTitle}>{title}</Text>
-      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-      {subtitle && <Text style={styles.kpiSubtitle}>{subtitle}</Text>}
-    </View>
+      <Text style={[styles.kpiValue, { color: accent }]}>{value}</Text>
+    </Animated.View>
   );
 }
 
 // ============================================================================
-// LOADING OVERLAY COMPONENT
+// REVENUE ROW
+// ============================================================================
+
+const SOURCE_LABELS: Record<string, string> = {
+  booking:        'Reservation',
+  safari_booking: 'Safari',
+  transaction:    'Income',
+};
+
+function RevenueRow({
+  item,
+  displayCurrency,
+  onPress,
+}: {
+  item: RevenueItem;
+  displayCurrency: Currency;
+  onPress: (item: RevenueItem) => void;
+}) {
+  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+  const displayed = (item.amount / (rates[item.currency] || 1)) * (rates[displayCurrency] || 1);
+  const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const sourceLabel = SOURCE_LABELS[item.source] || item.source;
+  const statusColor = item.status?.toLowerCase() === 'completed' || item.status?.toLowerCase() === 'confirmed'
+    ? COLORS.success : COLORS.warning;
+
+  return (
+    <TouchableOpacity style={styles.rowCard} onPress={() => onPress(item)} activeOpacity={0.75}>
+      <View style={[styles.rowIconWrap, { backgroundColor: '#dcfce7' }]}>
+        <TrendUpIcon size={16} color={COLORS.income} />
+      </View>
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle || date}</Text>
+        <View style={styles.rowMeta}>
+          <View style={[styles.sourceBadge, { backgroundColor: '#dbeafe' }]}>
+            <Text style={[styles.sourceBadgeText, { color: '#1d4ed8' }]}>{sourceLabel}</Text>
+          </View>
+          <View style={[styles.sourceBadge, { backgroundColor: statusColor + '22' }]}>
+            <Text style={[styles.sourceBadgeText, { color: statusColor }]}>{item.status}</Text>
+          </View>
+          <Text style={styles.rowDate}>{date}</Text>
+        </View>
+      </View>
+      <Text style={[styles.rowAmount, { color: COLORS.income }]}>
+        +{formatCurrency(displayed, displayCurrency)}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ============================================================================
+// EXPENSE ROW
+// ============================================================================
+
+function ExpenseRow({
+  item,
+  displayCurrency,
+  onPress,
+}: {
+  item: ExpenseItem;
+  displayCurrency: Currency;
+  onPress: (item: ExpenseItem) => void;
+}) {
+  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+  const displayed = (item.amount / (rates[item.currency] || 1)) * (rates[displayCurrency] || 1);
+  const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const sourceLabel = item.source === 'cash_requisition' ? 'Cash Req.' : 'Expense';
+  const statusColor = item.status?.toLowerCase() === 'completed' || item.status?.toLowerCase() === 'resolved'
+    ? COLORS.success : item.status?.toLowerCase() === 'approved' ? COLORS.warning : COLORS.textMuted;
+
+  return (
+    <TouchableOpacity style={styles.rowCard} onPress={() => onPress(item)} activeOpacity={0.75}>
+      <View style={[styles.rowIconWrap, { backgroundColor: '#fee2e2' }]}>
+        <TrendDownIcon size={16} color={COLORS.expense} />
+      </View>
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle || date}</Text>
+        <View style={styles.rowMeta}>
+          <View style={[styles.sourceBadge, { backgroundColor: '#fef3c7' }]}>
+            <Text style={[styles.sourceBadgeText, { color: '#92400e' }]}>{sourceLabel}</Text>
+          </View>
+          <View style={[styles.sourceBadge, { backgroundColor: statusColor + '22' }]}>
+            <Text style={[styles.sourceBadgeText, { color: statusColor }]}>{item.status}</Text>
+          </View>
+          <Text style={styles.rowDate}>{date}</Text>
+        </View>
+      </View>
+      <Text style={[styles.rowAmount, { color: COLORS.expense }]}>
+        -{formatCurrency(displayed, displayCurrency)}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ============================================================================
+// LOADING / ERROR
 // ============================================================================
 
 function LoadingOverlay() {
@@ -102,16 +229,7 @@ function LoadingOverlay() {
   );
 }
 
-// ============================================================================
-// ERROR MESSAGE COMPONENT
-// ============================================================================
-
-interface ErrorMessageProps {
-  message: string;
-  onRetry?: () => void;
-}
-
-function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
+function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <View style={styles.errorContainer}>
       <Text style={styles.errorTitle}>Something went wrong</Text>
@@ -126,68 +244,23 @@ function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
 }
 
 // ============================================================================
-// TAB SELECTOR COMPONENT
-// ============================================================================
-
-interface TabSelectorProps {
-  tabs: { key: string; label: string }[];
-  activeTab: string;
-  onTabChange: (tab: string) => void;
-}
-
-function TabSelector({ tabs, activeTab, onTabChange }: TabSelectorProps) {
-  return (
-    <View style={styles.tabContainer}>
-      {tabs.map((tab) => (
-        <TouchableOpacity
-          key={tab.key}
-          style={[
-            styles.tab,
-            activeTab === tab.key && styles.tabActive,
-          ]}
-          onPress={() => onTabChange(tab.key)}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === tab.key && styles.tabTextActive,
-            ]}
-          >
-            {tab.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
-// ============================================================================
 // MAIN FINANCE SCREEN
 // ============================================================================
 
 export function FinanceScreen() {
-  console.log('[FinanceScreen] Component mounted');
-
-  // ========================================================================
-  // STATE
-  // ========================================================================
-
-  const [currency, setCurrency] = useState<Currency>('USD');
-  const [activeTab, setActiveTab] = useState<'transactions' | 'requisitions'>('transactions');
-  const [transactionFilter, setTransactionFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [currency,   setCurrency]   = useState<Currency>('USD');
+  const [activeTab,  setActiveTab]  = useState<'revenue' | 'expenses'>('revenue');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<FinancialTransaction | CashRequisition | null>(null);
-  const [selectedItemType, setSelectedItemType] = useState<'transaction' | 'cr'>('transaction');
+
+  // For detail modal — adapted to work with both item types
+  const [modalItem,    setModalItem]    = useState<FinancialTransaction | CashRequisition | null>(null);
+  const [modalType,    setModalType]    = useState<'transaction' | 'cr'>('transaction');
   const [modalVisible, setModalVisible] = useState(false);
 
-  // ========================================================================
-  // HOOKS
-  // ========================================================================
-
   const {
-    transactions,
-    cashRequisitions,
+    revenueItems,
+    expenseItems,
     revenueMTD,
     expensesMTD,
     netProfitMTD,
@@ -197,253 +270,219 @@ export function FinanceScreen() {
     refetch,
   } = useFinanceData({ currency });
 
-  // Real-time sync
   useFinanceRealtimeSync(refetch);
 
-  // ========================================================================
-  // COMPUTED VALUES
-  // ========================================================================
+  // ── Filtered lists ────────────────────────────────────────────────────────
 
-  const filteredTransactions = useMemo(() => {
-    let result = transactions;
+  const filteredRevenue = useMemo(() => {
+    if (!searchQuery.trim()) return revenueItems;
+    const q = searchQuery.toLowerCase();
+    return revenueItems.filter(
+      i => i.title.toLowerCase().includes(q) ||
+           i.subtitle.toLowerCase().includes(q) ||
+           (i.reference || '').toLowerCase().includes(q)
+    );
+  }, [revenueItems, searchQuery]);
 
-    // Apply type filter
-    if (transactionFilter !== 'all') {
-      result = result.filter((t) => t.transaction_type === transactionFilter);
-    }
+  const filteredExpenses = useMemo(() => {
+    if (!searchQuery.trim()) return expenseItems;
+    const q = searchQuery.toLowerCase();
+    return expenseItems.filter(
+      i => i.title.toLowerCase().includes(q) ||
+           i.subtitle.toLowerCase().includes(q) ||
+           (i.reference || '').toLowerCase().includes(q)
+    );
+  }, [expenseItems, searchQuery]);
 
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (t) =>
-          (t.category || '').toLowerCase().includes(query) ||
-          (t.description || '').toLowerCase().includes(query)
-      );
-    }
-
-    console.log(`[FinanceScreen] Filtered ${result.length} transactions from ${transactions.length}`);
-
-    return result;
-  }, [transactions, transactionFilter, searchQuery]);
-
-  const filteredCRs = useMemo(() => {
-    let result = cashRequisitions;
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (cr) =>
-          (cr.cr_number || '').toLowerCase().includes(query) ||
-          (cr.expense_category || '').toLowerCase().includes(query)
-      );
-    }
-
-    console.log(`[FinanceScreen] Filtered ${result.length} CRs from ${cashRequisitions.length}`);
-
-    return result;
-  }, [cashRequisitions, searchQuery]);
-
-  const tabs = [
-    { key: 'transactions', label: 'Transactions' },
-    { key: 'requisitions', label: `CRs (${pendingCRCount})` },
-  ];
-
-  // ========================================================================
-  // CALLBACKS
-  // ========================================================================
+  // ── Callbacks ─────────────────────────────────────────────────────────────
 
   const handleRefresh = useCallback(async () => {
-    console.log('[FinanceScreen] Pull-to-refresh triggered');
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
 
-  const handleTransactionPress = useCallback((transaction: FinancialTransaction) => {
-    console.log('[FinanceScreen] Transaction pressed:', transaction.id);
-    setSelectedItem(transaction);
-    setSelectedItemType('transaction');
+  const handleRevenuePress = useCallback((item: RevenueItem) => {
+    // Map to FinancialTransaction shape for the existing modal
+    const mapped: FinancialTransaction = {
+      id:               item.id,
+      transaction_date: item.date,
+      amount:           item.amount,
+      transaction_type: 'income',
+      category:         item.title,
+      currency:         item.currency,
+      description:      item.subtitle,
+      reference_number: item.reference,
+      status:           item.status,
+    };
+    setModalItem(mapped);
+    setModalType('transaction');
     setModalVisible(true);
   }, []);
 
-  const handleCRPress = useCallback((cr: CashRequisition) => {
-    console.log('[FinanceScreen] CR pressed:', cr.cr_number);
-    setSelectedItem(cr);
-    setSelectedItemType('cr');
+  const handleExpensePress = useCallback((item: ExpenseItem) => {
+    if (item.source === 'cash_requisition') {
+      // Map to CashRequisition shape
+      const mapped: CashRequisition = {
+        id:               item.id.replace('cr-', ''),
+        cr_number:        item.reference || item.id,
+        total_cost:       item.amount,
+        currency:         item.currency,
+        status:           item.status as CashRequisition['status'],
+        date_needed:      item.date,
+        expense_category: item.title,
+        created_at:       item.date,
+        description:      item.subtitle,
+      };
+      setModalItem(mapped);
+      setModalType('cr');
+    } else {
+      const mapped: FinancialTransaction = {
+        id:               item.id,
+        transaction_date: item.date,
+        amount:           item.amount,
+        transaction_type: 'expense',
+        category:         item.title,
+        currency:         item.currency,
+        description:      item.subtitle,
+        reference_number: item.reference,
+        status:           item.status,
+      };
+      setModalItem(mapped);
+      setModalType('transaction');
+    }
     setModalVisible(true);
   }, []);
 
-  const handleCloseModal = useCallback(() => {
-    setModalVisible(false);
-    setSelectedItem(null);
-  }, []);
+  // ── Error state ───────────────────────────────────────────────────────────
 
-  // ========================================================================
-  // RENDER
-  // ========================================================================
-
-  // Show error if data fetch failed
   if (error && !loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Finance</Text>
         </View>
-        <ErrorMessage
-          message={error.message || 'Failed to load financial data'}
-          onRetry={refetch}
-        />
+        <ErrorMessage message={error.message || 'Failed to load financial data'} onRetry={refetch} />
       </SafeAreaView>
     );
   }
 
+  // ── Header / List ─────────────────────────────────────────────────────────
+
   const renderHeader = () => (
     <>
-      {/* Currency Picker */}
-      <View style={styles.currencyContainer}>
-        <Text style={styles.currencyLabel}>Currency</Text>
-        <View style={styles.currencyPickerWrapper}>
-          <Picker
-            selectedValue={currency}
-            onValueChange={(value) => setCurrency(value)}
-            style={styles.currencyPicker}
-          >
-            {CURRENCIES.map((curr) => (
-              <Picker.Item key={curr.value} label={curr.label} value={curr.value} />
-            ))}
-          </Picker>
+      {/* Currency chips */}
+      <View style={styles.currencyRow}>
+        <Text style={styles.sectionLabel}>Display Currency</Text>
+        <View style={styles.currencyChips}>
+          {CURRENCIES.map(c => (
+            <TouchableOpacity
+              key={c.value}
+              style={[styles.currencyChip, currency === c.value && styles.currencyChipActive]}
+              onPress={() => setCurrency(c.value)}
+            >
+              <Text style={[styles.currencyChipText, currency === c.value && styles.currencyChipTextActive]}>
+                {c.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
       {/* KPI Cards */}
       <View style={styles.kpiGrid}>
-        <KPICard
-          title="Revenue (MTD)"
-          value={formatCurrency(revenueMTD, currency)}
-          color={COLORS.success}
-          bgColor="#d1fae5"
-        />
-        <KPICard
-          title="Expenses (MTD)"
-          value={formatCurrency(expensesMTD, currency)}
-          color={COLORS.danger}
-          bgColor="#fee2e2"
-        />
-        <KPICard
-          title="Net Profit (MTD)"
-          value={formatCurrency(netProfitMTD, currency)}
-          color={netProfitMTD >= 0 ? COLORS.success : COLORS.danger}
-          bgColor={netProfitMTD >= 0 ? '#dcfce7' : '#fef3c7'}
+        <KPICard delay={0}   title="Revenue (MTD)"  value={formatCurrency(revenueMTD,  currency)} accent={COLORS.income}  bg={COLORS.revenueBg} icon={<TrendUpIcon   size={15} color={COLORS.income}  />} />
+        <KPICard delay={70}  title="Expenses (MTD)" value={formatCurrency(expensesMTD, currency)} accent={COLORS.expense} bg={COLORS.expenseBg} icon={<TrendDownIcon size={15} color={COLORS.expense} />} />
+        <KPICard delay={140} title="Net Profit"      value={formatCurrency(netProfitMTD, currency)} accent={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} bg={netProfitMTD >= 0 ? COLORS.revenueBg : '#f5e8ce'} icon={<TrendUpIcon size={15} color={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} />} />
+      </View>
+
+      {/* Tab selector now lives in the hero header above the list */}
+
+      {/* Search */}
+      <View style={styles.searchRow}>
+        <SearchIcon size={17} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={activeTab === 'revenue' ? 'Search revenue...' : 'Search expenses...'}
+          placeholderTextColor={COLORS.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
       </View>
 
-      {/* Tab Selector */}
-      <TabSelector
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          setActiveTab(tab as any);
-          setSearchQuery('');
-        }}
-      />
-
-      {/* Search and Filter Row */}
-      <View style={styles.searchFilterRow}>
-        <View style={styles.searchInputContainer}>
-          <SearchIcon size={18} color={COLORS.textMuted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={activeTab === 'transactions' ? 'Search transactions...' : 'Search CRs...'}
-            placeholderTextColor={COLORS.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        {activeTab === 'transactions' && (
-          <View style={styles.filterPillsRow}>
-            {(['all', 'income', 'expense'] as const).map((filter) => (
-              <TouchableOpacity
-                key={filter}
-                style={[
-                  styles.filterPill,
-                  transactionFilter === filter && styles.filterPillActive,
-                ]}
-                onPress={() => setTransactionFilter(filter)}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    transactionFilter === filter && styles.filterPillTextActive,
-                  ]}
-                >
-                  {filter === 'all' ? 'All' : filter === 'income' ? 'Income' : 'Expense'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* List Header */}
-      <Text style={styles.listHeader}>
-        {activeTab === 'transactions'
-          ? `Transactions (${filteredTransactions.length})`
-          : `Cash Requisitions (${filteredCRs.length})`
-        }
+      {/* Section count */}
+      <Text style={styles.listCount}>
+        {activeTab === 'revenue'
+          ? `${filteredRevenue.length} revenue record${filteredRevenue.length !== 1 ? 's' : ''}`
+          : `${filteredExpenses.length} expense record${filteredExpenses.length !== 1 ? 's' : ''}`}
       </Text>
     </>
   );
 
-  const renderTransaction = ({ item }: { item: FinancialTransaction }) => (
-    <TransactionCard
-      transaction={item}
-      onPress={handleTransactionPress}
-      displayCurrency={currency}
-    />
+  const renderRevenueItem = ({ item, index }: { item: RevenueItem; index: number }) => (
+    <FadeSlideIn delay={Math.min(index * 40, 300)} distance={14}>
+      <RevenueRow item={item} displayCurrency={currency} onPress={handleRevenuePress} />
+    </FadeSlideIn>
   );
 
-  const renderCR = ({ item }: { item: CashRequisition }) => (
-    <CRCard
-      cr={item}
-      onPress={handleCRPress}
-      displayCurrency={currency}
-    />
+  const renderExpenseItem = ({ item, index }: { item: ExpenseItem; index: number }) => (
+    <FadeSlideIn delay={Math.min(index * 40, 300)} distance={14}>
+      <ExpenseRow item={item} displayCurrency={currency} onPress={handleExpensePress} />
+    </FadeSlideIn>
   );
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <DollarIcon size={48} color={COLORS.textMuted} />
       <Text style={styles.emptyTitle}>
-        {activeTab === 'transactions' ? 'No transactions found' : 'No cash requisitions found'}
+        {activeTab === 'revenue' ? 'No revenue records found' : 'No expense records found'}
       </Text>
       <Text style={styles.emptyMessage}>
-        {searchQuery
-          ? 'Try adjusting your search'
-          : activeTab === 'transactions'
-            ? 'Transactions will appear here'
-            : 'Cash requisitions will appear here'
-        }
+        {searchQuery ? 'Try adjusting your search' : 'Records will appear here once available'}
       </Text>
     </View>
   );
 
+  const listData  = activeTab === 'revenue' ? filteredRevenue : filteredExpenses;
+  const renderRow = activeTab === 'revenue' ? renderRevenueItem : renderExpenseItem as any;
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Loading Overlay */}
       {loading && !refreshing && <LoadingOverlay />}
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Finance</Text>
-      </View>
+      <FadeSlideIn delay={0} distance={-10}>
+        <View style={styles.hero}>
+          <Text style={styles.heroEyebrow}>Operations</Text>
+          <View style={styles.heroRow}>
+            <View>
+              <Text style={styles.heroTitle}>Finance</Text>
+              <Text style={styles.heroSub}>Revenue &amp; Expenses</Text>
+            </View>
+            <View style={[styles.heroBadge, { backgroundColor: netProfitMTD >= 0 ? '#3d8f6a' : '#c96d4d' }]}>
+              <Text style={styles.heroBadgeText}>{netProfitMTD >= 0 ? '▲' : '▼'} {formatCurrency(Math.abs(netProfitMTD), currency)}</Text>
+            </View>
+          </View>
+          {/* Tab selector on dark bg */}
+          <View style={styles.heroTabs}>
+            {(['revenue', 'expenses'] as const).map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.heroTab, activeTab === tab && styles.heroTabActive]}
+                onPress={() => { setActiveTab(tab); setSearchQuery(''); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.heroTabText, activeTab === tab && styles.heroTabTextActive]}>
+                  {tab === 'revenue' ? `Revenue (${revenueItems.length})` : `Expenses (${expenseItems.length})`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </FadeSlideIn>
 
-      {/* Main Content */}
       <FlatList
-        data={activeTab === 'transactions' ? filteredTransactions : filteredCRs}
+        data={listData}
         keyExtractor={(item: any) => item.id}
-        renderItem={activeTab === 'transactions' ? renderTransaction : renderCR as any}
+        renderItem={renderRow}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={!loading ? renderEmpty : null}
         contentContainerStyle={styles.listContent}
@@ -458,12 +497,11 @@ export function FinanceScreen() {
         }
       />
 
-      {/* Detail Modal */}
       <TransactionDetailModal
-        item={selectedItem}
-        itemType={selectedItemType}
+        item={modalItem}
+        itemType={modalType}
         visible={modalVisible}
-        onClose={handleCloseModal}
+        onClose={() => { setModalVisible(false); setModalItem(null); }}
         displayCurrency={currency}
       />
     </SafeAreaView>
@@ -481,47 +519,78 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: COLORS.card,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: COLORS.text,
+    letterSpacing: -0.4,
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  hero: { backgroundColor: '#171513', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 12 },
+  heroEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#b8ab95' },
+  heroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  heroTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -1, color: '#fffaf3' },
+  heroSub: { fontSize: 13, color: '#b8ab95', marginTop: 2 },
+  heroBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  heroBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  heroTabs: { flexDirection: 'row', gap: 8 },
+  heroTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
+  heroTabActive: { backgroundColor: '#fffdf9' },
+  heroTabText: { fontSize: 13, fontWeight: '700', color: '#b8ab95' },
+  heroTabTextActive: { color: '#181512', fontWeight: '800' },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
-  currencyContainer: {
-    marginBottom: 16,
+
+  // Currency
+  currencyRow: {
+    marginBottom: 14,
   },
-  currencyLabel: {
-    fontSize: 12,
-    fontWeight: '500',
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
     color: COLORS.textMuted,
-    marginBottom: 4,
     textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
   },
-  currencyPickerWrapper: {
+  currencyChips: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  currencyChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: COLORS.card,
-    borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: 'hidden',
   },
-  currencyPicker: {
-    height: 44,
-    color: COLORS.text,
+  currencyChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
+  currencyChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  currencyChipTextActive: {
+    color: '#fff',
+  },
+
+  // KPI
   kpiGrid: {
     flexDirection: 'row',
     gap: 8,
@@ -529,103 +598,161 @@ const styles = StyleSheet.create({
   },
   kpiCard: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 12,
+    alignItems: 'flex-start',
+  },
+  kpiIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   kpiTitle: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: '700',
     color: COLORS.textMuted,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 4,
   },
   kpiValue: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
-  kpiSubtitle: {
-    fontSize: 10,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
+
+  // Tabs
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: COLORS.card,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   tab: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 10,
   },
-  tabActive: {
-    backgroundColor: COLORS.primary,
+  tabActiveRevenue: {
+    backgroundColor: '#059669',
+  },
+  tabActiveExpense: {
+    backgroundColor: '#dc2626',
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textMuted,
   },
-  tabTextActive: {
+  tabTextActiveRevenue: {
     color: '#ffffff',
   },
-  searchFilterRow: {
-    marginBottom: 12,
+  tabTextActiveExpense: {
+    color: '#ffffff',
   },
-  searchInputContainer: {
+
+  // Search
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.card,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 8,
+    marginBottom: 10,
+    height: 44,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    height: 44,
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.text,
-    marginLeft: 8,
   },
-  filterPillsRow: {
+  listCount: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+
+  // Row cards
+  rowCard: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
+    alignItems: 'center',
     backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  filterPillActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+  rowIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  filterPillText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.textMuted,
+  rowInfo: {
+    flex: 1,
   },
-  filterPillTextActive: {
-    color: '#ffffff',
-  },
-  listHeader: {
-    fontSize: 16,
+  rowTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 12,
-    marginTop: 8,
+    marginBottom: 2,
   },
+  rowSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: 6,
+  },
+  rowMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  sourceBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  rowDate: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+  rowAmount: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginLeft: 8,
+  },
+
+  // Loading
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(243, 244, 246, 0.9)',
+    backgroundColor: 'rgba(241,245,249,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
@@ -637,16 +764,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 5,
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
     color: COLORS.textMuted,
   },
+
+  // Error
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -654,8 +783,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: COLORS.text,
     marginBottom: 8,
   },
@@ -669,26 +798,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   retryButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#ffffff',
   },
+
+  // Empty
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 48,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.text,
-    marginTop: 16,
     marginBottom: 8,
   },
   emptyMessage: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textMuted,
     textAlign: 'center',
   },

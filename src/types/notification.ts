@@ -7,12 +7,14 @@
 
 export type NotificationType =
   | 'booking_created'
+  | 'booking_started'
   | 'booking_confirmed'
   | 'booking_completed'
   | 'booking_cancelled'
   | 'payment_received'
   | 'payment_overdue'
   | 'cr_created'
+  | 'cr_assigned'
   | 'cr_approved'
   | 'cr_rejected'
   | 'vehicle_maintenance'
@@ -61,6 +63,7 @@ export interface NotificationData {
   // Deep linking
   screen?: string;
   params?: Record<string, any>;
+  suppress_banner?: boolean;
 }
 
 /**

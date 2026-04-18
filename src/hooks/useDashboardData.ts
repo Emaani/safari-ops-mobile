@@ -95,16 +95,18 @@ export function useDashboardData({
       )
       .order('start_date', { ascending: false });
 
-    // Apply dashboard month filter
-    if (dashboardMonthFilter !== 'all') {
+    // Apply dashboard filter — always scope to the selected year
+    {
       const year = dashboardFilterYear;
       const month = dashboardMonthFilter;
-      const firstDay = new Date(year, month, 1).toISOString();
-      const lastDay = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+      const firstDay = month !== 'all'
+        ? new Date(year, month, 1).toISOString()
+        : new Date(year, 0, 1).toISOString();
+      const lastDay = month !== 'all'
+        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+        : new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] Bookings date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('start_date', firstDay).lte('start_date', lastDay);
-    } else {
-      console.log(`[DashboardData #${fetchId}] Bookings: NO date filter (all months)`);
     }
 
     const { data: bookings, error } = await query;
@@ -182,16 +184,18 @@ export function useDashboardData({
       .neq('status', 'cancelled')
       .order('transaction_date', { ascending: true });
 
-    // Apply dashboard month filter
-    if (dashboardMonthFilter !== 'all') {
+    // Apply dashboard filter — always scope to the selected year
+    {
       const year = dashboardFilterYear;
       const month = dashboardMonthFilter;
-      const firstDay = new Date(year, month, 1).toISOString();
-      const lastDay = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+      const firstDay = month !== 'all'
+        ? new Date(year, month, 1).toISOString()
+        : new Date(year, 0, 1).toISOString();
+      const lastDay = month !== 'all'
+        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+        : new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] Transactions date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('transaction_date', firstDay).lte('transaction_date', lastDay);
-    } else {
-      console.log(`[DashboardData #${fetchId}] Transactions: NO date filter (all months)`);
     }
 
     const { data: transactions, error } = await query;
@@ -232,16 +236,18 @@ export function useDashboardData({
       .not('status', 'in', '(Declined,Rejected)')
       .order('created_at', { ascending: true });
 
-    // Apply dashboard month filter on created_at
-    if (dashboardMonthFilter !== 'all') {
+    // Apply dashboard filter — always scope to the selected year
+    {
       const year = dashboardFilterYear;
       const month = dashboardMonthFilter;
-      const firstDay = new Date(year, month, 1).toISOString();
-      const lastDay = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+      const firstDay = month !== 'all'
+        ? new Date(year, month, 1).toISOString()
+        : new Date(year, 0, 1).toISOString();
+      const lastDay = month !== 'all'
+        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+        : new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] CRs date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('created_at', firstDay).lte('created_at', lastDay);
-    } else {
-      console.log(`[DashboardData #${fetchId}] CRs: NO date filter (all months)`);
     }
 
     const { data: crs, error } = await query;
@@ -330,16 +336,18 @@ export function useDashboardData({
       .select('id, total_price_usd, total_price_ugx, total_expenses_usd, total_expenses_ugx, vehicle_hire_cost_usd, vehicle_hire_cost_ugx, start_date, end_date, amount_paid, currency')
       .order('start_date', { ascending: false });
 
-    // Apply dashboard month filter on start_date (same as bookings)
-    if (dashboardMonthFilter !== 'all') {
+    // Apply dashboard filter — always scope to the selected year
+    {
       const year = dashboardFilterYear;
       const month = dashboardMonthFilter;
-      const firstDay = new Date(year, month, 1).toISOString();
-      const lastDay = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+      const firstDay = month !== 'all'
+        ? new Date(year, month, 1).toISOString()
+        : new Date(year, 0, 1).toISOString();
+      const lastDay = month !== 'all'
+        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+        : new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] Safari bookings date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('start_date', firstDay).lte('start_date', lastDay);
-    } else {
-      console.log(`[DashboardData #${fetchId}] Safari bookings: NO date filter (all months)`);
     }
 
     const { data: safariBookings, error } = await query;

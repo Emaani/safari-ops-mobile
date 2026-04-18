@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { devLog } from '../lib/devLog';
 
 /**
@@ -23,6 +24,58 @@ export interface AuthError {
   message: string;
   code?: string;
 }
+
+const isInvalidRefreshTokenError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const message = 'message' in error && typeof error.message === 'string'
+    ? error.message.toLowerCase()
+    : '';
+
+  return message.includes('invalid refresh token') || message.includes('refresh token not found');
+};
+
+const clearPersistedAuthSession = async (): Promise<void> => {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const authKeys = keys.filter((key) => (
+      key.startsWith('sb-') ||
+      key.includes('supabase.auth') ||
+      key.includes('auth-token')
+    ));
+
+    if (authKeys.length > 0) {
+      await AsyncStorage.multiRemove(authKeys);
+    }
+  } catch (storageError) {
+    console.warn('[AuthService] Failed to clear stale auth storage:', storageError);
+  }
+};
+
+const recoverSessionWithoutRefreshRedbox = async () => {
+  const originalConsoleError = console.error;
+
+  console.error = (...args: unknown[]) => {
+    const message = args
+      .map((arg) => (typeof arg === 'string' ? arg : arg instanceof Error ? arg.message : ''))
+      .join(' ')
+      .toLowerCase();
+
+    if (message.includes('invalid refresh token') || message.includes('refresh token not found')) {
+      return;
+    }
+
+    originalConsoleError(...args);
+  };
+
+  try {
+    return await supabase.auth.getSession();
+  } finally {
+    console.error = originalConsoleError;
+  }
+};
 
 /**
  * Sign in with email and password
@@ -157,10 +210,15 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
   devLog('[AuthService] Getting current session');
 
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await recoverSessionWithoutRefreshRedbox();
 
     if (error) {
-      console.error('[AuthService] Error getting session:', error);
+      if (isInvalidRefreshTokenError(error)) {
+        console.warn('[AuthService] Stored session expired. Clearing stale credentials.');
+        await clearPersistedAuthSession();
+      } else {
+        console.warn('[AuthService] Error getting session:', error.message);
+      }
       return null;
     }
 
@@ -179,7 +237,12 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
       session: data.session,
     };
   } catch (error) {
-    console.error('[AuthService] Unexpected error getting session:', error);
+    if (isInvalidRefreshTokenError(error)) {
+      console.warn('[AuthService] Stored session expired during recovery. Clearing stale credentials.');
+      await clearPersistedAuthSession();
+    } else {
+      console.warn('[AuthService] Unexpected error getting session:', error);
+    }
     return null;
   }
 }

@@ -16,6 +16,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "wminejob@gmail.com",
+        "ascAppId": "6744423134",
+        "bundleIdentifier": "com.jackalwild.jackaladventures"
+      }
+    }
   }
 }

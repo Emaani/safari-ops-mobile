@@ -9,28 +9,38 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withDelay,
+  withSpring,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { useFleetData } from '../hooks/useFleetData';
 import { useFleetRealtimeSync } from '../hooks/useFleetRealtimeSync';
 import { VehicleCard, VehicleDetailModal, MaintenanceTracker } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
+import { FadeSlideIn } from '../components/ui';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
 const COLORS = {
-  primary: '#3b82f6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#1f4d45',
+  success:    '#3d8f6a',
+  warning:    '#b8883f',
+  danger:     '#c96d4d',
+  purple:     '#8366d7',
+  background: '#f6f2eb',
+  card:       '#fffdf9',
+  text:       '#181512',
+  textMuted:  '#7f7565',
+  border:     '#e1d7c8',
 };
 
 const STATUS_FILTERS: { label: string; value: VehicleStatus | 'all' }[] = [
@@ -77,12 +87,22 @@ interface StatCardProps {
   bgColor: string;
 }
 
-function StatCard({ title, value, color, bgColor }: StatCardProps) {
+function StatCard({ title, value, color, bgColor, delay = 0 }: StatCardProps & { delay?: number }) {
+  const opacity = useSharedValue(0);
+  const scale   = useSharedValue(0.88);
+  React.useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) }));
+    scale.value   = withDelay(delay, withSpring(1, { damping: 18, stiffness: 220 }));
+  }, [delay]);
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
   return (
-    <View style={[styles.statCard, { backgroundColor: bgColor }]}>
+    <Animated.View style={[styles.statCard, { backgroundColor: bgColor }, animStyle]}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={[styles.statTitle, { color }]}>{title}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -234,30 +254,10 @@ export function FleetScreen() {
     <>
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
-        <StatCard
-          title="Total Fleet"
-          value={stats.total}
-          color={COLORS.primary}
-          bgColor="#eff6ff"
-        />
-        <StatCard
-          title="Available"
-          value={stats.available}
-          color={COLORS.success}
-          bgColor="#dcfce7"
-        />
-        <StatCard
-          title="On Safari"
-          value={stats.booked}
-          color={COLORS.purple}
-          bgColor="#f3e8ff"
-        />
-        <StatCard
-          title="Maintenance"
-          value={stats.maintenance}
-          color={COLORS.warning}
-          bgColor="#fef3c7"
-        />
+        <StatCard title="Total Fleet"  value={stats.total}       color={COLORS.primary} bgColor="#dce8e3" delay={0}   />
+        <StatCard title="Available"    value={stats.available}   color={COLORS.success} bgColor="#ddf0e8" delay={60}  />
+        <StatCard title="On Safari"    value={stats.booked}      color={COLORS.purple}  bgColor="#ede8f9" delay={120} />
+        <StatCard title="Maintenance"  value={stats.maintenance} color={COLORS.warning} bgColor="#f5e8ce" delay={180} />
       </View>
 
       {/* Search Bar */}
@@ -312,8 +312,10 @@ export function FleetScreen() {
     </>
   );
 
-  const renderVehicle = ({ item }: { item: Vehicle }) => (
-    <VehicleCard vehicle={item} onPress={handleVehiclePress} />
+  const renderVehicle = ({ item, index }: { item: Vehicle; index: number }) => (
+    <FadeSlideIn delay={Math.min(index * 50, 320)} distance={16}>
+      <VehicleCard vehicle={item} onPress={handleVehiclePress} />
+    </FadeSlideIn>
   );
 
   const renderEmpty = () => (
@@ -333,10 +335,37 @@ export function FleetScreen() {
       {/* Loading Overlay */}
       {loading && !refreshing && <LoadingOverlay />}
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Fleet Management</Text>
-      </View>
+      {/* Dark hero header */}
+      <FadeSlideIn delay={0} distance={-10}>
+        <View style={styles.hero}>
+          <Text style={styles.heroEyebrow}>Operations</Text>
+          <View style={styles.heroRow}>
+            <View>
+              <Text style={styles.heroTitle}>Fleet</Text>
+              <Text style={styles.heroSub}>{stats.total} vehicles · {stats.available} available</Text>
+            </View>
+            {stats.maintenance > 0 && (
+              <View style={[styles.heroBadge, { backgroundColor: '#b8883f' }]}>
+                <Text style={styles.heroBadgeText}>{stats.maintenance} in service</Text>
+              </View>
+            )}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroTabs}>
+            {STATUS_FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f.value}
+                style={[styles.heroTab, statusFilter === f.value && styles.heroTabActive]}
+                onPress={() => setStatusFilter(f.value)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </FadeSlideIn>
 
       {/* Main Content */}
       <FlatList
@@ -393,6 +422,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
   },
+  hero: { backgroundColor: '#171513', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 12 },
+  heroEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#b8ab95' },
+  heroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  heroTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -1, color: '#fffaf3' },
+  heroSub: { fontSize: 13, color: '#b8ab95', marginTop: 2 },
+  heroBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  heroBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  heroTabs: { flexDirection: 'row', gap: 8 },
+  heroTab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
+  heroTabActive: { backgroundColor: '#fffdf9' },
+  heroTabText: { fontSize: 13, fontWeight: '700', color: '#b8ab95' },
+  heroTabTextActive: { color: '#181512', fontWeight: '800' },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -407,8 +448,8 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: '22%',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 16,
+    padding: 14,
     alignItems: 'center',
   },
   statValue: {

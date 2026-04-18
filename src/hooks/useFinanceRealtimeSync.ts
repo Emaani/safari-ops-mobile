@@ -1,77 +1,28 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { devLog } from '../lib/devLog';
-import { logRealtimeStatus } from '../lib/realtimeStatus';
+import { useEffect, useRef } from 'react';
+import { realtimeManager } from '../lib/realtimeManager';
 
-const DEBOUNCE_MS = 500;
+const FINANCE_TABLES = [
+  'financial_transactions',
+  'cash_requisitions',
+  'exchange_rates',
+  'bookings',
+  'safari_bookings',
+] as const;
 
 /**
- * Hook to subscribe to realtime updates for Finance tables
- * Matches Dashboard realtime sync pattern exactly
+ * Subscribes to realtime changes for Finance-relevant tables via the
+ * centralised RealtimeManager (shared channels — no duplicates with Dashboard).
  */
 export function useFinanceRealtimeSync(onUpdate: () => void) {
-  const channelsRef = useRef<RealtimeChannel[]>([]);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isCleaningUpRef = useRef(false);
-
-  // Debounced update handler
-  const debouncedUpdate = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    debounceTimerRef.current = setTimeout(() => {
-      devLog('[Finance Realtime] Triggering data refetch...');
-      onUpdate();
-    }, DEBOUNCE_MS);
-  }, [onUpdate]);
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
 
   useEffect(() => {
-    isCleaningUpRef.current = false;
-    devLog('[Finance Realtime] Initializing subscriptions...');
-
-    const tables = ['financial_transactions', 'cash_requisitions', 'exchange_rates'];
-
-    // Create channels for each table
-    const channels = tables.map(table => {
-      const channel = supabase
-        .channel(`finance-${table}-changes`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: table,
-          },
-          (payload) => {
-            console.log(`[Finance Realtime] ${table} changed:`, payload.eventType);
-            debouncedUpdate();
-          }
-        )
-        .subscribe((status) => {
-          logRealtimeStatus('Finance Realtime', table, status, isCleaningUpRef.current);
-        });
-
-      return channel;
-    });
-
-    channelsRef.current = channels;
-
-    // Cleanup on unmount
-    return () => {
-      isCleaningUpRef.current = true;
-      devLog('[Finance Realtime] Cleaning up subscriptions...');
-
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-
-      channels.forEach(channel => {
-        supabase.removeChannel(channel);
-      });
-
-      channelsRef.current = [];
-    };
-  }, [debouncedUpdate]);
+    const unsub = realtimeManager.subscribe(
+      [...FINANCE_TABLES],
+      () => onUpdateRef.current(),
+      'Finance',
+    );
+    return unsub;
+  }, []);
 }

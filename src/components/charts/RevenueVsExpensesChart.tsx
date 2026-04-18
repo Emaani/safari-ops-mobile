@@ -7,10 +7,9 @@ import {
   TouchableOpacity,
   Dimensions,
 } from 'react-native';
-import { CartesianChart, Line } from 'victory-native';
-import { Circle, useFont, Text as SkiaText } from '@shopify/react-native-skia';
+import { CartesianChart, Line, Area } from 'victory-native';
+import { Circle } from '@shopify/react-native-skia';
 
-// Types
 interface MonthlyRevenueExpense {
   month: string;
   revenue: number;
@@ -23,29 +22,26 @@ interface RevenueVsExpensesChartProps {
   currency?: string;
 }
 
-// Color constants matching web dashboard
-const COLORS = {
-  revenue: '#6FA2E5',
-  expenses: '#FF8688',
-  axis: '#6b7280',
-  grid: '#e5e7eb',
-  background: '#ffffff',
-  text: '#111827',
-  mutedText: '#6b7280',
+const CARD_COLORS = {
+  background: '#fffdf9',
+  text: '#181512',
+  textMuted: '#7f7565',
+  border: '#e1d7c8',
+  grid: '#e8e0d4',
+  revenue: '#3d8f6a',
+  expenses: '#c96d4d',
+  revenueSoft: '#3d8f6a33',
+  expensesSoft: '#c96d4d33',
 };
 
-// Month abbreviations for x-axis
 const MONTH_ABBREV = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Compact currency formatter
-const formatCurrency = (value: number, currency: string = 'USD'): string => {
-  const absValue = Math.abs(value);
-  if (absValue >= 1000000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000000).toFixed(1)}M`;
-  } else if (absValue >= 1000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000).toFixed(0)}K`;
-  }
-  return `${currency === 'USD' ? '$' : currency}${value.toFixed(0)}`;
+const formatCompact = (value: number, currency: string = 'USD'): string => {
+  const prefix = currency === 'USD' ? '$' : currency + ' ';
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${prefix}${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${prefix}${(value / 1_000).toFixed(0)}K`;
+  return `${prefix}${value.toFixed(0)}`;
 };
 
 export function RevenueVsExpensesChart({
@@ -56,7 +52,10 @@ export function RevenueVsExpensesChart({
   const [showRevenue, setShowRevenue] = useState(true);
   const [showExpenses, setShowExpenses] = useState(true);
 
-  // Transform data for chart
+  // scrollContent paddingH:20 (×2=40) + card padding:18 (×2=36) = 76
+  const screenWidth = Dimensions.get('window').width;
+  const chartWidth = screenWidth - 76;
+
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
     return data.map((item, index) => ({
@@ -67,30 +66,31 @@ export function RevenueVsExpensesChart({
     }));
   }, [data]);
 
-  // Calculate Y domain
   const yDomain = useMemo(() => {
-    if (chartData.length === 0) return { min: 0, max: 100 };
-    const allValues: number[] = [];
+    if (chartData.length === 0) return [0, 100] as [number, number];
+    const vals: number[] = [];
     chartData.forEach((d) => {
-      if (showRevenue) allValues.push(d.revenue);
-      if (showExpenses) allValues.push(d.expenses);
+      if (showRevenue) vals.push(d.revenue);
+      if (showExpenses) vals.push(d.expenses);
     });
-    if (allValues.length === 0) return { min: 0, max: 100 };
-    const max = Math.max(...allValues);
-    const min = Math.min(0, Math.min(...allValues));
-    return { min, max: max * 1.1 };
+    if (vals.length === 0) return [0, 100] as [number, number];
+    const max = Math.max(...vals);
+    return [0, max * 1.15] as [number, number];
   }, [chartData, showRevenue, showExpenses]);
 
-  // Get screen width for responsive sizing
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - 32; // Account for padding
+  // Summary totals for the header
+  const totals = useMemo(() => {
+    const rev = chartData.reduce((s, d) => s + d.revenue, 0);
+    const exp = chartData.reduce((s, d) => s + d.expenses, 0);
+    return { revenue: rev, expenses: exp, net: rev - exp };
+  }, [chartData]);
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.revenue} />
-          <Text style={styles.loadingText}>Loading chart data...</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={CARD_COLORS.revenue} />
+          <Text style={styles.mutedText}>Loading revenue data…</Text>
         </View>
       </View>
     );
@@ -99,8 +99,10 @@ export function RevenueVsExpensesChart({
   if (!data || data.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No data available</Text>
+        <View style={styles.centered}>
+          <Text style={styles.emptyEmoji}>📈</Text>
+          <Text style={styles.emptyTitle}>No trend data</Text>
+          <Text style={styles.mutedText}>Monthly revenue and expenses will appear here.</Text>
         </View>
       </View>
     );
@@ -108,125 +110,124 @@ export function RevenueVsExpensesChart({
 
   return (
     <View style={styles.container}>
-      {/* Legend */}
-      <View style={styles.legendContainer}>
-        <TouchableOpacity
-          style={styles.legendItem}
-          onPress={() => setShowRevenue(!showRevenue)}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.legendDot,
-              { backgroundColor: showRevenue ? COLORS.revenue : '#d1d5db' },
-            ]}
-          />
-          <Text
-            style={[
-              styles.legendText,
-              { color: showRevenue ? COLORS.text : '#9ca3af' },
-            ]}
-          >
-            Revenue
+      {/* Summary row */}
+      <View style={styles.summaryRow}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Revenue</Text>
+          <Text style={[styles.summaryValue, { color: CARD_COLORS.revenue }]}>
+            {formatCompact(totals.revenue, currency)}
           </Text>
-        </TouchableOpacity>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Expenses</Text>
+          <Text style={[styles.summaryValue, { color: CARD_COLORS.expenses }]}>
+            {formatCompact(totals.expenses, currency)}
+          </Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Net</Text>
+          <Text style={[
+            styles.summaryValue,
+            { color: totals.net >= 0 ? CARD_COLORS.revenue : CARD_COLORS.expenses },
+          ]}>
+            {totals.net >= 0 ? '+' : ''}{formatCompact(totals.net, currency)}
+          </Text>
+        </View>
+      </View>
 
+      {/* Legend toggles */}
+      <View style={styles.legendRow}>
         <TouchableOpacity
-          style={styles.legendItem}
-          onPress={() => setShowExpenses(!showExpenses)}
-          activeOpacity={0.7}
+          style={[styles.legendChip, { opacity: showRevenue ? 1 : 0.45 }]}
+          onPress={() => setShowRevenue(!showRevenue)}
+          activeOpacity={0.75}
         >
-          <View
-            style={[
-              styles.legendDot,
-              { backgroundColor: showExpenses ? COLORS.expenses : '#d1d5db' },
-            ]}
-          />
-          <Text
-            style={[
-              styles.legendText,
-              { color: showExpenses ? COLORS.text : '#9ca3af' },
-            ]}
-          >
-            Expenses
-          </Text>
+          <View style={[styles.legendDot, { backgroundColor: CARD_COLORS.revenue }]} />
+          <Text style={styles.legendText}>Revenue</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.legendChip, { opacity: showExpenses ? 1 : 0.45 }]}
+          onPress={() => setShowExpenses(!showExpenses)}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.legendDot, { backgroundColor: CARD_COLORS.expenses }]} />
+          <Text style={styles.legendText}>Expenses</Text>
         </TouchableOpacity>
       </View>
 
       {/* Chart */}
-      <View style={[styles.chartWrapper, { width: chartWidth }]}>
+      <View style={{ width: chartWidth, height: 200, alignSelf: 'center' }}>
         <CartesianChart
           data={chartData}
           xKey="x"
           yKeys={['revenue', 'expenses']}
-          domain={{ y: [yDomain.min, yDomain.max] }}
-          padding={{ left: 50, right: 16, top: 16, bottom: 40 }}
+          domain={{ y: yDomain }}
+          padding={{ left: 48, right: 12, top: 12, bottom: 36 }}
           axisOptions={{
             font: null,
-            tickCount: { x: Math.min(chartData.length, 6), y: 5 },
-            lineColor: COLORS.grid,
-            labelColor: COLORS.axis,
+            tickCount: { x: Math.min(chartData.length, 6), y: 4 },
+            lineColor: CARD_COLORS.grid,
+            labelColor: CARD_COLORS.textMuted,
             formatXLabel: (value) => {
-              const index = Math.round(value);
-              if (index >= 0 && index < chartData.length) {
-                const monthStr = chartData[index]?.month || '';
-                // Try to get abbreviated month
-                const monthIndex = MONTH_ABBREV.findIndex(
-                  (m) => monthStr.toLowerCase().startsWith(m.toLowerCase())
+              const idx = Math.round(value);
+              if (idx >= 0 && idx < chartData.length) {
+                const m = chartData[idx]?.month || '';
+                const mi = MONTH_ABBREV.findIndex((a) =>
+                  m.toLowerCase().startsWith(a.toLowerCase())
                 );
-                return monthIndex >= 0 ? MONTH_ABBREV[monthIndex] : monthStr.slice(0, 3);
+                return mi >= 0 ? MONTH_ABBREV[mi] : m.slice(0, 3);
               }
               return '';
             },
-            formatYLabel: (value) => formatCurrency(value, currency),
+            formatYLabel: (value) => formatCompact(value, currency),
           }}
         >
           {({ points }) => (
             <>
-              {/* Revenue line */}
               {showRevenue && points.revenue && (
-                <Line
-                  points={points.revenue}
-                  color={COLORS.revenue}
-                  strokeWidth={2}
-                  curveType="natural"
-                />
+                <>
+                  <Area
+                    points={points.revenue}
+                    color={CARD_COLORS.revenueSoft}
+                    curveType="natural"
+                    y0={yDomain[0]}
+                  />
+                  <Line
+                    points={points.revenue}
+                    color={CARD_COLORS.revenue}
+                    strokeWidth={2.5}
+                    curveType="natural"
+                  />
+                  {points.revenue.map((pt, i) =>
+                    pt.y !== null ? (
+                      <Circle key={`rev-${i}`} cx={pt.x} cy={pt.y} r={4} color={CARD_COLORS.revenue} />
+                    ) : null
+                  )}
+                </>
               )}
-              {/* Expenses line */}
               {showExpenses && points.expenses && (
-                <Line
-                  points={points.expenses}
-                  color={COLORS.expenses}
-                  strokeWidth={2}
-                  curveType="natural"
-                />
+                <>
+                  <Area
+                    points={points.expenses}
+                    color={CARD_COLORS.expensesSoft}
+                    curveType="natural"
+                    y0={yDomain[0]}
+                  />
+                  <Line
+                    points={points.expenses}
+                    color={CARD_COLORS.expenses}
+                    strokeWidth={2.5}
+                    curveType="natural"
+                  />
+                  {points.expenses.map((pt, i) =>
+                    pt.y !== null ? (
+                      <Circle key={`exp-${i}`} cx={pt.x} cy={pt.y} r={4} color={CARD_COLORS.expenses} />
+                    ) : null
+                  )}
+                </>
               )}
-              {/* Data points for revenue */}
-              {showRevenue &&
-                points.revenue?.map((point, index) => (
-                  point.y !== null && (
-                    <Circle
-                      key={`revenue-dot-${index}`}
-                      cx={point.x}
-                      cy={point.y}
-                      r={4}
-                      color={COLORS.revenue}
-                    />
-                  )
-                ))}
-              {/* Data points for expenses */}
-              {showExpenses &&
-                points.expenses?.map((point, index) => (
-                  point.y !== null && (
-                    <Circle
-                      key={`expenses-dot-${index}`}
-                      cx={point.x}
-                      cy={point.y}
-                      r={4}
-                      color={COLORS.expenses}
-                    />
-                  )
-                ))}
             </>
           )}
         </CartesianChart>
@@ -237,59 +238,89 @@ export function RevenueVsExpensesChart({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    backgroundColor: CARD_COLORS.background,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
+    gap: 14,
   },
-  chartWrapper: {
-    height: 220,
-  },
-  loadingContainer: {
-    height: 220,
+  centered: {
+    minHeight: 200,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: COLORS.mutedText,
+  emptyEmoji: { fontSize: 32 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
   },
-  emptyContainer: {
-    height: 220,
-    justifyContent: 'center',
-    alignItems: 'center',
+  mutedText: {
+    fontSize: 13,
+    color: CARD_COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
   },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  legendContainer: {
+  summaryRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 24,
-    marginBottom: 12,
+    backgroundColor: '#f5f0e8',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  legendItem: {
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: CARD_COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: CARD_COLORS.border,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  legendChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#f0ebe3',
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   legendText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: CARD_COLORS.text,
   },
 });
 

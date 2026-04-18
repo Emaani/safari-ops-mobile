@@ -3,7 +3,16 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
-import type { PushToken } from '../types/notification';
+import type { NotificationPriority, NotificationType, PushToken } from '../types/notification';
+
+type CreateNotificationInput = {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  priority?: NotificationPriority;
+  data?: Record<string, any>;
+};
 
 /**
  * Push Notification Service
@@ -217,6 +226,52 @@ export async function savePushToken(userId: string, token: string): Promise<void
     console.error('[PushNotifications] Failed to save push token:', error);
     throw error;
   }
+}
+
+export async function createNotification({
+  userId,
+  type,
+  title,
+  message,
+  priority = 'medium',
+  data = {},
+}: CreateNotificationInput): Promise<void> {
+  const { error } = await supabase.from('notifications').insert({
+    user_id: userId,
+    type,
+    title,
+    message,
+    priority,
+    status: 'unread',
+    data,
+  });
+
+  if (error) {
+    console.error('[Notifications] Failed to create notification:', error);
+    throw error;
+  }
+}
+
+export async function resolveUserByEmail(email: string): Promise<{
+  id: string;
+  email: string | null;
+  full_name: string | null;
+} | null> {
+  const normalizedEmail = email.trim().replace(/^@/, '').toLowerCase();
+  if (!normalizedEmail) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,email,full_name')
+    .ilike('email', normalizedEmail)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Notifications] Failed to resolve recipient email:', error);
+    throw error;
+  }
+
+  return data as { id: string; email: string | null; full_name: string | null } | null;
 }
 
 /**

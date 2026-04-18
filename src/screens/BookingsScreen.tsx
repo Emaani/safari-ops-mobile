@@ -9,7 +9,17 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
+import { FadeSlideIn } from '../components/ui';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { useBookingsData } from '../hooks/useBookingsData';
 import { useBookingsRealtimeSync } from '../hooks/useBookingsRealtimeSync';
@@ -21,16 +31,16 @@ import type { Booking, BookingStatus } from '../types/dashboard';
 // ============================================================================
 
 const COLORS = {
-  primary: '#3b82f6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#1f4d45',
+  success:    '#3d8f6a',
+  warning:    '#b8883f',
+  danger:     '#c96d4d',
+  purple:     '#8366d7',
+  background: '#f6f2eb',
+  card:       '#fffdf9',
+  text:       '#181512',
+  textMuted:  '#7f7565',
+  border:     '#e1d7c8',
 };
 
 const STATUS_FILTERS: { label: string; value: BookingStatus | 'all' }[] = [
@@ -107,12 +117,27 @@ interface StatCardProps {
   bgColor: string;
 }
 
-function StatCard({ title, value, color, bgColor }: StatCardProps) {
+function StatCard({
+  title, value, color, bgColor, delay = 0,
+}: StatCardProps & { delay?: number }) {
+  const opacity = useSharedValue(0);
+  const scale   = useSharedValue(0.88);
+
+  React.useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) }));
+    scale.value   = withDelay(delay, withSpring(1, { damping: 18, stiffness: 220 }));
+  }, [delay]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
-    <View style={[styles.statCard, { backgroundColor: bgColor }]}>
+    <Animated.View style={[styles.statCard, { backgroundColor: bgColor }, animStyle]}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={[styles.statTitle, { color }]}>{title}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -283,30 +308,10 @@ export function BookingsScreen() {
     <>
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
-        <StatCard
-          title="Total"
-          value={stats.total}
-          color={COLORS.purple}
-          bgColor="#f3e8ff"
-        />
-        <StatCard
-          title="Active"
-          value={stats.active}
-          color={COLORS.success}
-          bgColor="#dcfce7"
-        />
-        <StatCard
-          title="Confirmed"
-          value={stats.confirmed}
-          color={COLORS.primary}
-          bgColor="#dbeafe"
-        />
-        <StatCard
-          title="Pending"
-          value={stats.pending}
-          color={COLORS.warning}
-          bgColor="#fef3c7"
-        />
+        <StatCard title="Total"     value={stats.total}     color={COLORS.purple}  bgColor="#ede8f9" delay={0}   />
+        <StatCard title="Active"    value={stats.active}    color={COLORS.success} bgColor="#ddf0e8" delay={60}  />
+        <StatCard title="Confirmed" value={stats.confirmed} color={COLORS.primary} bgColor="#dce8e3" delay={120} />
+        <StatCard title="Pending"   value={stats.pending}   color={COLORS.warning} bgColor="#f5e8ce" delay={180} />
       </View>
 
       {/* Search Bar */}
@@ -398,8 +403,10 @@ export function BookingsScreen() {
     </>
   );
 
-  const renderBooking = ({ item }: { item: Booking }) => (
-    <BookingCard booking={item} onPress={handleBookingPress} />
+  const renderBooking = ({ item, index }: { item: Booking; index: number }) => (
+    <FadeSlideIn delay={Math.min(index * 40, 320)} distance={16}>
+      <BookingCard booking={item} onPress={handleBookingPress} />
+    </FadeSlideIn>
   );
 
   const renderEmpty = () => (
@@ -430,10 +437,38 @@ export function BookingsScreen() {
       {/* Skeleton Loader */}
       {loading && !refreshing && <SkeletonLoader />}
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Bookings</Text>
-      </View>
+      {/* Dark hero header */}
+      <FadeSlideIn delay={0} distance={-10}>
+        <View style={styles.hero}>
+          <Text style={styles.heroEyebrow}>Operations</Text>
+          <View style={styles.heroRow}>
+            <View>
+              <Text style={styles.heroTitle}>Bookings</Text>
+              <Text style={styles.heroSub}>{stats.total} total · {stats.active} active</Text>
+            </View>
+            {stats.active > 0 && (
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>{stats.active} live</Text>
+              </View>
+            )}
+          </View>
+          {/* Animated filter tabs on dark bg */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroTabs}>
+            {STATUS_FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f.value}
+                style={[styles.heroTab, statusFilter === f.value && styles.heroTabActive]}
+                onPress={() => setStatusFilter(f.value)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </FadeSlideIn>
 
       {/* Main Content */}
       <FlatList
@@ -479,16 +514,75 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: COLORS.text,
+  },
+  // ── Hero header ──────────────────────────────────────────────────────────
+  hero: {
+    backgroundColor: '#171513',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: '#b8ab95',
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    color: '#fffaf3',
+  },
+  heroSub: {
+    fontSize: 13,
+    color: '#b8ab95',
+    marginTop: 2,
+  },
+  heroBadge: {
+    backgroundColor: '#3d8f6a',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  heroTabs: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  heroTabActive: {
+    backgroundColor: '#fffdf9',
+  },
+  heroTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#b8ab95',
+  },
+  heroTabTextActive: {
+    color: '#181512',
+    fontWeight: '800',
   },
   listContent: {
     paddingHorizontal: 16,

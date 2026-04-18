@@ -3,6 +3,33 @@ import { supabase } from '../lib/supabase';
 import { normalizeCashRequisition } from '../lib/cashRequisition';
 import type { FinancialTransaction, CashRequisition, Currency } from '../types/dashboard';
 
+// ─── Unified Revenue Item ─────────────────────────────────────────────────────
+// Represents any revenue entry regardless of source table
+export interface RevenueItem {
+  id: string;
+  source: 'booking' | 'safari_booking' | 'transaction';
+  date: string;
+  amount: number;
+  currency: Currency;
+  title: string;         // e.g. "Booking REF-001" / "Safari Booking" / category
+  subtitle: string;      // description / client / dates
+  status: string;
+  reference?: string;
+}
+
+// ─── Unified Expense Item ─────────────────────────────────────────────────────
+export interface ExpenseItem {
+  id: string;
+  source: 'cash_requisition' | 'transaction';
+  date: string;
+  amount: number;
+  currency: Currency;
+  title: string;
+  subtitle: string;
+  status: string;
+  reference?: string;
+}
+
 interface FinanceDataState {
   transactions: FinancialTransaction[];
   cashRequisitions: CashRequisition[];
@@ -14,7 +41,16 @@ interface UseFinanceDataProps {
   currency?: Currency;
 }
 
-// Generate a unique fetch ID for debugging
+// Normalise transaction_type from DB — DB may store 'revenue', 'Revenue', 'booking', etc.
+function normalizeTransactionType(raw: string | null | undefined): 'income' | 'expense' {
+  if (!raw) return 'expense';
+  const lower = raw.toLowerCase().trim();
+  if (lower === 'income' || lower === 'revenue' || lower === 'booking' || lower === 'inflow') {
+    return 'income';
+  }
+  return 'expense';
+}
+
 let fetchCounter = 0;
 
 export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
@@ -25,43 +61,42 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
     error: null,
   });
 
-  // Track if initial fetch has been done
+  // Raw booking data from DB
+  const [rawBookings,       setRawBookings]       = useState<Record<string, unknown>[]>([]);
+  const [rawSafariBookings, setRawSafariBookings] = useState<Record<string, unknown>[]>([]);
+
   const hasFetchedRef = useRef(false);
 
-  // Fetch Financial Transactions
+  // ── Fetchers ──────────────────────────────────────────────────────────────
+
   const fetchTransactions = useCallback(async (fetchId: number) => {
     console.log(`[FinanceData #${fetchId}] Fetching transactions...`);
-
-    const { data: transactions, error } = await supabase
+    const { data: rows, error } = await supabase
       .from('financial_transactions')
       .select('id, transaction_date, amount, transaction_type, category, currency, description, reference_number, status')
       .neq('status', 'cancelled')
       .order('transaction_date', { ascending: false })
       .limit(100);
 
-    if (error) {
-      console.error(`[FinanceData #${fetchId}] ERROR fetching transactions:`, error.message);
-      throw error;
-    }
+    if (error) throw error;
 
-    const result = (transactions || []) as FinancialTransaction[];
-    console.log(`[FinanceData #${fetchId}] Fetched ${result.length} transactions`);
+    // Normalise transaction_type so income entries are always classified correctly
+    const result = (rows || []).map((t) => ({
+      ...t,
+      transaction_type: normalizeTransactionType(t.transaction_type as string),
+    })) as FinancialTransaction[];
 
-    if (result.length > 0) {
-      const typeBreakdown = result.reduce((acc, t) => {
-        acc[t.transaction_type] = (acc[t.transaction_type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-      console.log(`[FinanceData #${fetchId}] Transaction types:`, typeBreakdown);
-    }
+    const typeBreakdown = result.reduce((acc, t) => {
+      acc[t.transaction_type] = (acc[t.transaction_type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(`[FinanceData #${fetchId}] Transactions:`, typeBreakdown);
 
     return result;
   }, []);
 
-  // Fetch Cash Requisitions
   const fetchCashRequisitions = useCallback(async (fetchId: number) => {
     console.log(`[FinanceData #${fetchId}] Fetching cash requisitions...`);
-
     const { data: crs, error } = await supabase
       .from('cash_requisitions')
       .select('*')
@@ -70,156 +105,232 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (error) {
-      console.error(`[FinanceData #${fetchId}] ERROR fetching CRs:`, error.message);
-      throw error;
-    }
+    if (error) throw error;
 
-    const result = (crs || []).map((record) =>
+    return (crs || []).map((record) =>
       normalizeCashRequisition(record as Record<string, unknown>)
     ) as CashRequisition[];
-    console.log(`[FinanceData #${fetchId}] Fetched ${result.length} CRs`);
-
-    if (result.length > 0) {
-      const statusBreakdown = result.reduce((acc, cr) => {
-        acc[cr.status] = (acc[cr.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-      console.log(`[FinanceData #${fetchId}] CR statuses:`, statusBreakdown);
-    }
-
-    return result;
   }, []);
 
-  // Fetch all data
+  const fetchBookings = useCallback(async (fetchId: number) => {
+    console.log(`[FinanceData #${fetchId}] Fetching bookings (revenue)...`);
+    const { data: rows, error } = await supabase
+      .from('bookings')
+      .select('id, booking_reference, start_date, end_date, status, amount_paid, total_amount, currency, client_name, created_at')
+      .not('status', 'in', '(Cancelled,cancelled)')
+      .order('start_date', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.warn(`[FinanceData #${fetchId}] Could not fetch bookings:`, error.message);
+      return [];
+    }
+    console.log(`[FinanceData #${fetchId}] Fetched ${(rows || []).length} bookings`);
+    return (rows || []) as Record<string, unknown>[];
+  }, []);
+
+  const fetchSafariBookings = useCallback(async (fetchId: number) => {
+    console.log(`[FinanceData #${fetchId}] Fetching safari bookings (revenue)...`);
+    const { data: rows, error } = await supabase
+      .from('safari_bookings')
+      .select('id, total_price_usd, total_price_ugx, start_date, end_date, amount_paid, currency, status')
+      .order('start_date', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.warn(`[FinanceData #${fetchId}] Could not fetch safari bookings:`, error.message);
+      return [];
+    }
+    console.log(`[FinanceData #${fetchId}] Fetched ${(rows || []).length} safari bookings`);
+    return (rows || []) as Record<string, unknown>[];
+  }, []);
+
+  // ── Fetch All ─────────────────────────────────────────────────────────────
+
   const fetchAllData = useCallback(async () => {
     const fetchId = ++fetchCounter;
-
-    console.log(`[FinanceData #${fetchId}] ========== FETCH START ==========`);
+    console.log(`[FinanceData #${fetchId}] ===== FETCH START =====`);
 
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
 
-      console.log(`[FinanceData #${fetchId}] Starting parallel fetches...`);
-      const startTime = Date.now();
-
-      const [transactions, cashRequisitions] = await Promise.all([
+      const [transactions, cashRequisitions, bookings, safariBookings] = await Promise.all([
         fetchTransactions(fetchId),
         fetchCashRequisitions(fetchId),
+        fetchBookings(fetchId),
+        fetchSafariBookings(fetchId),
       ]);
-
-      const fetchDuration = Date.now() - startTime;
-      console.log(`[FinanceData #${fetchId}] All fetches completed in ${fetchDuration}ms`);
-
-      console.log(`[FinanceData #${fetchId}] ========== FETCH SUMMARY ==========`);
-      console.log(`[FinanceData #${fetchId}] Transactions: ${transactions.length}`);
-      console.log(`[FinanceData #${fetchId}] CRs: ${cashRequisitions.length}`);
 
       hasFetchedRef.current = true;
 
-      setData({
-        transactions,
-        cashRequisitions,
-        loading: false,
-        error: null,
-      });
+      setData({ transactions, cashRequisitions, loading: false, error: null });
+      setRawBookings(bookings);
+      setRawSafariBookings(safariBookings);
 
-      console.log(`[FinanceData #${fetchId}] ========== FETCH COMPLETE ==========`);
+      console.log(`[FinanceData #${fetchId}] ===== FETCH COMPLETE =====`);
     } catch (error) {
-      console.error(`[FinanceData #${fetchId}] ========== FETCH ERROR ==========`);
-      console.error(`[FinanceData #${fetchId}] Error:`, error);
-      setData(prev => ({
-        ...prev,
-        loading: false,
-        error: error as Error,
-      }));
+      console.error(`[FinanceData #${fetchId}] FETCH ERROR:`, error);
+      setData(prev => ({ ...prev, loading: false, error: error as Error }));
     }
-  }, [fetchTransactions, fetchCashRequisitions]);
+  }, [fetchTransactions, fetchCashRequisitions, fetchBookings, fetchSafariBookings]);
 
-  // Fetch on mount
   useEffect(() => {
-    console.log('[FinanceData] useEffect triggered - fetching data...');
     fetchAllData();
   }, [fetchAllData]);
 
-  // Create a stable refetch reference
   const refetchRef = useRef(fetchAllData);
   refetchRef.current = fetchAllData;
+  const stableRefetch = useCallback(() => refetchRef.current(), []);
 
-  const stableRefetch = useCallback(() => {
-    console.log('[FinanceData] stableRefetch called');
-    return refetchRef.current();
-  }, []);
+  // ── Currency conversion ───────────────────────────────────────────────────
 
-  // Compute financial summaries
+  const convertAmount = useCallback((amount: number, fromCurrency: string): number => {
+    const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+    const fromRate = rates[fromCurrency] || 1;
+    const toRate   = rates[currency] || 1;
+    return (amount / fromRate) * toRate;
+  }, [currency]);
+
+  // ── Unified Revenue Items ─────────────────────────────────────────────────
+  // Sources: bookings (Reservations) + safari_bookings + income financial_transactions
+
+  const revenueItems = useMemo((): RevenueItem[] => {
+    const items: RevenueItem[] = [];
+
+    // 1. Vehicle Bookings / Reservations
+    rawBookings.forEach((b) => {
+      const amount = Number(b.total_amount ?? b.amount_paid ?? 0);
+      const cur    = (b.currency as Currency) || 'USD';
+      const ref    = (b.booking_reference as string) || (b.id as string).slice(0, 8).toUpperCase();
+      const date   = (b.start_date as string) || (b.created_at as string) || '';
+      const client = (b.client_name as string) || '';
+      const status = (b.status as string) || 'Confirmed';
+
+      items.push({
+        id:        `booking-${b.id}`,
+        source:    'booking',
+        date,
+        amount,
+        currency:  cur,
+        title:     `Booking · ${ref}`,
+        subtitle:  client || `${date ? new Date(date).toLocaleDateString() : 'Vehicle booking'}`,
+        status,
+        reference: ref,
+      });
+    });
+
+    // 2. Safari Bookings
+    rawSafariBookings.forEach((s) => {
+      const amountUSD = Number(s.total_price_usd ?? 0);
+      const amountUGX = Number(s.total_price_ugx ?? 0);
+      const cur       = (s.currency as Currency) || 'USD';
+      const amount    = cur === 'UGX' && amountUGX > 0 ? amountUGX : amountUSD;
+      const date      = (s.start_date as string) || '';
+      const status    = (s.status as string) || 'Active';
+
+      items.push({
+        id:       `safari-${s.id}`,
+        source:   'safari_booking',
+        date,
+        amount,
+        currency: cur === 'UGX' && amountUGX > 0 ? 'UGX' : 'USD',
+        title:    'Safari Booking',
+        subtitle: date ? `Safari · ${new Date(date).toLocaleDateString()}` : 'Safari Booking',
+        status,
+      });
+    });
+
+    // 3. Income entries from financial_transactions
+    data.transactions
+      .filter(t => t.transaction_type === 'income')
+      .forEach((t) => {
+        items.push({
+          id:        `txn-${t.id}`,
+          source:    'transaction',
+          date:      t.transaction_date,
+          amount:    t.amount,
+          currency:  t.currency,
+          title:     t.category || 'Income',
+          subtitle:  t.description || t.reference_number || '',
+          status:    t.status,
+          reference: t.reference_number,
+        });
+      });
+
+    // Sort newest first
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [rawBookings, rawSafariBookings, data.transactions]);
+
+  // ── Unified Expense Items ─────────────────────────────────────────────────
+  // Sources: cash_requisitions + expense financial_transactions
+
+  const expenseItems = useMemo((): ExpenseItem[] => {
+    const items: ExpenseItem[] = [];
+
+    // 1. Cash Requisitions
+    data.cashRequisitions.forEach((cr) => {
+      items.push({
+        id:        `cr-${cr.id}`,
+        source:    'cash_requisition',
+        date:      cr.date_needed || cr.created_at,
+        amount:    cr.total_cost,
+        currency:  cr.currency,
+        title:     cr.expense_category || 'Cash Requisition',
+        subtitle:  cr.cr_number ? `CR ${cr.cr_number}` : (cr.description || ''),
+        status:    cr.status,
+        reference: cr.cr_number,
+      });
+    });
+
+    // 2. Expense entries from financial_transactions
+    data.transactions
+      .filter(t => t.transaction_type === 'expense')
+      .forEach((t) => {
+        items.push({
+          id:        `txn-${t.id}`,
+          source:    'transaction',
+          date:      t.transaction_date,
+          amount:    t.amount,
+          currency:  t.currency,
+          title:     t.category || 'Expense',
+          subtitle:  t.description || t.reference_number || '',
+          status:    t.status,
+          reference: t.reference_number,
+        });
+      });
+
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [data.cashRequisitions, data.transactions]);
+
+  // ── Financial Summary ─────────────────────────────────────────────────────
+
   const financialSummary = useMemo(() => {
-    const now = new Date();
+    const now          = new Date();
     const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const currentYear  = now.getFullYear();
 
-    // Calculate totals
-    const incomeTransactions = data.transactions.filter(
-      t => t.transaction_type === 'income' && t.status !== 'cancelled'
-    );
-    const expenseTransactions = data.transactions.filter(
-      t => t.transaction_type === 'expense' && t.status !== 'cancelled'
-    );
-
-    // This month's transactions
-    const mtdIncome = incomeTransactions.filter(t => {
-      const date = new Date(t.transaction_date);
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    });
-    const mtdExpenses = expenseTransactions.filter(t => {
-      const date = new Date(t.transaction_date);
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    });
-
-    // YTD transactions
-    const ytdIncome = incomeTransactions.filter(t => {
-      const date = new Date(t.transaction_date);
-      return date.getFullYear() === currentYear;
-    });
-    const ytdExpenses = expenseTransactions.filter(t => {
-      const date = new Date(t.transaction_date);
-      return date.getFullYear() === currentYear;
-    });
-
-    // Calculate amounts (convert to display currency)
-    const convertAmount = (amount: number, fromCurrency: string): number => {
-      // Simple conversion rates - in production, use real-time rates
-      const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
-      const fromRate = rates[fromCurrency] || 1;
-      const toRate = rates[currency] || 1;
-      return (amount / fromRate) * toRate;
+    const isThisMonth = (dateStr: string) => {
+      const d = new Date(dateStr);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    };
+    const isThisYear = (dateStr: string) => {
+      return new Date(dateStr).getFullYear() === currentYear;
     };
 
-    const sumAmounts = (items: FinancialTransaction[]) =>
-      items.reduce((sum, t) => sum + convertAmount(t.amount, t.currency || 'USD'), 0);
+    const sumRevenue = (items: RevenueItem[]) =>
+      items.reduce((sum, i) => sum + convertAmount(i.amount, i.currency), 0);
+    const sumExpense = (items: ExpenseItem[]) =>
+      items.reduce((sum, i) => sum + convertAmount(i.amount, i.currency), 0);
 
-    const revenueMTD = sumAmounts(mtdIncome);
-    const revenueYTD = sumAmounts(ytdIncome);
-    const expensesMTD = sumAmounts(mtdExpenses);
-    const expensesYTD = sumAmounts(ytdExpenses);
+    const revenueMTD   = sumRevenue(revenueItems.filter(i => isThisMonth(i.date)));
+    const revenueYTD   = sumRevenue(revenueItems.filter(i => isThisYear(i.date)));
+    const expensesMTD  = sumExpense(expenseItems.filter(i => isThisMonth(i.date)));
+    const expensesYTD  = sumExpense(expenseItems.filter(i => isThisYear(i.date)));
     const netProfitMTD = revenueMTD - expensesMTD;
     const netProfitYTD = revenueYTD - expensesYTD;
 
-    // CR Summary
-    const pendingCRs = data.cashRequisitions.filter(cr =>
-      cr.status === 'Pending' || cr.status === 'Approved'
-    );
-    const completedCRs = data.cashRequisitions.filter(cr =>
-      cr.status === 'Completed' || cr.status === 'Resolved'
-    );
-
-    console.log('[FinanceData] Financial summary computed:', {
-      revenueMTD,
-      revenueYTD,
-      expensesMTD,
-      expensesYTD,
-      netProfitMTD,
-      pendingCRs: pendingCRs.length,
-    });
+    const pendingCRs   = data.cashRequisitions.filter(cr => cr.status === 'Pending' || cr.status === 'Approved');
+    const completedCRs = data.cashRequisitions.filter(cr => cr.status === 'Completed' || cr.status === 'Resolved');
 
     return {
       revenueMTD,
@@ -228,17 +339,19 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
       expensesYTD,
       netProfitMTD,
       netProfitYTD,
-      totalIncome: sumAmounts(incomeTransactions),
-      totalExpenses: sumAmounts(expenseTransactions),
+      totalRevenue:  sumRevenue(revenueItems),
+      totalExpenses: sumExpense(expenseItems),
       pendingCRs,
       completedCRs,
-      pendingCRCount: pendingCRs.length,
+      pendingCRCount:   pendingCRs.length,
       completedCRCount: completedCRs.length,
     };
-  }, [data.transactions, data.cashRequisitions, currency]);
+  }, [revenueItems, expenseItems, data.cashRequisitions, convertAmount]);
 
   return {
     ...data,
+    revenueItems,
+    expenseItems,
     ...financialSummary,
     refetch: stableRefetch,
   };

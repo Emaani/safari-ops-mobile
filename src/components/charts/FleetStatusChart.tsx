@@ -7,9 +7,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { PolarChart, Pie } from 'victory-native';
-import { Text as SkiaText, useFont } from '@shopify/react-native-skia';
 
-// Types
 interface FleetStatus {
   status: string;
   count: number;
@@ -21,76 +19,77 @@ interface FleetStatusChartProps {
   loading?: boolean;
 }
 
-// Color constants matching web dashboard - by status
 const STATUS_COLORS: Record<string, string> = {
-  Available: '#6b7280',
-  Booked: '#3b82f6',
-  Rented: '#10b981',
-  Maintenance: '#f59e0b',
-  'Out of Service': '#ef4444',
-  // Additional status mappings
-  available: '#6b7280',
-  booked: '#3b82f6',
-  rented: '#10b981',
-  maintenance: '#f59e0b',
-  'out of service': '#ef4444',
-  outofservice: '#ef4444',
-  operational: '#10b981',
-  Operational: '#10b981',
+  Available: '#3d8f6a',
+  available: '#3d8f6a',
+  Booked: '#4a7fc1',
+  booked: '#4a7fc1',
+  Rented: '#4a7fc1',
+  rented: '#4a7fc1',
+  'On Safari': '#4a7fc1',
+  Maintenance: '#b8883f',
+  maintenance: '#b8883f',
+  'Out of Service': '#c96d4d',
+  'out of service': '#c96d4d',
+  Operational: '#3d8f6a',
+  operational: '#3d8f6a',
 };
 
-// General colors
-const COLORS = {
-  background: '#ffffff',
-  text: '#111827',
-  mutedText: '#6b7280',
+const CARD_COLORS = {
+  background: '#fffdf9',
+  text: '#181512',
+  textMuted: '#7f7565',
+  border: '#e1d7c8',
+  sectionBg: '#f5f0e8',
 };
 
-// Get color for status
-const getStatusColor = (status: string, providedColor?: string): string => {
-  if (providedColor) return providedColor;
-  return STATUS_COLORS[status] || STATUS_COLORS[status.toLowerCase()] || '#6b7280';
+const getStatusColor = (status: string, provided?: string): string => {
+  if (provided) return provided;
+  return (
+    STATUS_COLORS[status] ||
+    STATUS_COLORS[status.toLowerCase()] ||
+    '#8a9ab0'
+  );
 };
 
-export function FleetStatusChart({
-  data,
-  loading = false,
-}: FleetStatusChartProps) {
-  // Get screen width for responsive sizing
+export function FleetStatusChart({ data, loading = false }: FleetStatusChartProps) {
   const screenWidth = Dimensions.get('window').width;
-  const chartSize = Math.min(screenWidth - 64, 200);
+  const chartSize = Math.min(screenWidth - 140, 180);
 
-  // Transform data for chart
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
-    return data.map((item) => ({
-      label: item.status,
-      value: item.count,
-      color: getStatusColor(item.status, item.color),
-    }));
+    return data
+      .filter((item) => item.count > 0)
+      .map((item) => ({
+        label: item.status,
+        value: item.count,
+        color: getStatusColor(item.status, item.color),
+      }));
   }, [data]);
 
-  // Calculate total
-  const total = useMemo(() => {
-    return chartData.reduce((sum, item) => sum + item.value, 0);
-  }, [chartData]);
+  const total = useMemo(
+    () => chartData.reduce((sum, item) => sum + item.value, 0),
+    [chartData]
+  );
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.loadingText}>Loading chart data...</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4a7fc1" />
+          <Text style={styles.mutedText}>Loading fleet status…</Text>
         </View>
       </View>
     );
   }
 
-  if (!data || data.length === 0 || total === 0) {
+  if (chartData.length === 0 || total === 0) {
     return (
       <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No data available</Text>
+        <View style={styles.centered}>
+          <Text style={styles.emptyEmoji}>🚗</Text>
+          <Text style={styles.emptyTitle}>No fleet data</Text>
+          <Text style={styles.mutedText}>Vehicle statuses will appear here once fleet is configured.</Text>
         </View>
       </View>
     );
@@ -98,43 +97,62 @@ export function FleetStatusChart({
 
   return (
     <View style={styles.container}>
-      <View style={styles.chartSection}>
-        {/* Pie Chart */}
-        <View style={[styles.chartWrapper, { width: chartSize, height: chartSize }]}>
+      <View style={styles.body}>
+        {/* Donut chart */}
+        <View style={{ width: chartSize, height: chartSize, position: 'relative' }}>
           <PolarChart
             data={chartData}
             labelKey="label"
             valueKey="value"
             colorKey="color"
           >
-            <Pie.Chart innerRadius="50%">
-              {({ slice }) => (
-                <Pie.Slice />
-              )}
+            <Pie.Chart innerRadius="52%">
+              {() => <Pie.Slice />}
             </Pie.Chart>
           </PolarChart>
 
-          {/* Center label - Total */}
-          <View style={styles.centerLabel}>
-            <Text style={styles.centerValue}>{total}</Text>
-            <Text style={styles.centerTitle}>Total Fleet</Text>
+          {/* Center overlay */}
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View style={styles.centerOverlay}>
+              <Text style={styles.centerValue}>{total}</Text>
+              <Text style={styles.centerLabel}>Vehicles</Text>
+            </View>
           </View>
         </View>
 
         {/* Legend */}
-        <View style={styles.legendContainer}>
-          {chartData.map((item, index) => (
-            <View key={`legend-${index}`} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <View style={styles.legendTextContainer}>
-                <Text style={styles.legendName}>{item.label}</Text>
-                <Text style={styles.legendCount}>
-                  {item.value} ({total > 0 ? Math.round((item.value / total) * 100) : 0}%)
-                </Text>
+        <View style={styles.legend}>
+          {chartData.map((item, index) => {
+            const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
+            return (
+              <View key={`${item.label}-${index}`} style={styles.legendRow}>
+                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                <View style={styles.legendInfo}>
+                  <Text style={styles.legendName}>{item.label}</Text>
+                  <Text style={[styles.legendCount, { color: item.color }]}>
+                    {item.value} · {pct}%
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
+      </View>
+
+      {/* Summary bar */}
+      <View style={styles.summaryBar}>
+        {chartData.map((item) => (
+          <View
+            key={item.label}
+            style={[
+              styles.summarySegment,
+              {
+                flex: item.value,
+                backgroundColor: item.color,
+              },
+            ]}
+          />
+        ))}
       </View>
     </View>
   );
@@ -142,87 +160,95 @@ export function FleetStatusChart({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    backgroundColor: CARD_COLORS.background,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
+    gap: 16,
   },
-  chartSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  chartWrapper: {
-    position: 'relative',
+  centered: {
+    minHeight: 160,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  centerLabel: {
-    position: 'absolute',
+  emptyEmoji: { fontSize: 32 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
+  },
+  mutedText: {
+    fontSize: 13,
+    color: CARD_COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  body: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  centerOverlay: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   centerValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.text,
+    fontSize: 30,
+    fontWeight: '800',
+    color: CARD_COLORS.text,
+    letterSpacing: -1,
   },
-  centerTitle: {
+  centerLabel: {
     fontSize: 10,
-    fontWeight: '500',
-    color: COLORS.mutedText,
+    fontWeight: '600',
+    color: CARD_COLORS.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    marginTop: 2,
   },
-  loadingContainer: {
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  emptyContainer: {
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  legendContainer: {
+  legend: {
     flex: 1,
-    marginLeft: 16,
     gap: 12,
   },
-  legendItem: {
+  legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   legendDot: {
     width: 12,
     height: 12,
-    borderRadius: 6,
+    borderRadius: 4,
   },
-  legendTextContainer: {
+  legendInfo: {
     flex: 1,
   },
   legendName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '600',
+    color: CARD_COLORS.text,
   },
   legendCount: {
-    fontSize: 11,
-    color: COLORS.mutedText,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  summaryBar: {
+    flexDirection: 'row',
+    height: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+    gap: 2,
+  },
+  summarySegment: {
+    borderRadius: 999,
   },
 });
 

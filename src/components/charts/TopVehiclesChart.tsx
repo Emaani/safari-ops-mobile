@@ -1,16 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
-  Dimensions,
-  Modal,
 } from 'react-native';
-import { CartesianChart, BarGroup } from 'victory-native';
 
-// Types
 interface TopVehicle {
   id?: string;
   name: string;
@@ -25,45 +20,29 @@ interface TopVehiclesChartProps {
   currency?: string;
 }
 
-// Color constants matching web dashboard - by capacity
-const COLORS = {
-  // 7 Seater colors
-  revenue7S: '#9333ea', // Purple
-  trips7S: '#f59e0b', // Amber
-  // 5 Seater colors
-  revenue5S: '#10b981', // Green
-  trips5S: '#3b82f6', // Blue
-  // General
-  axis: '#6b7280',
-  grid: '#e5e7eb',
-  background: '#ffffff',
-  text: '#111827',
-  mutedText: '#6b7280',
+const CARD_COLORS = {
+  background: '#fffdf9',
+  text: '#181512',
+  textMuted: '#7f7565',
+  border: '#e1d7c8',
+  track: '#ede6d8',
+  sevenSeater: '#8366d7',
+  fiveSeater: '#3d8f6a',
+  gold: '#b78a43',
+  silver: '#8a9ab0',
+  bronze: '#b87c5a',
 };
 
-// Compact currency formatter
+const RANK_COLORS = [CARD_COLORS.gold, CARD_COLORS.silver, CARD_COLORS.bronze];
+const RANK_LABELS = ['🥇', '🥈', '🥉'];
+
 const formatCurrency = (value: number, currency: string = 'USD'): string => {
   const absValue = Math.abs(value);
-  if (absValue >= 1000000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000000).toFixed(1)}M`;
-  } else if (absValue >= 1000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000).toFixed(0)}K`;
-  }
+  if (absValue >= 1_000_000)
+    return `${currency === 'USD' ? '$' : currency}${(value / 1_000_000).toFixed(1)}M`;
+  if (absValue >= 1_000)
+    return `${currency === 'USD' ? '$' : currency}${(value / 1_000).toFixed(1)}K`;
   return `${currency === 'USD' ? '$' : currency}${value.toFixed(0)}`;
-};
-
-// Truncate vehicle names
-const truncateName = (name: string, maxLength: number = 8): string => {
-  if (name.length <= maxLength) return name;
-  return name.slice(0, maxLength - 2) + '..';
-};
-
-// Get colors based on capacity
-const getColors = (capacity?: string) => {
-  if (capacity === '7S' || capacity?.includes('7')) {
-    return { revenue: COLORS.revenue7S, trips: COLORS.trips7S };
-  }
-  return { revenue: COLORS.revenue5S, trips: COLORS.trips5S };
 };
 
 export function TopVehiclesChart({
@@ -71,65 +50,34 @@ export function TopVehiclesChart({
   loading = false,
   currency = 'USD',
 }: TopVehiclesChartProps) {
-  const [selectedVehicle, setSelectedVehicle] = useState<TopVehicle | null>(null);
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-
-  // Get screen width for responsive sizing
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - 32;
-
-  // Transform data for chart
-  const chartData = useMemo(() => {
+  const sorted = useMemo(() => {
     if (!data || data.length === 0) return [];
-    return data.map((item, index) => ({
-      x: index,
-      revenue: item.revenue,
-      tripCount: item.tripCount,
-      name: item.name,
-      capacity: item.capacity,
-      originalData: item,
-    }));
+    return [...data].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
   }, [data]);
 
-  // Calculate domains for dual axis
-  const { revenueMax, tripMax } = useMemo(() => {
-    if (chartData.length === 0) return { revenueMax: 100, tripMax: 10 };
-    const maxRev = Math.max(...chartData.map((d) => d.revenue));
-    const maxTrip = Math.max(...chartData.map((d) => d.tripCount));
-    return { revenueMax: maxRev * 1.1, tripMax: maxTrip * 1.1 };
-  }, [chartData]);
-
-  // Normalize trip count to revenue scale for dual-axis display
-  const normalizedData = useMemo(() => {
-    if (chartData.length === 0) return [];
-    const scale = revenueMax / tripMax;
-    return chartData.map((item) => ({
-      ...item,
-      normalizedTripCount: item.tripCount * scale,
-    }));
-  }, [chartData, revenueMax, tripMax]);
-
-  const handleBarPress = (vehicle: TopVehicle) => {
-    setSelectedVehicle(vehicle);
-    setTooltipVisible(true);
-  };
+  const maxRevenue = useMemo(
+    () => (sorted.length > 0 ? sorted[0].revenue : 1),
+    [sorted]
+  );
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.revenue7S} />
-          <Text style={styles.loadingText}>Loading chart data...</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={CARD_COLORS.sevenSeater} />
+          <Text style={styles.mutedText}>Loading vehicle rankings…</Text>
         </View>
       </View>
     );
   }
 
-  if (!data || data.length === 0) {
+  if (sorted.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No data available</Text>
+        <View style={styles.centered}>
+          <Text style={styles.emptyEmoji}>🚙</Text>
+          <Text style={styles.emptyTitle}>No vehicle data</Text>
+          <Text style={styles.mutedText}>Revenue by vehicle will appear here once trips are recorded.</Text>
         </View>
       </View>
     );
@@ -138,287 +86,195 @@ export function TopVehiclesChart({
   return (
     <View style={styles.container}>
       {/* Legend */}
-      <View style={styles.legendContainer}>
-        <View style={styles.legendGroup}>
-          <Text style={styles.legendGroupTitle}>7 Seater:</Text>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: COLORS.revenue7S }]} />
-            <Text style={styles.legendText}>Revenue</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: COLORS.trips7S }]} />
-            <Text style={styles.legendText}>Trips</Text>
-          </View>
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: CARD_COLORS.sevenSeater }]} />
+          <Text style={styles.legendText}>7 Seater</Text>
         </View>
-        <View style={styles.legendGroup}>
-          <Text style={styles.legendGroupTitle}>5 Seater:</Text>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: COLORS.revenue5S }]} />
-            <Text style={styles.legendText}>Revenue</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: COLORS.trips5S }]} />
-            <Text style={styles.legendText}>Trips</Text>
-          </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: CARD_COLORS.fiveSeater }]} />
+          <Text style={styles.legendText}>5 Seater</Text>
         </View>
       </View>
 
-      {/* Dual Y-axis labels */}
-      <View style={styles.axisLabelContainer}>
-        <Text style={[styles.axisLabel, { color: COLORS.revenue7S }]}>
-          Revenue ({currency})
-        </Text>
-        <Text style={[styles.axisLabel, { color: COLORS.trips7S }]}>
-          Trip Count
-        </Text>
-      </View>
+      {sorted.map((vehicle, index) => {
+        const is7S = vehicle.capacity === '7S' || vehicle.capacity?.includes('7');
+        const accentColor = is7S ? CARD_COLORS.sevenSeater : CARD_COLORS.fiveSeater;
+        const fillPct = maxRevenue > 0 ? (vehicle.revenue / maxRevenue) * 100 : 0;
+        const isTopThree = index < 3;
 
-      {/* Touch overlay for interactions */}
-      <View style={[styles.touchOverlay, { width: chartWidth }]}>
-        {chartData.map((item, index) => (
-          <TouchableOpacity
-            key={`touch-${index}`}
-            style={[
-              styles.touchZone,
-              { width: chartWidth / chartData.length },
-            ]}
-            onPress={() => handleBarPress(item.originalData)}
-            activeOpacity={0.7}
-          />
-        ))}
-      </View>
+        return (
+          <View key={vehicle.id || vehicle.name} style={styles.vehicleRow}>
+            {/* Rank */}
+            <View style={styles.rankCell}>
+              {isTopThree ? (
+                <Text style={styles.rankEmoji}>{RANK_LABELS[index]}</Text>
+              ) : (
+                <Text style={[styles.rankNumber, { color: RANK_COLORS[index] ?? CARD_COLORS.textMuted }]}>
+                  #{index + 1}
+                </Text>
+              )}
+            </View>
 
-      {/* Chart */}
-      <View style={[styles.chartWrapper, { width: chartWidth }]}>
-        <CartesianChart
-          data={normalizedData}
-          xKey="x"
-          yKeys={['revenue', 'normalizedTripCount']}
-          domain={{ y: [0, revenueMax] }}
-          padding={{ left: 50, right: 40, top: 16, bottom: 60 }}
-          axisOptions={{
-            font: null,
-            tickCount: { x: chartData.length, y: 5 },
-            lineColor: COLORS.grid,
-            labelColor: COLORS.axis,
-            formatXLabel: (value) => {
-              const index = Math.round(value);
-              if (index >= 0 && index < chartData.length) {
-                return truncateName(chartData[index]?.name || '', 6);
-              }
-              return '';
-            },
-            formatYLabel: (value) => formatCurrency(value, currency),
-            labelOffset: { x: 12, y: 8 },
-          }}
-        >
-          {({ points, chartBounds }) => (
-            <BarGroup
-              chartBounds={chartBounds}
-              betweenGroupPadding={0.3}
-              withinGroupPadding={0.1}
-            >
-              <BarGroup.Bar
-                points={points.revenue}
-                color={COLORS.revenue7S}
-              />
-              <BarGroup.Bar
-                points={points.normalizedTripCount}
-                color={COLORS.trips7S}
-              />
-            </BarGroup>
-          )}
-        </CartesianChart>
-      </View>
-
-      {/* Right Y-axis label for trip count */}
-      <View style={styles.rightAxisContainer}>
-        {[0, 1, 2, 3, 4].map((tick) => (
-          <Text key={`right-tick-${tick}`} style={styles.rightAxisTick}>
-            {Math.round((tripMax / 4) * (4 - tick))}
-          </Text>
-        ))}
-      </View>
-
-      {/* Custom Tooltip Modal */}
-      <Modal
-        visible={tooltipVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setTooltipVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setTooltipVisible(false)}
-        >
-          <View style={styles.tooltipContainer}>
-            {selectedVehicle && (
-              <>
-                <Text style={styles.tooltipTitle}>{selectedVehicle.name}</Text>
-                <View style={styles.tooltipRow}>
-                  <Text style={styles.tooltipLabel}>Capacity:</Text>
-                  <Text style={styles.tooltipValue}>
-                    {selectedVehicle.capacity || 'N/A'}
+            {/* Vehicle info + bar */}
+            <View style={styles.infoSection}>
+              <View style={styles.topRow}>
+                <Text style={styles.vehicleName} numberOfLines={1}>
+                  {vehicle.name}
+                </Text>
+                <View style={[styles.capacityBadge, { backgroundColor: accentColor + '22', borderColor: accentColor + '66' }]}>
+                  <Text style={[styles.capacityText, { color: accentColor }]}>
+                    {vehicle.capacity || 'N/A'}
                   </Text>
                 </View>
-                <View style={styles.tooltipRow}>
-                  <Text style={styles.tooltipLabel}>Revenue:</Text>
-                  <Text style={[styles.tooltipValue, { color: getColors(selectedVehicle.capacity).revenue }]}>
-                    {formatCurrency(selectedVehicle.revenue, currency)}
-                  </Text>
-                </View>
-                <View style={styles.tooltipRow}>
-                  <Text style={styles.tooltipLabel}>Trips:</Text>
-                  <Text style={[styles.tooltipValue, { color: getColors(selectedVehicle.capacity).trips }]}>
-                    {selectedVehicle.tripCount}
-                  </Text>
-                </View>
-              </>
-            )}
+              </View>
+
+              {/* Revenue bar */}
+              <View style={styles.barTrack}>
+                <View
+                  style={[
+                    styles.barFill,
+                    { width: `${fillPct}%`, backgroundColor: accentColor },
+                  ]}
+                />
+              </View>
+
+              {/* Stats */}
+              <View style={styles.statsRow}>
+                <Text style={[styles.revenueText, { color: accentColor }]}>
+                  {formatCurrency(vehicle.revenue, currency)}
+                </Text>
+                <Text style={styles.tripsBadgeText}>
+                  {vehicle.tripCount} {vehicle.tripCount === 1 ? 'trip' : 'trips'}
+                </Text>
+              </View>
+            </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    backgroundColor: CARD_COLORS.background,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
-    position: 'relative',
+    gap: 14,
   },
-  chartWrapper: {
-    height: 240,
-  },
-  loadingContainer: {
-    height: 240,
+  centered: {
+    minHeight: 140,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  emptyContainer: {
-    height: 240,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  legendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 8,
-  },
-  legendGroup: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  legendGroupTitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.mutedText,
+  emptyEmoji: { fontSize: 32 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
+  },
+  mutedText: {
+    fontSize: 13,
+    color: CARD_COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  legend: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 4,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legendText: {
-    fontSize: 10,
-    color: COLORS.text,
-  },
-  axisLabelContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    marginBottom: 4,
-  },
-  axisLabel: {
-    fontSize: 9,
-    fontWeight: '500',
-  },
-  touchOverlay: {
-    position: 'absolute',
-    top: 80,
-    left: 50,
-    height: 240,
-    flexDirection: 'row',
-    zIndex: 10,
-  },
-  touchZone: {
-    height: '100%',
-  },
-  rightAxisContainer: {
-    position: 'absolute',
-    right: 8,
-    top: 80,
-    height: 180,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  rightAxisTick: {
-    fontSize: 9,
-    color: COLORS.trips7S,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tooltipContainer: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  tooltipTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  tooltipRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  tooltipLabel: {
-    fontSize: 12,
-    color: COLORS.mutedText,
-  },
-  tooltipValue: {
     fontSize: 12,
     fontWeight: '600',
-    color: COLORS.text,
+    color: CARD_COLORS.textMuted,
+  },
+  vehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rankCell: {
+    width: 36,
+    alignItems: 'center',
+  },
+  rankEmoji: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  rankNumber: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  infoSection: {
+    flex: 1,
+    gap: 6,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  vehicleName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
+    flex: 1,
+  },
+  capacityBadge: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  capacityText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  barTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: CARD_COLORS.track,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  revenueText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  tripsBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: CARD_COLORS.textMuted,
   },
 });
 

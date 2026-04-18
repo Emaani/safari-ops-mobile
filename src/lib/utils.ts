@@ -131,10 +131,12 @@ export function matchesDashboardFilter(
   filterMonth: number | 'all',
   filterYear: number
 ): boolean {
-  if (filterMonth === 'all') return true;
-
   const date = new Date(dateString);
-  return date.getMonth() === filterMonth && date.getFullYear() === filterYear;
+  // Always filter by the selected year
+  if (date.getFullYear() !== filterYear) return false;
+  // If 'all months' selected, year match is enough
+  if (filterMonth === 'all') return true;
+  return date.getMonth() === filterMonth;
 }
 
 /**

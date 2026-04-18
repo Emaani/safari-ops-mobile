@@ -4,12 +4,9 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
   Dimensions,
 } from 'react-native';
-import { CartesianChart, Bar } from 'victory-native';
 
-// Types
 interface ExpenseCategory {
   id?: string;
   name: string;
@@ -24,91 +21,79 @@ interface ExpenseCategoriesChartProps {
   onBarPress?: (category: ExpenseCategory, index: number) => void;
 }
 
-// Color constants matching web dashboard
-const COLORS = {
-  axis: '#6b7280',
-  grid: '#e5e7eb',
-  background: '#ffffff',
-  text: '#111827',
-  mutedText: '#6b7280',
+const CARD_COLORS = {
+  background: '#fffdf9',
+  text: '#181512',
+  textMuted: '#7f7565',
+  border: '#e1d7c8',
+  track: '#ede6d8',
 };
 
-// Dynamic bar colors palette
-const BAR_COLORS = [
-  '#6FA2E5', // Blue
-  '#FF8688', // Red
-  '#10b981', // Green
-  '#f59e0b', // Amber
-  '#9333ea', // Purple
-  '#3b82f6', // Blue-500
-  '#ef4444', // Red-500
-  '#84cc16', // Lime
-  '#06b6d4', // Cyan
-  '#f97316', // Orange
+const BAR_PALETTE = [
+  '#1f4d45', // deep green
+  '#b78a43', // gold
+  '#8366d7', // purple
+  '#c96d4d', // terracotta
+  '#3d8f6a', // emerald
+  '#b8883f', // amber
+  '#4a7fc1', // blue
+  '#d07070', // rose
+  '#5bab8a', // mint
+  '#c07a3a', // burnt orange
 ];
 
-// Compact currency formatter
 const formatCurrency = (value: number, currency: string = 'USD'): string => {
   const absValue = Math.abs(value);
-  if (absValue >= 1000000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000000).toFixed(1)}M`;
-  } else if (absValue >= 1000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000).toFixed(0)}K`;
-  }
+  if (absValue >= 1_000_000)
+    return `${currency === 'USD' ? '$' : currency}${(value / 1_000_000).toFixed(1)}M`;
+  if (absValue >= 1_000)
+    return `${currency === 'USD' ? '$' : currency}${(value / 1_000).toFixed(1)}K`;
   return `${currency === 'USD' ? '$' : currency}${value.toFixed(0)}`;
-};
-
-// Truncate long category names
-const truncateName = (name: string, maxLength: number = 10): string => {
-  if (name.length <= maxLength) return name;
-  return name.slice(0, maxLength - 2) + '..';
 };
 
 export function ExpenseCategoriesChart({
   data,
   loading = false,
   currency = 'USD',
-  onBarPress,
 }: ExpenseCategoriesChartProps) {
-  // Get screen width for responsive sizing
   const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - 32;
+  // scrollContent paddingHorizontal:20 (×2=40) + card padding:18 (×2=36) = 76
+  const innerWidth = screenWidth - 76;
 
-  // Transform data for chart
-  const chartData = useMemo(() => {
+  const sorted = useMemo(() => {
     if (!data || data.length === 0) return [];
-    return data.map((item, index) => ({
-      x: index,
-      amount: item.amount,
-      name: item.name,
-      color: item.color || BAR_COLORS[index % BAR_COLORS.length],
-      originalData: item,
-    }));
+    return [...data]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 8)
+      .map((item, i) => ({
+        ...item,
+        color: item.color || BAR_PALETTE[i % BAR_PALETTE.length],
+      }));
   }, [data]);
 
-  // Calculate Y domain
-  const yDomain = useMemo(() => {
-    if (chartData.length === 0) return { min: 0, max: 100 };
-    const maxValue = Math.max(...chartData.map((d) => d.amount));
-    return { min: 0, max: maxValue * 1.1 };
-  }, [chartData]);
+  const maxAmount = useMemo(
+    () => (sorted.length > 0 ? sorted[0].amount : 1),
+    [sorted]
+  );
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={BAR_COLORS[0]} />
-          <Text style={styles.loadingText}>Loading chart data...</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={BAR_PALETTE[0]} />
+          <Text style={styles.mutedText}>Loading expense breakdown…</Text>
         </View>
       </View>
     );
   }
 
-  if (!data || data.length === 0) {
+  if (sorted.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No data available</Text>
+        <View style={styles.centered}>
+          <Text style={styles.emptyEmoji}>📊</Text>
+          <Text style={styles.emptyTitle}>No expense data</Text>
+          <Text style={styles.mutedText}>Expenses will appear here once recorded.</Text>
         </View>
       </View>
     );
@@ -116,183 +101,136 @@ export function ExpenseCategoriesChart({
 
   return (
     <View style={styles.container}>
-      {/* Touch overlay for bar interactions */}
-      {onBarPress && (
-        <View style={styles.touchOverlay}>
-          {chartData.map((item, index) => (
-            <TouchableOpacity
-              key={`touch-${index}`}
-              style={[
-                styles.touchZone,
-                { width: chartWidth / chartData.length },
-              ]}
-              onPress={() => onBarPress(item.originalData, index)}
-              activeOpacity={0.7}
-            />
-          ))}
-        </View>
-      )}
-
-      {/* Chart */}
-      <View style={[styles.chartWrapper, { width: chartWidth }]}>
-        <CartesianChart
-          data={chartData}
-          xKey="x"
-          yKeys={['amount']}
-          domain={{ y: [yDomain.min, yDomain.max] }}
-          padding={{ left: 50, right: 16, top: 16, bottom: 50 }}
-          axisOptions={{
-            font: null,
-            tickCount: { x: chartData.length, y: 5 },
-            lineColor: COLORS.grid,
-            labelColor: COLORS.axis,
-            formatXLabel: (value) => {
-              const index = Math.round(value);
-              if (index >= 0 && index < chartData.length) {
-                return truncateName(chartData[index]?.name || '', 8);
-              }
-              return '';
-            },
-            formatYLabel: (value) => formatCurrency(value, currency),
-            labelOffset: { x: 8, y: 8 },
-          }}
-        >
-          {({ points, chartBounds }) => (
-            <>
-              {/* Render individual bars with colors */}
-              {chartData.map((item, index) => {
-                const barPoints = points.amount.filter(
-                  (_, i) => i === index
-                );
-                if (barPoints.length === 0) return null;
-                return (
-                  <Bar
-                    key={`bar-${index}`}
-                    points={[barPoints[0]]}
-                    chartBounds={chartBounds}
-                    color={item.color}
-                    roundedCorners={{ topLeft: 4, topRight: 4 }}
-                    innerPadding={0.3}
-                    barCount={chartData.length}
-                  />
-                );
-              })}
-            </>
-          )}
-        </CartesianChart>
-      </View>
-
-      {/* Category labels with amounts */}
-      <View style={styles.labelsContainer}>
-        {chartData.slice(0, 5).map((item, index) => (
-          <TouchableOpacity
-            key={`label-${index}`}
-            style={styles.labelItem}
-            onPress={() => onBarPress?.(item.originalData, index)}
-            activeOpacity={onBarPress ? 0.7 : 1}
-            disabled={!onBarPress}
-          >
-            <View style={[styles.labelDot, { backgroundColor: item.color }]} />
-            <View style={styles.labelTextContainer}>
-              <Text style={styles.labelName} numberOfLines={1}>
-                {truncateName(item.name, 12)}
-              </Text>
-              <Text style={styles.labelAmount}>
-                {formatCurrency(item.amount, currency)}
-              </Text>
+      {sorted.map((item, index) => {
+        const fillPct = maxAmount > 0 ? (item.amount / maxAmount) * 100 : 0;
+        return (
+          <View key={`${item.name}-${index}`} style={styles.row}>
+            {/* Rank + dot */}
+            <View style={styles.rankWrap}>
+              <View style={[styles.rankDot, { backgroundColor: item.color }]} />
+              <Text style={styles.rankNum}>{index + 1}</Text>
             </View>
-          </TouchableOpacity>
-        ))}
-        {chartData.length > 5 && (
-          <Text style={styles.moreLabel}>+{chartData.length - 5} more</Text>
-        )}
-      </View>
+
+            {/* Name + bar + amount */}
+            <View style={styles.barSection}>
+              <View style={styles.labelRow}>
+                <Text style={styles.categoryName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={[styles.amountText, { color: item.color }]}>
+                  {formatCurrency(item.amount, currency)}
+                </Text>
+              </View>
+              <View style={[styles.track, { width: innerWidth - 56 }]}>
+                <View
+                  style={[
+                    styles.fill,
+                    {
+                      width: `${fillPct}%`,
+                      backgroundColor: item.color,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        );
+      })}
+
+      {data.length > 8 && (
+        <Text style={styles.moreLabel}>+{data.length - 8} more categories</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    backgroundColor: CARD_COLORS.background,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
+    gap: 16,
   },
-  chartWrapper: {
-    height: 220,
-  },
-  touchOverlay: {
-    position: 'absolute',
-    top: 16,
-    left: 50,
-    right: 16,
-    height: 220,
-    flexDirection: 'row',
-    zIndex: 10,
-  },
-  touchZone: {
-    height: '100%',
-  },
-  loadingContainer: {
-    height: 220,
+  centered: {
+    minHeight: 140,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: COLORS.mutedText,
+  emptyEmoji: { fontSize: 32 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
   },
-  emptyContainer: {
-    height: 220,
-    justifyContent: 'center',
-    alignItems: 'center',
+  mutedText: {
+    fontSize: 13,
+    color: CARD_COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
   },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  labelsContainer: {
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+    alignItems: 'center',
     gap: 12,
-    marginTop: 16,
-    paddingHorizontal: 8,
   },
-  labelItem: {
-    flexDirection: 'row',
+  rankWrap: {
+    width: 32,
     alignItems: 'center',
-    gap: 6,
-    minWidth: 80,
+    gap: 4,
   },
-  labelDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  rankDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  labelTextContainer: {
-    flexDirection: 'column',
-  },
-  labelName: {
+  rankNum: {
     fontSize: 10,
-    color: COLORS.mutedText,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: CARD_COLORS.textMuted,
   },
-  labelAmount: {
-    fontSize: 11,
-    color: COLORS.text,
+  barSection: {
+    flex: 1,
+    gap: 6,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryName: {
+    fontSize: 13,
     fontWeight: '600',
+    color: CARD_COLORS.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  amountText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  track: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: CARD_COLORS.track,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 999,
   },
   moreLabel: {
-    fontSize: 10,
-    color: COLORS.mutedText,
+    fontSize: 11,
+    color: CARD_COLORS.textMuted,
+    textAlign: 'center',
     fontStyle: 'italic',
-    alignSelf: 'center',
   },
 });
 

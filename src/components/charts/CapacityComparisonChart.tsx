@@ -4,11 +4,8 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
-import { CartesianChart, Bar } from 'victory-native';
 
-// Types
 interface CapacityData {
   category: string;
   sevenSeater: number;
@@ -22,134 +19,78 @@ interface CapacityComparisonChartProps {
   currency?: string;
 }
 
-// Color constants matching web dashboard
-const COLORS = {
-  sevenSeater: '#9333ea', // Purple
-  fiveSeater: '#10b981', // Green
-  axis: '#6b7280',
-  grid: '#e5e7eb',
-  background: '#ffffff',
-  text: '#111827',
-  mutedText: '#6b7280',
+const CARD_COLORS = {
+  background: '#fffdf9',
+  text: '#181512',
+  textMuted: '#7f7565',
+  border: '#e1d7c8',
+  track: '#ede6d8',
+  sevenSeater: '#8366d7',
+  fiveSeater: '#3d8f6a',
+  sectionBg: '#f5f0e8',
 };
 
-// Compact currency formatter
 const formatCurrency = (value: number, currency: string = 'USD'): string => {
   const absValue = Math.abs(value);
-  if (absValue >= 1000000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000000).toFixed(1)}M`;
-  } else if (absValue >= 1000) {
-    return `${currency === 'USD' ? '$' : currency}${(value / 1000).toFixed(0)}K`;
-  }
+  if (absValue >= 1_000_000)
+    return `${currency === 'USD' ? '$' : currency}${(value / 1_000_000).toFixed(1)}M`;
+  if (absValue >= 1_000)
+    return `${currency === 'USD' ? '$' : currency}${(value / 1_000).toFixed(1)}K`;
   return `${currency === 'USD' ? '$' : currency}${value.toFixed(0)}`;
 };
 
-// Format number with compact notation
-const formatNumber = (value: number): string => {
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}K`;
-  }
-  return value.toString();
-};
-
-// Single bar chart component
-interface SingleComparisonChartProps {
-  title: string;
-  data: { label: string; value: number; color: string }[];
-  formatValue: (value: number) => string;
-  height: number;
+interface StatRowProps {
+  label: string;
+  sevenValue: number;
+  fiveValue: number;
+  formatValue: (v: number) => string;
 }
 
-function SingleComparisonChart({
-  title,
-  data,
-  formatValue,
-  height,
-}: SingleComparisonChartProps) {
-  const chartData = useMemo(() => {
-    return data.map((item, index) => ({
-      x: index,
-      value: item.value,
-      label: item.label,
-      color: item.color,
-    }));
-  }, [data]);
-
-  const maxValue = useMemo(() => {
-    const max = Math.max(...data.map((d) => d.value));
-    return max * 1.2 || 100;
-  }, [data]);
-
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = (screenWidth - 48) / 2; // Half width minus padding
-
-  if (data.length === 0 || data.every((d) => d.value === 0)) {
-    return (
-      <View style={[styles.chartCard, { width: chartWidth }]}>
-        <Text style={styles.chartTitle}>{title}</Text>
-        <View style={styles.emptyMiniContainer}>
-          <Text style={styles.emptyText}>No data</Text>
-        </View>
-      </View>
-    );
-  }
+function StatRow({ label, sevenValue, fiveValue, formatValue }: StatRowProps) {
+  const total = sevenValue + fiveValue;
+  const sevenPct = total > 0 ? (sevenValue / total) * 100 : 50;
+  const fivePct = total > 0 ? (fiveValue / total) * 100 : 50;
+  const winner = sevenValue >= fiveValue ? '7S' : '5S';
 
   return (
-    <View style={[styles.chartCard, { width: chartWidth }]}>
-      <Text style={styles.chartTitle}>{title}</Text>
-      <View style={{ height }}>
-        <CartesianChart
-          data={chartData}
-          xKey="x"
-          yKeys={['value']}
-          domain={{ y: [0, maxValue] }}
-          padding={{ left: 40, right: 8, top: 8, bottom: 30 }}
-          axisOptions={{
-            font: null,
-            tickCount: { x: 2, y: 4 },
-            lineColor: COLORS.grid,
-            labelColor: COLORS.axis,
-            formatXLabel: (value) => {
-              const index = Math.round(value);
-              if (index >= 0 && index < chartData.length) {
-                return chartData[index]?.label || '';
-              }
-              return '';
-            },
-            formatYLabel: (value) => formatValue(value),
-          }}
-        >
-          {({ points, chartBounds }) => (
-            <>
-              {chartData.map((item, index) => {
-                const point = points.value[index];
-                if (!point) return null;
-                return (
-                  <Bar
-                    key={`bar-${index}`}
-                    points={[point]}
-                    chartBounds={chartBounds}
-                    color={item.color}
-                    roundedCorners={{ topLeft: 4, topRight: 4 }}
-                    innerPadding={0.4}
-                    barCount={2}
-                  />
-                );
-              })}
-            </>
-          )}
-        </CartesianChart>
+    <View style={sStyles.block}>
+      <View style={sStyles.blockHeader}>
+        <Text style={sStyles.blockLabel}>{label}</Text>
+        <View style={[
+          sStyles.winnerBadge,
+          { backgroundColor: winner === '7S' ? CARD_COLORS.sevenSeater + '22' : CARD_COLORS.fiveSeater + '22' },
+        ]}>
+          <Text style={[
+            sStyles.winnerText,
+            { color: winner === '7S' ? CARD_COLORS.sevenSeater : CARD_COLORS.fiveSeater },
+          ]}>
+            {winner} leads
+          </Text>
+        </View>
       </View>
 
-      {/* Values display */}
-      <View style={styles.valuesContainer}>
-        {data.map((item, index) => (
-          <View key={`value-${index}`} style={styles.valueItem}>
-            <View style={[styles.valueDot, { backgroundColor: item.color }]} />
-            <Text style={styles.valueLabel}>{item.label}</Text>
-            <Text style={styles.valueText}>{formatValue(item.value)}</Text>
-          </View>
-        ))}
+      {/* Split bar */}
+      <View style={sStyles.splitBar}>
+        <View style={[sStyles.splitLeft, { flex: sevenPct, backgroundColor: CARD_COLORS.sevenSeater }]} />
+        <View style={[sStyles.splitRight, { flex: fivePct, backgroundColor: CARD_COLORS.fiveSeater }]} />
+      </View>
+
+      {/* Value cards */}
+      <View style={sStyles.valueRow}>
+        <View style={[sStyles.valueCard, { borderLeftColor: CARD_COLORS.sevenSeater, borderLeftWidth: 3 }]}>
+          <Text style={sStyles.valueCapacity}>7 Seater</Text>
+          <Text style={[sStyles.valueAmount, { color: CARD_COLORS.sevenSeater }]}>
+            {formatValue(sevenValue)}
+          </Text>
+          <Text style={sStyles.valuePct}>{sevenPct.toFixed(0)}%</Text>
+        </View>
+        <View style={[sStyles.valueCard, { borderLeftColor: CARD_COLORS.fiveSeater, borderLeftWidth: 3 }]}>
+          <Text style={sStyles.valueCapacity}>5 Seater</Text>
+          <Text style={[sStyles.valueAmount, { color: CARD_COLORS.fiveSeater }]}>
+            {formatValue(fiveValue)}
+          </Text>
+          <Text style={sStyles.valuePct}>{fivePct.toFixed(0)}%</Text>
+        </View>
       </View>
     </View>
   );
@@ -161,43 +102,27 @@ export function CapacityComparisonChart({
   loading = false,
   currency = 'USD',
 }: CapacityComparisonChartProps) {
-  // Prepare revenue comparison data
-  const revenueComparisonData = useMemo(() => {
-    if (!revenueData) return [];
-    return [
-      { label: '7S', value: revenueData.sevenSeater, color: COLORS.sevenSeater },
-      { label: '5S', value: revenueData.fiveSeater, color: COLORS.fiveSeater },
-    ];
-  }, [revenueData]);
-
-  // Prepare trip comparison data
-  const tripComparisonData = useMemo(() => {
-    if (!tripData) return [];
-    return [
-      { label: '7S', value: tripData.sevenSeater, color: COLORS.sevenSeater },
-      { label: '5S', value: tripData.fiveSeater, color: COLORS.fiveSeater },
-    ];
-  }, [tripData]);
+  const hasRevenueData = revenueData && (revenueData.sevenSeater > 0 || revenueData.fiveSeater > 0);
+  const hasTripData = tripData && (tripData.sevenSeater > 0 || tripData.fiveSeater > 0);
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.sevenSeater} />
-          <Text style={styles.loadingText}>Loading chart data...</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={CARD_COLORS.sevenSeater} />
+          <Text style={styles.mutedText}>Loading capacity comparison…</Text>
         </View>
       </View>
     );
   }
 
-  const hasRevenueData = revenueData && (revenueData.sevenSeater > 0 || revenueData.fiveSeater > 0);
-  const hasTripData = tripData && (tripData.sevenSeater > 0 || tripData.fiveSeater > 0);
-
   if (!hasRevenueData && !hasTripData) {
     return (
       <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No data available</Text>
+        <View style={styles.centered}>
+          <Text style={styles.emptyEmoji}>🚐</Text>
+          <Text style={styles.emptyTitle}>No capacity data</Text>
+          <Text style={styles.mutedText}>Fleet comparison data will appear once trips are completed.</Text>
         </View>
       </View>
     );
@@ -206,136 +131,158 @@ export function CapacityComparisonChart({
   return (
     <View style={styles.container}>
       {/* Legend */}
-      <View style={styles.legendContainer}>
+      <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: COLORS.sevenSeater }]} />
+          <View style={[styles.legendSwatch, { backgroundColor: CARD_COLORS.sevenSeater }]} />
           <Text style={styles.legendText}>7 Seater</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: COLORS.fiveSeater }]} />
+          <View style={[styles.legendSwatch, { backgroundColor: CARD_COLORS.fiveSeater }]} />
           <Text style={styles.legendText}>5 Seater</Text>
         </View>
       </View>
 
-      {/* Side by side charts */}
-      <View style={styles.chartsRow}>
-        <SingleComparisonChart
-          title="Revenue Comparison"
-          data={revenueComparisonData}
+      {hasRevenueData && revenueData && (
+        <StatRow
+          label="Revenue Comparison"
+          sevenValue={revenueData.sevenSeater}
+          fiveValue={revenueData.fiveSeater}
           formatValue={(v) => formatCurrency(v, currency)}
-          height={180}
         />
-        <SingleComparisonChart
-          title="Trip Count Comparison"
-          data={tripComparisonData}
-          formatValue={formatNumber}
-          height={180}
+      )}
+
+      {hasTripData && tripData && (
+        <StatRow
+          label="Trip Count Comparison"
+          sevenValue={tripData.sevenSeater}
+          fiveValue={tripData.fiveSeater}
+          formatValue={(v) => `${v} trips`}
         />
-      </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    backgroundColor: CARD_COLORS.background,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
+    gap: 16,
   },
-  loadingContainer: {
-    height: 220,
+  centered: {
+    minHeight: 140,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: COLORS.mutedText,
+  emptyEmoji: { fontSize: 32 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
   },
-  emptyContainer: {
-    height: 220,
-    justifyContent: 'center',
-    alignItems: 'center',
+  mutedText: {
+    fontSize: 13,
+    color: CARD_COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
   },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.mutedText,
-  },
-  emptyMiniContainer: {
-    height: 140,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  legendContainer: {
+  legend: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-    marginBottom: 12,
+    gap: 20,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  legendSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 4,
   },
   legendText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.text,
+    fontWeight: '600',
+    color: CARD_COLORS.textMuted,
   },
-  chartsRow: {
+});
+
+const sStyles = StyleSheet.create({
+  block: {
+    backgroundColor: CARD_COLORS.sectionBg,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  blockHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
-  },
-  chartCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-  },
-  chartTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  valuesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.grid,
-  },
-  valueItem: {
     alignItems: 'center',
+  },
+  blockLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: CARD_COLORS.text,
+  },
+  winnerBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  winnerText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  splitBar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
     gap: 2,
   },
-  valueDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 2,
+  splitLeft: {
+    borderRadius: 999,
   },
-  valueLabel: {
+  splitRight: {
+    borderRadius: 999,
+  },
+  valueRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  valueCard: {
+    flex: 1,
+    backgroundColor: CARD_COLORS.background,
+    borderRadius: 12,
+    padding: 12,
+    gap: 2,
+  },
+  valueCapacity: {
     fontSize: 10,
-    color: COLORS.mutedText,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: CARD_COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  valueText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.text,
+  valueAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  valuePct: {
+    fontSize: 11,
+    color: CARD_COLORS.textMuted,
+    fontWeight: '600',
   },
 });
 

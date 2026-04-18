@@ -10,7 +10,6 @@ import {
   Dimensions,
   TouchableOpacity,
   Alert,
-  Image,
 } from 'react-native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,6 +34,9 @@ import {
   OutstandingPaymentsCard,
   RecentBookingsWidget,
 } from '../components/widgets';
+
+// Forms
+import { NewBookingModal, AddExpenseModal, CreateSafariModal } from '../components/forms';
 
 // Utils
 import { formatCurrency } from '../lib/utils';
@@ -273,6 +275,9 @@ export function DashboardScreen() {
   });
   const [currency, setCurrency] = useState<Currency>('USD');
   const [refreshing, setRefreshing] = useState(false);
+  const [showNewBooking,    setShowNewBooking]    = useState(false);
+  const [showAddExpense,    setShowAddExpense]    = useState(false);
+  const [showCreateSafari,  setShowCreateSafari]  = useState(false);
 
   // ========================================================================
   // AUTH
@@ -540,13 +545,14 @@ export function DashboardScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
+          <View style={styles.headerGlowLeft} />
+          <View style={styles.headerGlowRight} />
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
-              <Image
-                source={require('../../assets/branding/jackal-logo.png')}
-                style={styles.headerLogo}
-                resizeMode="contain"
-              />
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerEyebrow}>Jackal Adventures</Text>
+                <Text style={styles.headerTitle}>Operations</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -563,28 +569,41 @@ export function DashboardScreen() {
       {/* Loading Overlay */}
       {loading && !refreshing && <LoadingOverlay />}
 
-      {/* Header */}
+      {/* Hero Header */}
       <View style={styles.header}>
+        <View style={styles.headerGlowLeft} />
+        <View style={styles.headerGlowRight} />
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            <Image
-              source={require('../../assets/branding/jackal-logo.png')}
-              style={styles.headerLogo}
-              resizeMode="contain"
-            />
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Operations snapshot</Text>
-              {user && (
-                <Text style={styles.headerSubtitle}>{user.email}</Text>
-              )}
+              <Text style={styles.headerEyebrow}>Jackal Adventures</Text>
+              <Text style={styles.headerTitle}>
+                Welcome back,{' '}
+                {user?.user_metadata?.full_name?.split(' ')[0] ||
+                  user?.email?.split('@')[0] ||
+                  'there'}!
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-          >
-            <LogoutIcon size={18} color={COLORS.text} />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.livePillText}>Live</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+            >
+              <LogoutIcon size={18} color="#b8ab95" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -637,6 +656,22 @@ export function DashboardScreen() {
               value={`${kpiData.fleetUtilization}%`}
             />
           </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.quickActionsRow}>
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowNewBooking(true)}>
+            <Text style={styles.quickActionEmoji}>🗓</Text>
+            <Text style={styles.quickActionLabel}>New Booking</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowAddExpense(true)}>
+            <Text style={styles.quickActionEmoji}>💰</Text>
+            <Text style={styles.quickActionLabel}>Add Expense</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowCreateSafari(true)}>
+            <Text style={styles.quickActionEmoji}>🌿</Text>
+            <Text style={styles.quickActionLabel}>Create Safari</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.controlsCard}>
@@ -694,6 +729,48 @@ export function DashboardScreen() {
 
           <View style={styles.filterStatusContainer}>
             <Text style={styles.filterStatusText}>{filterDisplayText}</Text>
+          </View>
+        </View>
+
+        {/* Compact metric tiles — 2×2 */}
+        <View style={styles.compactKpiGrid}>
+          <View style={[styles.compactKpiTile, { backgroundColor: '#dce8e3' }]}>
+            <Text style={[styles.compactKpiLabel, { color: '#1f4d45' }]}>Revenue</Text>
+            <Text style={[styles.compactKpiValue, { color: '#1f4d45' }]}>
+              {formatCurrency(kpiData.totalRevenue, currency)}
+            </Text>
+            <Text style={[styles.compactKpiSub, { color: '#1f4d45' }]}>
+              MTD: {formatCurrency(kpiData.revenueMTD, currency)}
+            </Text>
+          </View>
+          <View style={[styles.compactKpiTile, { backgroundColor: '#fde8e0' }]}>
+            <Text style={[styles.compactKpiLabel, { color: '#c96d4d' }]}>Expenses</Text>
+            <Text style={[styles.compactKpiValue, { color: '#c96d4d' }]}>
+              {formatCurrency(kpiData.totalExpenses, currency)}
+            </Text>
+            <Text style={[styles.compactKpiSub, { color: '#c96d4d' }]}>
+              {currency === 'USD'
+                ? formatCurrency(kpiData.totalExpensesUGX, 'UGX')
+                : formatCurrency(kpiData.totalExpensesUSD, 'USD')}
+            </Text>
+          </View>
+          <View style={[styles.compactKpiTile, { backgroundColor: '#e8edf5' }]}>
+            <Text style={[styles.compactKpiLabel, { color: '#4a7fc1' }]}>Bookings</Text>
+            <Text style={[styles.compactKpiValue, { color: '#4a7fc1' }]}>
+              {kpiData.activeBookings}
+            </Text>
+            <Text style={[styles.compactKpiSub, { color: '#4a7fc1' }]}>
+              Pending: {kpiData.pendingBookings}
+            </Text>
+          </View>
+          <View style={[styles.compactKpiTile, { backgroundColor: '#f5e8ce' }]}>
+            <Text style={[styles.compactKpiLabel, { color: '#b8883f' }]}>Vehicles</Text>
+            <Text style={[styles.compactKpiValue, { color: '#b8883f' }]}>
+              {kpiData.vehiclesAvailable}
+            </Text>
+            <Text style={[styles.compactKpiSub, { color: '#b8883f' }]}>
+              Available now
+            </Text>
           </View>
         </View>
 
@@ -808,6 +885,29 @@ export function DashboardScreen() {
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Action Modals */}
+      <NewBookingModal
+        visible={showNewBooking}
+        onClose={() => setShowNewBooking(false)}
+        onSuccess={() => { setShowNewBooking(false); refetch(); }}
+        vehicles={vehicles}
+        userId={user?.id}
+      />
+      <AddExpenseModal
+        visible={showAddExpense}
+        onClose={() => setShowAddExpense(false)}
+        onSuccess={() => { setShowAddExpense(false); refetch(); }}
+        userId={user?.id}
+        userName={user?.user_metadata?.full_name || user?.email?.split('@')[0]}
+      />
+      <CreateSafariModal
+        visible={showCreateSafari}
+        onClose={() => setShowCreateSafari(false)}
+        onSuccess={() => { setShowCreateSafari(false); refetch(); }}
+        vehicles={vehicles.map(v => ({ id: v.id, name: `${v.make} ${v.model}`, plate_number: v.license_plate, status: v.status }))}
+        userId={user?.id}
+      />
     </SafeAreaView>
   );
 }
@@ -822,53 +922,172 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.hero,
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 14,
+    paddingBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  headerGlowLeft: {
+    position: 'absolute',
+    top: -30,
+    left: -20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#264a42',
+    opacity: 0.32,
+  },
+  headerGlowRight: {
+    position: 'absolute',
+    right: -40,
+    bottom: -20,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#6c5228',
+    opacity: 0.2,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
+    flex: 1,
   },
-  headerLogo: {
-    width: 48,
-    height: 48,
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 10,
   },
   headerTextContainer: {
     flexDirection: 'column',
   },
-  headerTitle: {
-    fontSize: 24,
+  headerEyebrow: {
+    fontSize: 11,
     fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: -0.8,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: COLORS.heroMuted,
+    marginBottom: 6,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.7,
+    color: '#fffaf3',
+    marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginTop: 4,
+    fontSize: 13,
+    color: '#d3c7b5',
+    marginTop: 2,
+  },
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(31,77,69,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(61,143,106,0.4)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#3d8f6a',
+  },
+  livePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#a8d9bc',
+    letterSpacing: 0.6,
   },
   logoutButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  // Quick Actions
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+  },
+  quickActionBtn: {
+    flex: 1,
+    alignItems: 'center',
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     shadowColor: '#201a13',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.05,
-    shadowRadius: 12,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  quickActionEmoji: {
+    fontSize: 22,
+    marginBottom: 6,
+  },
+  quickActionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+    letterSpacing: 0.1,
+  },
+  // Compact KPI tiles (2x2)
+  compactKpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 18,
+  },
+  compactKpiTile: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: '#201a13',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
     elevation: 2,
+  },
+  compactKpiLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+    opacity: 0.7,
+  },
+  compactKpiValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    marginBottom: 3,
+  },
+  compactKpiSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    opacity: 0.65,
   },
   scrollView: {
     flex: 1,
