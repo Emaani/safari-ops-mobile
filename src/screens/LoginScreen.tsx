@@ -363,29 +363,29 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
-    // Needs position relative for the glow ring to sit behind
     position: 'relative',
-    width: 136,
-    height: 136,
+    width: 124,
+    height: 124,
   },
-  // Outer ambient glow — a wider, blurred-feeling ring
+  // Outer ambient glow ring — same circle geometry as the shell
   logoGlow: {
     position: 'absolute',
-    width: 136,
-    height: 136,
-    borderRadius: 68,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    width: 124,
+    height: 124,
+    borderRadius: 62,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
-  // Inner solid shell
+  // Inner solid shell — perfect circle
   logoShell: {
     width: 108,
     height: 108,
-    borderRadius: 28,
-    backgroundColor: '#ffffff',          // solid white — logo is always visible
+    borderRadius: 54,                    // exactly half → perfect circle
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',                  // clips logo inside the circle
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.5,
@@ -395,8 +395,8 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.9)',
   },
   logo: {
-    width: 80,
-    height: 80,
+    width: 84,
+    height: 84,
   },
 
   // ── Card ──────────────────────────────────────────────────────────────────

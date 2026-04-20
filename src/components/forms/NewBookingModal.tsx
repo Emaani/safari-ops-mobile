@@ -46,14 +46,18 @@ interface NewBookingModalProps {
   userId?: string;
 }
 
-type BookingStatus = 'Confirmed' | 'Pending';
+// Match exactly the BookingStatus values used by the Jackal Dashboard
+type BookingStatus = 'Confirmed' | 'Pending' | 'In-Progress' | 'Completed' | 'Cancelled';
 type BookingCurrency = 'USD' | 'UGX' | 'KES';
 
 const CURRENCIES: BookingCurrency[] = ['USD', 'UGX', 'KES'];
-const STATUS_OPTIONS: BookingStatus[] = ['Confirmed', 'Pending'];
+const STATUS_OPTIONS: BookingStatus[] = ['Confirmed', 'Pending', 'In-Progress', 'Completed', 'Cancelled'];
 const STATUS_COLOR: Record<BookingStatus, string> = {
-  Confirmed: C.success,
-  Pending:   C.warning,
+  Confirmed:    C.success,
+  Pending:      C.warning,
+  'In-Progress': C.primary,
+  Completed:    '#8366d7',
+  Cancelled:    C.danger,
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -143,22 +147,24 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   const insets = useSafeAreaInsets();
   const [submitting, setSubmitting] = useState(false);
 
-  // Form state
+  // Form state — mirrors the `bookings` table columns used by the Jackal Dashboard
   const [clientName,  setClientName]  = useState('');
+  const [contact,     setContact]     = useState('');
+  const [email,       setEmail]       = useState('');
   const [startDate,   setStartDate]   = useState('');
   const [endDate,     setEndDate]     = useState('');
   const [totalCost,   setTotalCost]   = useState('');
   const [currency,    setCurrency]    = useState<BookingCurrency>('USD');
   const [status,      setStatus]      = useState<BookingStatus>('Confirmed');
   const [vehicleId,   setVehicleId]   = useState('');
-  const [passengers,  setPassengers]  = useState('');
   const [notes,       setNotes]       = useState('');
   const [vehicleOpen, setVehicleOpen] = useState(false);
 
   const reset = useCallback(() => {
-    setClientName(''); setStartDate(''); setEndDate(''); setTotalCost('');
+    setClientName(''); setContact(''); setEmail('');
+    setStartDate(''); setEndDate(''); setTotalCost('');
     setCurrency('USD'); setStatus('Confirmed'); setVehicleId('');
-    setPassengers(''); setNotes(''); setVehicleOpen(false);
+    setNotes(''); setVehicleOpen(false);
   }, []);
 
   const validate = useCallback((): string | null => {
@@ -178,22 +184,25 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      // Booking reference format matches the Jackal Dashboard convention
       const booking_reference = `BK-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
 
       const { error } = await supabase.from('bookings').insert({
         booking_reference,
-        client_name:          clientName.trim(),
-        start_date:           startDate,
-        end_date:             endDate,
-        total_amount:         parseFloat(totalCost),
-        amount_paid:          0,
+        client_name:         clientName.trim(),
+        contact:             contact.trim()  || null,
+        email:               email.trim()    || null,
+        start_date:          startDate,
+        end_date:            endDate,
+        total_amount:        parseFloat(totalCost),
+        amount_paid:         0,
         currency,
         status,
-        notes:                notes.trim() || null,
-        assigned_vehicle_id:  vehicleId  || null,
-        number_of_passengers: passengers ? parseInt(passengers, 10) : null,
-        assigned_user_id:     userId || user?.id || null,
-        created_at:           new Date().toISOString(),
+        notes:               notes.trim()    || null,
+        assigned_vehicle_id: vehicleId       || null,
+        // 'assigned_to' is the column name used by the Jackal Dashboard
+        assigned_to:         userId || user?.id || null,
+        created_at:          new Date().toISOString(),
       });
 
       if (error) throw error;
@@ -206,7 +215,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     } finally {
       setSubmitting(false);
     }
-  }, [validate, clientName, startDate, endDate, totalCost, currency, status, vehicleId, passengers, notes, userId, reset, onSuccess]);
+  }, [validate, clientName, contact, email, startDate, endDate, totalCost, currency, status, vehicleId, notes, userId, reset, onSuccess]);
 
   const selectedVehicle = vehicles.find(v => v.id === vehicleId);
 
@@ -227,7 +236,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
 
-            {/* Client */}
+            {/* Client Name */}
             <View style={fieldStyles.wrap}>
               <Text style={fieldStyles.label}>Client Name *</Text>
               <View style={fieldStyles.iconInput}>
@@ -240,6 +249,37 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                   placeholderTextColor={C.muted}
                   autoCapitalize="words"
                 />
+              </View>
+            </View>
+
+            {/* Contact + Email */}
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <View style={fieldStyles.wrap}>
+                  <Text style={fieldStyles.label}>Contact</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={contact}
+                    onChangeText={setContact}
+                    placeholder="Phone number"
+                    placeholderTextColor={C.muted}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={fieldStyles.wrap}>
+                  <Text style={fieldStyles.label}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="client@email.com"
+                    placeholderTextColor={C.muted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
               </View>
             </View>
 
@@ -339,19 +379,6 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                   ))}
                 </View>
               )}
-            </View>
-
-            {/* Passengers */}
-            <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Passengers (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={passengers}
-                onChangeText={setPassengers}
-                placeholder="Number of passengers"
-                placeholderTextColor={C.muted}
-                keyboardType="number-pad"
-              />
             </View>
 
             {/* Notes */}
