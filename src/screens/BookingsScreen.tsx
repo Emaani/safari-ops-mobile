@@ -1,3 +1,4 @@
+import { devLog } from '../lib/devLog';
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -184,7 +185,7 @@ function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
 // ============================================================================
 
 export function BookingsScreen() {
-  console.log('[BookingsScreen] Component mounted');
+  devLog('[BookingsScreen] Component mounted');
 
   // ========================================================================
   // STATE
@@ -217,7 +218,7 @@ export function BookingsScreen() {
     const confirmed = bookings.filter((b) => b.status === 'Confirmed').length;
     const pending = bookings.filter((b) => b.status === 'Pending').length;
 
-    console.log('[BookingsScreen] Stats computed:', { total, active, confirmed, pending });
+    devLog('[BookingsScreen] Stats computed:', { total, active, confirmed, pending });
 
     return { total, active, confirmed, pending };
   }, [bookings]);
@@ -268,14 +269,14 @@ export function BookingsScreen() {
   // ========================================================================
 
   const handleRefresh = useCallback(async () => {
-    console.log('[BookingsScreen] Pull-to-refresh triggered');
+    devLog('[BookingsScreen] Pull-to-refresh triggered');
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
 
   const handleBookingPress = useCallback((booking: Booking) => {
-    console.log('[BookingsScreen] Booking pressed:', booking.booking_number || booking.id);
+    devLog('[BookingsScreen] Booking pressed:', booking.booking_number || booking.id);
     setSelectedBooking(booking);
     setModalVisible(true);
   }, []);

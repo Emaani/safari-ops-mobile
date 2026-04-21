@@ -1,3 +1,4 @@
+import { devLog } from '../lib/devLog';
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -149,7 +150,7 @@ function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
 // ============================================================================
 
 export function FleetScreen() {
-  console.log('[FleetScreen] Component mounted');
+  devLog('[FleetScreen] Component mounted');
 
   // ========================================================================
   // STATE
@@ -180,7 +181,7 @@ export function FleetScreen() {
     const booked = vehicles.filter((v) => v.status === 'booked' || v.status === 'rented').length;
     const maintenance = vehicles.filter((v) => v.status === 'maintenance' || v.status === 'out_of_service').length;
 
-    console.log('[FleetScreen] Stats computed:', { total, available, booked, maintenance });
+    devLog('[FleetScreen] Stats computed:', { total, available, booked, maintenance });
 
     return { total, available, booked, maintenance };
   }, [vehicles]);
@@ -204,7 +205,7 @@ export function FleetScreen() {
       );
     }
 
-    console.log(`[FleetScreen] Filtered ${result.length} vehicles from ${vehicles.length}`);
+    devLog(`[FleetScreen] Filtered ${result.length} vehicles from ${vehicles.length}`);
 
     return result;
   }, [vehicles, statusFilter, searchQuery]);
@@ -214,14 +215,14 @@ export function FleetScreen() {
   // ========================================================================
 
   const handleRefresh = useCallback(async () => {
-    console.log('[FleetScreen] Pull-to-refresh triggered');
+    devLog('[FleetScreen] Pull-to-refresh triggered');
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
 
   const handleVehiclePress = useCallback((vehicle: Vehicle) => {
-    console.log('[FleetScreen] Vehicle pressed:', vehicle.license_plate);
+    devLog('[FleetScreen] Vehicle pressed:', vehicle.license_plate);
     setSelectedVehicle(vehicle);
     setModalVisible(true);
   }, []);

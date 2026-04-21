@@ -1,3 +1,4 @@
+import { devLog } from '../lib/devLog';
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   View,
@@ -217,7 +218,7 @@ function EmptyState({ tab }: EmptyStateProps) {
 // ============================================================================
 
 export function SafariScreen() {
-  console.log('[SafariScreen] Component mounted');
+  devLog('[SafariScreen] Component mounted');
 
   // ========================================================================
   // STATE
@@ -277,14 +278,14 @@ export function SafariScreen() {
   // ========================================================================
 
   const handleRefresh = useCallback(async () => {
-    console.log('[SafariScreen] Pull-to-refresh triggered');
+    devLog('[SafariScreen] Pull-to-refresh triggered');
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
 
   const handleSafariPress = useCallback((safari: Booking) => {
-    console.log('[SafariScreen] Safari pressed:', safari.booking_number || safari.id);
+    devLog('[SafariScreen] Safari pressed:', safari.booking_number || safari.id);
     setSelectedSafari(safari);
     setModalVisible(true);
   }, []);
@@ -398,7 +399,7 @@ export function SafariScreen() {
         style={styles.fab}
         activeOpacity={0.85}
         onPress={() => {
-          console.log('[SafariScreen] Add Safari tapped');
+          devLog('[SafariScreen] Add Safari tapped');
         }}
       >
         <PlusIcon size={22} color="#fff" />

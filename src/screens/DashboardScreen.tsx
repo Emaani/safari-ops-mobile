@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
-import { devLog } from '../lib/devLog';
+import { devLog, devError } from '../lib/devLog';
 
 // Hooks
 import { useExchangeRate, getConversionRates } from '../hooks/useExchangeRate';
@@ -368,16 +368,11 @@ export function DashboardScreen() {
       calculations.kpis.totalExpenses === 0 &&
       calculations.kpis.activeBookings === 0
     ) {
-      console.warn('[Dashboard] WARNING: All KPIs are zero! This suggests data is not being fetched or calculated correctly.');
-      console.warn(
-        '[Dashboard] Input data counts - Vehicles:',
-        vehicles.length,
-        'Bookings:',
-        bookings.length,
-        'Transactions:',
-        financialTransactions.length,
-        'CRs:',
-        cashRequisitions.length
+      devError('[Dashboard] WARNING: All KPIs are zero — data may not be loading correctly.',
+        'Vehicles:', vehicles.length,
+        'Bookings:', bookings.length,
+        'Transactions:', financialTransactions.length,
+        'CRs:', cashRequisitions.length
       );
     }
   }, [
@@ -440,7 +435,7 @@ export function DashboardScreen() {
             try {
               await signOut();
             } catch (error) {
-              console.error('[Dashboard] Logout error:', error);
+              devError('[Dashboard] Logout error:', error);
               Alert.alert('Error', 'Failed to logout. Please try again.');
             }
           },
