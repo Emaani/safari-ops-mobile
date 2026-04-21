@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Animated, AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { ErrorBoundary } from './src/components/system/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import {
   AppPreferencesProvider,
@@ -24,6 +25,7 @@ import {
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookingNotifications } from './src/hooks/useBookingNotifications';
 import { useCRNotifications } from './src/hooks/useCRNotifications';
+import { useNetworkStatus } from './src/hooks/useNetworkStatus';
 import DashboardScreen from './src/screens/DashboardScreen';
 import BookingsScreen from './src/screens/BookingsScreen';
 import FleetScreen from './src/screens/FleetScreen';
@@ -33,6 +35,10 @@ import MoreScreen from './src/screens/MoreScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import { initializeSDK } from './src/sdk-init';
 import { realtimeManager } from './src/lib/realtimeManager';
+import { suppressProductionLogs } from './src/lib/devLog';
+
+// Silence debug noise in production builds immediately
+suppressProductionLogs();
 import {
   addNotificationReceivedListener,
   addNotificationResponseListener,
@@ -88,16 +94,18 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <AppPreferencesProvider>
-          {/* InAppNotificationProvider wraps everything so banners appear above all screens */}
-          <InAppNotificationProvider onNavigate={handleBannerNavigate}>
-            <AppShell />
-          </InAppNotificationProvider>
-        </AppPreferencesProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <AppPreferencesProvider>
+            {/* InAppNotificationProvider wraps everything so banners appear above all screens */}
+            <InAppNotificationProvider onNavigate={handleBannerNavigate}>
+              <AppShell />
+            </InAppNotificationProvider>
+          </AppPreferencesProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -105,13 +113,37 @@ export default function App() {
 
 function AppShell() {
   const { theme } = useAppPreferences();
+  const { isOnline } = useNetworkStatus();
+
   return (
     <>
       <StatusBar style={theme.statusBarStyle} />
+      {/* Offline banner — shown below status bar, above all content */}
+      {!isOnline && (
+        <View style={shellStyles.offlineBanner}>
+          <Text style={shellStyles.offlineText}>⚡ No internet connection — data may be outdated</Text>
+        </View>
+      )}
       <AppNavigator />
     </>
   );
 }
+
+const shellStyles = StyleSheet.create({
+  offlineBanner: {
+    backgroundColor: '#b8883f',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  offlineText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+});
 
 // ─── Navigator ────────────────────────────────────────────────────────────────
 

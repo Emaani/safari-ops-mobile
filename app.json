@@ -19,19 +19,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3.5",
+      "buildNumber": "3.6",
       "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "Allow Jackal Adventures to use Face ID for quick and secure sign-in.",
-        "NSCameraUsageDescription": "Jackal Adventures does not use the camera.",
-        "NSPhotoLibraryUsageDescription": "Jackal Adventures does not access your photo library.",
-        "NSMicrophoneUsageDescription": "Jackal Adventures does not use the microphone.",
-        "NSLocationWhenInUseUsageDescription": "Jackal Adventures does not use your location.",
-        "NSContactsUsageDescription": "Jackal Adventures does not access your contacts.",
+        "NSFaceIDUsageDescription": "Jackal Adventures uses Face ID so you can sign in quickly and securely without typing your password.",
         "CFBundleAllowMixedLocalizations": true
       }
     },

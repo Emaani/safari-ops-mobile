@@ -1,66 +1,47 @@
-import { useState, useEffect, useCallback } from 'react';
-
 /**
- * Hook to detect network connectivity status
- * Returns online/offline status and provides a way to manually check
+ * useNetworkStatus
+ *
+ * Monitors device connectivity via @react-native-community/netinfo.
+ * Uses the native platform APIs rather than polling an external URL.
  */
+import { useState, useEffect } from 'react';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 
-interface NetworkStatus {
+export interface NetworkStatus {
   isOnline: boolean;
-  isChecking: boolean;
+  isInternetReachable: boolean | null;
+  connectionType: string | null;
 }
 
-export function useNetworkStatus(): NetworkStatus & { checkConnection: () => Promise<boolean> } {
-  const [isOnline, setIsOnline] = useState(true);
-  const [isChecking, setIsChecking] = useState(false);
+export function useNetworkStatus(): NetworkStatus {
+  const [status, setStatus] = useState<NetworkStatus>({
+    isOnline:            true,   // Optimistic default — avoids flash on boot
+    isInternetReachable: null,
+    connectionType:      null,
+  });
 
-  // Check connection by making a simple fetch request
-  const checkConnection = useCallback(async (): Promise<boolean> => {
-    setIsChecking(true);
-    try {
-      // Try to fetch a small resource to verify connectivity
-      // Using a simple HEAD request to minimize data transfer
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch('https://www.google.com/favicon.ico', {
-        method: 'HEAD',
-        mode: 'no-cors',
-        signal: controller.signal,
+  useEffect(() => {
+    // Fetch once immediately
+    NetInfo.fetch().then((state: NetInfoState) => {
+      setStatus({
+        isOnline:            state.isConnected ?? true,
+        isInternetReachable: state.isInternetReachable,
+        connectionType:      state.type,
       });
+    });
 
-      clearTimeout(timeoutId);
-      setIsOnline(true);
-      setIsChecking(false);
-      return true;
-    } catch (error) {
-      setIsOnline(false);
-      setIsChecking(false);
-      return false;
-    }
+    const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
+      setStatus({
+        isOnline:            state.isConnected ?? true,
+        isInternetReachable: state.isInternetReachable,
+        connectionType:      state.type,
+      });
+    });
+
+    return unsubscribe;
   }, []);
 
-  // Check connection on mount and periodically
-  useEffect(() => {
-    // Initial check
-    checkConnection();
-
-    // Check every 30 seconds when online, every 10 seconds when offline
-    const intervalId = setInterval(
-      () => {
-        checkConnection();
-      },
-      isOnline ? 30000 : 10000
-    );
-
-    return () => clearInterval(intervalId);
-  }, [checkConnection, isOnline]);
-
-  return {
-    isOnline,
-    isChecking,
-    checkConnection,
-  };
+  return status;
 }
 
 export default useNetworkStatus;
