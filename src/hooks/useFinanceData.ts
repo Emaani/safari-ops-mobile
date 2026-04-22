@@ -107,9 +107,40 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
 
     if (error) throw error;
 
-    return (crs || []).map((record) =>
-      normalizeCashRequisition(record as Record<string, unknown>)
-    ) as CashRequisition[];
+    const records = (crs || []) as Record<string, unknown>[];
+    const approverIds = Array.from(new Set(
+      records
+        .map((record) => record.approver_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    ));
+
+    let approverMap: Record<string, { full_name: string | null; email: string | null }> = {};
+    if (approverIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', approverIds);
+
+      if (profilesError) {
+        console.warn(`[FinanceData #${fetchId}] Could not hydrate CR approvers:`, profilesError.message);
+      } else {
+        approverMap = (profiles || []).reduce((acc, profile: any) => {
+          acc[profile.id] = {
+            full_name: typeof profile.full_name === 'string' ? profile.full_name : null,
+            email:     typeof profile.email === 'string' ? profile.email : null,
+          };
+          return acc;
+        }, {} as Record<string, { full_name: string | null; email: string | null }>);
+      }
+    }
+
+    return records.map((record) => {
+      const approverId = typeof record.approver_id === 'string' ? record.approver_id : null;
+      return normalizeCashRequisition({
+        ...record,
+        approver: approverId ? approverMap[approverId] ?? null : null,
+      });
+    }) as CashRequisition[];
   }, []);
 
   const fetchBookings = useCallback(async (fetchId: number) => {
