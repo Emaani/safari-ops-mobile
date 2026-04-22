@@ -503,6 +503,7 @@ export function FinanceScreen() {
         visible={modalVisible}
         onClose={() => { setModalVisible(false); setModalItem(null); }}
         displayCurrency={currency}
+        onRefetch={refetch}
       />
     </SafeAreaView>
   );

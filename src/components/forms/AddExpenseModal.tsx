@@ -168,7 +168,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
       if (error) throw error;
       reset();
       onSuccess();
-      Alert.alert('Expense Submitted', `Cash requisition ${cr_number} has been created and is pending approval.`);
+      Alert.alert('Requisition Submitted', `Cash Requisition ${cr_number} has been created and is pending approval.`);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to submit expense. Please try again.');
     } finally {
@@ -184,7 +184,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
           <View style={styles.header}>
             <View>
               <Text style={styles.headerEyebrow}>Finance</Text>
-              <Text style={styles.headerTitle}>Add Expense</Text>
+              <Text style={styles.headerTitle}>Cash Requisition</Text>
             </View>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} style={styles.closeBtn}>
               <CloseIcon />
@@ -282,7 +282,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
             {/* Info notice */}
             <View style={styles.notice}>
               <Text style={styles.noticeText}>
-                💡 This expense will be submitted as a Cash Requisition with Pending status and will require approval.
+                💡 This requisition will be submitted as Pending and must be approved by an authorised approver before funds are released.
               </Text>
             </View>
 
@@ -295,7 +295,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
             >
               {submitting
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.submitText}>Submit Expense</Text>}
+                : <Text style={styles.submitText}>Submit Requisition</Text>}
             </TouchableOpacity>
 
             <View style={{ height: insets.bottom + 20 }} />

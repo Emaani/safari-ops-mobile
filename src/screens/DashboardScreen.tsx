@@ -661,7 +661,7 @@ export function DashboardScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowAddExpense(true)}>
             <Text style={styles.quickActionEmoji}>💰</Text>
-            <Text style={styles.quickActionLabel}>Add Expense</Text>
+            <Text style={styles.quickActionLabel}>Cash Requisition</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowCreateSafari(true)}>
             <Text style={styles.quickActionEmoji}>🌿</Text>

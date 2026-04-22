@@ -19,7 +19,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3.6",
+      "buildNumber": "3.7",
       "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
         "UIBackgroundModes": [
@@ -61,7 +61,8 @@
           "color": "#1e40af",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "eas": {
