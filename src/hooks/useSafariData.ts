@@ -148,8 +148,8 @@ export function useSafariData() {
         vehicle: s.assigned_vehicle_id && vehicles[s.assigned_vehicle_id]
           ? { name: vehicles[s.assigned_vehicle_id] }
           : undefined,
-        profiles: s.assigned_user_id && profiles[s.assigned_user_id]
-          ? { full_name: profiles[s.assigned_user_id] }
+        profiles: (s.assigned_to || s.assigned_user_id) && profiles[s.assigned_to || s.assigned_user_id!]
+          ? { full_name: profiles[s.assigned_to || s.assigned_user_id!] }
           : undefined,
       }));
 

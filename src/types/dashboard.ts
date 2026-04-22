@@ -47,6 +47,18 @@ export interface Booking {
   client_id?: string;
   actual_client_id?: string;
   client_name?: string;
+  contact_person?: string;
+  contact?: string;
+  email?: string;
+  package_type?: string;
+  daily_rate?: number;
+  number_of_days?: number;
+  balance_due?: number;
+  payment_method?: string;
+  transaction_id?: string;
+  bank_name?: string;
+  booking_type?: 'booking' | 'reservation' | string;
+  contract_status?: string;
   created_at?: string; // Booking creation date (for Recent Bookings sorting)
   client?: {
     company_name: string;
@@ -94,6 +106,10 @@ export interface CashRequisition {
   amount_usd?: number;
   description?: string;
   requested_by?: string;
+  approver_id?: string | null;
+  approved_at?: string | null;
+  declined_at?: string | null;
+  approver?: { full_name: string | null; email: string | null } | null;
 }
 
 export interface SafariBooking {

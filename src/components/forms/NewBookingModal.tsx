@@ -9,7 +9,7 @@
  *  - Auto-population of email / phone on client selection
  *  - client_id linked to bookings table
  */
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -48,9 +48,11 @@ const C = {
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ClientResult {
   id: string;
+  client_id?: string | null;
   company_name: string;
+  contact_person?: string | null;
   email?: string | null;
-  phone?: string | null;
+  phone_number?: string | null;
 }
 
 interface NewBookingModalProps {
@@ -63,9 +65,22 @@ interface NewBookingModalProps {
 
 type BookingStatus   = 'Confirmed' | 'Pending' | 'In-Progress' | 'Completed' | 'Cancelled';
 type BookingCurrency = 'USD' | 'UGX' | 'KES';
+type BookingType = 'booking' | 'reservation';
+type PaymentMethod = '' | 'mtn_uganda' | 'airtel_uganda' | 'mpesa_kenya' | 'bank_transfer' | 'cash';
 
 const CURRENCIES: BookingCurrency[] = ['USD', 'UGX', 'KES'];
 const STATUS_OPTIONS: BookingStatus[] = ['Confirmed', 'Pending', 'In-Progress', 'Completed', 'Cancelled'];
+const BOOKING_TYPES: { value: BookingType; label: string }[] = [
+  { value: 'booking', label: 'Booking (Current)' },
+  { value: 'reservation', label: 'Reservation (Future)' },
+];
+const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: 'mtn_uganda', label: 'MTN Uganda' },
+  { value: 'airtel_uganda', label: 'Airtel Uganda' },
+  { value: 'mpesa_kenya', label: 'M-PESA Kenya' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'cash', label: 'Cash' },
+];
 const STATUS_COLOR: Record<BookingStatus, string> = {
   Confirmed:     C.success,
   Pending:       C.warning,
@@ -83,6 +98,24 @@ function formatDisplay(iso: string): string {
   const [y, m, d] = iso.split('-');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${d} ${months[parseInt(m, 10) - 1]} ${y}`;
+}
+function countDays(start: string, end: string): number {
+  if (!start || !end) return 0;
+  return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1);
+}
+function getDailyRate(capacity: string): number | null {
+  if (capacity.includes('7')) return 130;
+  if (capacity.includes('5')) return 120;
+  return null;
+}
+function normalizePhone(phone?: string | null): string {
+  return (phone || '').trim();
+}
+function escapePostgrestSearch(value: string): string {
+  return value.trim().replace(/[%,]/g, '');
+}
+function calculateBalance(total: string, paid: string): number {
+  return Math.max(0, (parseFloat(total) || 0) - (parseFloat(paid) || 0));
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -273,10 +306,11 @@ function ClientSearch({
     if (!q.trim() || q.trim().length < 2) { setResults([]); setShowResults(false); return; }
     setSearching(true);
     try {
+      const term = escapePostgrestSearch(q);
       const { data, error } = await supabase
         .from('clients')
-        .select('id, company_name, email, phone')
-        .or(`company_name.ilike.%${q.trim()}%,email.ilike.%${q.trim()}%,phone.ilike.%${q.trim()}%`)
+        .select('id, client_id, company_name, contact_person, email, phone_number')
+        .or(`company_name.ilike.%${term}%,email.ilike.%${term}%,phone_number.ilike.%${term}%,contact_person.ilike.%${term}%,client_id.ilike.%${term}%`)
         .limit(8);
       if (!error && data) { setResults(data as ClientResult[]); setShowResults(true); }
     } finally {
@@ -309,9 +343,9 @@ function ClientSearch({
             <CheckIcon />
             <View style={{ marginLeft: 10, flex: 1 }}>
               <Text style={srchStyles.selectedName}>{selectedClient.company_name}</Text>
-              {(selectedClient.email || selectedClient.phone) && (
+              {(selectedClient.client_id || selectedClient.email || selectedClient.phone_number) && (
                 <Text style={srchStyles.selectedSub} numberOfLines={1}>
-                  {[selectedClient.email, selectedClient.phone].filter(Boolean).join(' · ')}
+                  {[selectedClient.client_id, selectedClient.email, selectedClient.phone_number].filter(Boolean).join(' · ')}
                 </Text>
               )}
             </View>
@@ -363,9 +397,9 @@ function ClientSearch({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={srchStyles.resultName}>{c.company_name}</Text>
-                {(c.email || c.phone) && (
+                {(c.client_id || c.email || c.phone_number) && (
                   <Text style={srchStyles.resultSub} numberOfLines={1}>
-                    {[c.email, c.phone].filter(Boolean).join(' · ')}
+                    {[c.client_id, c.email, c.phone_number].filter(Boolean).join(' · ')}
                   </Text>
                 )}
               </View>
@@ -421,8 +455,8 @@ function AutocompleteName({ value, onChange, onSelect, isLinked }: AutocompleteN
     try {
       const { data, error } = await supabase
         .from('clients')
-        .select('id, company_name, email, phone')
-        .ilike('company_name', `%${q.trim()}%`)
+        .select('id, client_id, company_name, contact_person, email, phone_number')
+        .or(`company_name.ilike.%${escapePostgrestSearch(q)}%,email.ilike.%${escapePostgrestSearch(q)}%,phone_number.ilike.%${escapePostgrestSearch(q)}%,contact_person.ilike.%${escapePostgrestSearch(q)}%,client_id.ilike.%${escapePostgrestSearch(q)}%`)
         .limit(5);
       if (!error && data && data.length > 0) {
         setSuggestions(data as ClientResult[]);
@@ -485,9 +519,9 @@ function AutocompleteName({ value, onChange, onSelect, isLinked }: AutocompleteN
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={autoStyles.name}>{c.company_name}</Text>
-                {(c.email || c.phone) && (
+                {(c.client_id || c.email || c.phone_number) && (
                   <Text style={autoStyles.sub} numberOfLines={1}>
-                    {[c.email, c.phone].filter(Boolean).join(' · ')}
+                    {[c.client_id, c.email, c.phone_number].filter(Boolean).join(' · ')}
                   </Text>
                 )}
               </View>
@@ -518,37 +552,84 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
   // Client state
   const [selectedClient, setSelectedClient] = useState<ClientResult | null>(null);
+  const [companyName,    setCompanyName]    = useState('');
   const [clientName,     setClientName]     = useState('');
+  const [contactPerson,  setContactPerson]  = useState('');
   const [contact,        setContact]        = useState('');
   const [email,          setEmail]          = useState('');
+  const [phoneNumber,    setPhoneNumber]    = useState('');
 
   // Booking fields
   const [startDate,   setStartDate]   = useState('');
   const [endDate,     setEndDate]     = useState('');
+  const [packageType, setPackageType] = useState('');
   const [totalCost,   setTotalCost]   = useState('');
+  const [dailyRate,   setDailyRate]   = useState('');
+  const [amountPaid,  setAmountPaid]  = useState('');
   const [currency,    setCurrency]    = useState<BookingCurrency>('USD');
-  const [status,      setStatus]      = useState<BookingStatus>('Confirmed');
+  const [status,      setStatus]      = useState<BookingStatus>('Pending');
+  const [bookingType, setBookingType] = useState<BookingType>('booking');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
+  const [transactionId, setTransactionId] = useState('');
+  const [bankName, setBankName] = useState('');
   const [vehicleId,   setVehicleId]   = useState('');
   const [notes,       setNotes]       = useState('');
   const [vehicleOpen, setVehicleOpen] = useState(false);
+  const [driverOpen, setDriverOpen] = useState(false);
+  const [driverId, setDriverId] = useState('');
+  const [guides, setGuides] = useState<Array<{ id: string; full_name: string; phone?: string | null }>>([]);
+
+  // Track whether cost was auto-calculated (shows indicator) or manually edited
+  const [costAutoCalc, setCostAutoCalc] = useState(false);
 
   // Derived min date for end date picker
   const minEndDate = startDate ? new Date(startDate) : undefined;
 
+  // ── Auto-calculate cost when vehicle or dates change ──────────────────────
+  useEffect(() => {
+    if (!vehicleId || !startDate || !endDate) return;
+    const vehicle = vehicles.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+    const rate = getDailyRate(vehicle.capacity);
+    if (rate === null) return;
+    const days = countDays(startDate, endDate);
+    setDailyRate(String(rate));
+    setTotalCost(String(rate * days));
+    setCostAutoCalc(true);
+  }, [vehicleId, startDate, endDate, vehicles]);
+
+  useEffect(() => {
+    if (!visible) return;
+    supabase
+      .from('safari_guides')
+      .select('id, full_name, phone, status')
+      .eq('status', 'active')
+      .order('full_name')
+      .then(({ data, error }) => {
+        if (!error) setGuides((data || []) as Array<{ id: string; full_name: string; phone?: string | null }>);
+      });
+  }, [visible]);
+
   const reset = useCallback(() => {
     setSelectedClient(null);
-    setClientName(''); setContact(''); setEmail('');
-    setStartDate(''); setEndDate(''); setTotalCost('');
-    setCurrency('USD'); setStatus('Confirmed');
-    setVehicleId(''); setNotes(''); setVehicleOpen(false);
+    setCompanyName(''); setClientName(''); setContactPerson(''); setContact(''); setEmail(''); setPhoneNumber('');
+    setStartDate(''); setEndDate(''); setPackageType(''); setTotalCost(''); setDailyRate(''); setAmountPaid('');
+    setCurrency('USD'); setStatus('Pending'); setBookingType('booking'); setPaymentMethod(''); setTransactionId(''); setBankName('');
+    setVehicleId(''); setDriverId(''); setNotes(''); setVehicleOpen(false); setDriverOpen(false);
+    setCostAutoCalc(false);
   }, []);
 
   // Called when a client is chosen from either the dedicated Search or the autocomplete
   const handleClientSelect = useCallback((c: ClientResult) => {
     setSelectedClient(c);
-    setClientName(c.company_name);
+    setCompanyName(c.company_name);
+    setClientName(c.contact_person || c.company_name);
+    setContactPerson(c.contact_person || '');
     if (c.email) setEmail(c.email);
-    if (c.phone) setContact(c.phone);
+    if (c.phone_number) {
+      setContact(c.phone_number);
+      setPhoneNumber(c.phone_number);
+    }
   }, []);
 
   const handleClientClear = useCallback(() => {
@@ -561,21 +642,56 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     setClientName(text);
   }, [selectedClient]);
 
+  const handleCompanyNameChange = useCallback((text: string) => {
+    if (selectedClient) setSelectedClient(null);
+    setCompanyName(text);
+  }, [selectedClient]);
+
   // Auto-clear end date if it's before the new start date
   const handleStartDateChange = useCallback((iso: string) => {
     setStartDate(iso);
     if (endDate && iso && endDate < iso) setEndDate('');
   }, [endDate]);
 
+  const handleTotalCostChange = useCallback((text: string) => {
+    setTotalCost(text);
+    setCostAutoCalc(false);
+  }, []);
+
+  const handleDailyRateChange = useCallback((text: string) => {
+    setDailyRate(text);
+    setCostAutoCalc(false);
+    const days = countDays(startDate, endDate);
+    const rate = parseFloat(text);
+    if (days > 0 && !isNaN(rate) && rate > 0) {
+      setTotalCost(String(days * rate));
+    }
+  }, [startDate, endDate]);
+
   const validate = useCallback((): string | null => {
-    if (!clientName.trim())  return 'Client name is required.';
+    if (!companyName.trim()) return 'Company name is required.';
+    if (!phoneNumber.trim()) return 'Phone number is required.';
+    if (!clientName.trim())  return 'Contact person name is required.';
+    if (!contact.trim())     return 'Contact phone is required.';
+    if (!email.trim())       return 'Email is required.';
+    if (!packageType.trim()) return 'Package type is required.';
+    if (!dailyRate.trim())   return 'Daily rate is required.';
     if (!startDate)          return 'Please select a start date.';
     if (!endDate)            return 'Please select an end date.';
     if (endDate < startDate) return 'End date must be on or after the start date.';
+    const rate = parseFloat(dailyRate);
+    if (isNaN(rate) || rate <= 0) return 'Daily rate must be a positive number.';
     const cost = parseFloat(totalCost);
     if (isNaN(cost) || cost <= 0) return 'Total cost must be a positive number.';
+    const paid = parseFloat(amountPaid || '0');
+    if (isNaN(paid) || paid < 0) return 'Amount paid cannot be negative.';
+    if (paid > cost) return 'Amount paid cannot exceed total amount.';
+    if ((paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && !transactionId.trim()) {
+      return 'Please enter transaction ID for the selected payment method.';
+    }
+    if (paymentMethod === 'bank_transfer' && !bankName.trim()) return 'Please specify the bank.';
     return null;
-  }, [clientName, startDate, endDate, totalCost]);
+  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, transactionId, bankName]);
 
   const handleSubmit = useCallback(async () => {
     const err = validate();
@@ -584,37 +700,91 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const booking_reference = `BK-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+      let clientId = selectedClient?.id || null;
+      if (!clientId) {
+        const { data: resolvedClientId, error: clientError } = await supabase.rpc('find_or_create_client', {
+          p_company_name: companyName.trim(),
+          p_phone_number: normalizePhone(phoneNumber),
+          p_contact_person: clientName.trim(),
+          p_email: email.trim(),
+          p_created_by: user?.id || userId || null,
+        });
+        if (clientError) throw clientError;
+        clientId = resolvedClientId as string;
+      }
 
-      const { error } = await supabase.from('bookings').insert({
-        booking_reference,
-        client_id:           selectedClient?.id || null,
+      const totalAmount = parseFloat(totalCost);
+      const paidAmount = parseFloat(amountPaid || '0');
+      const balanceDue = totalAmount - paidAmount;
+      const numberOfDays = countDays(startDate, endDate);
+
+      const { data: bookingData, error } = await supabase.from('bookings').insert({
+        booking_reference:   null,
+        client_id:           clientId,
         client_name:         clientName.trim(),
+        contact_person:      contactPerson.trim() || null,
         contact:             contact.trim()  || null,
         email:               email.trim()    || null,
+        package_type:        packageType.trim(),
         start_date:          startDate,
         end_date:            endDate,
-        total_amount:        parseFloat(totalCost),
-        amount_paid:         0,
+        date_range:          `${startDate} to ${endDate}`,
+        daily_rate:          parseFloat(dailyRate),
+        number_of_days:      numberOfDays,
+        total_amount:        totalAmount,
+        amount_paid:         paidAmount,
+        balance_due:         balanceDue,
         currency,
+        payment_method:      paymentMethod || null,
+        transaction_id:      transactionId.trim() || null,
+        bank_name:           bankName.trim() || null,
         status,
+        contract_status:     'Pending',
+        booking_type:        bookingType,
         notes:               notes.trim() || null,
         assigned_vehicle_id: vehicleId    || null,
+        assigned_driver_id:  driverId || null,
         assigned_to:         userId || user?.id || null,
+        created_by:          user?.id || userId || null,
+        vehicles:            [],
         created_at:          new Date().toISOString(),
-      });
+      }).select('id, booking_reference').single();
 
       if (error) throw error;
 
+      if (vehicleId) {
+        await supabase.from('vehicles').update({ status: 'booked' }).eq('id', vehicleId);
+      }
+
+      if (paidAmount > 0) {
+        await supabase.from('financial_transactions').insert({
+          transaction_type: 'income',
+          category: 'Booking Revenue',
+          amount: paidAmount,
+          currency,
+          description: `Payment for booking ${bookingData?.booking_reference || 'new booking'} - ${clientName.trim()}`,
+          reference_number: transactionId.trim() || bookingData?.booking_reference || null,
+          booking_id: bookingData?.id,
+          payment_method: paymentMethod || 'cash',
+          payment_details: {
+            method: paymentMethod || 'cash',
+            transaction_id: transactionId.trim() || null,
+          },
+          status: 'completed',
+          transaction_date: new Date().toISOString(),
+          created_by: user?.id || userId || null,
+        });
+      }
+
       reset();
       onSuccess();
-      Alert.alert('Booking Created', `Booking ${booking_reference} has been successfully created.`);
+      Alert.alert('Booking Created', `Booking ${bookingData?.booking_reference || 'new booking'} has been successfully created.`);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to create booking. Please try again.');
     } finally {
       setSubmitting(false);
     }
-  }, [validate, selectedClient, clientName, contact, email, startDate, endDate, totalCost, currency, status, vehicleId, notes, userId, reset, onSuccess]);
+  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, status, bookingType, vehicleId, driverId, notes, userId, reset, onSuccess]);
 
   const selectedVehicle = vehicles.find(v => v.id === vehicleId);
 
@@ -626,8 +796,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
           {/* ── Header ── */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerEyebrow}>Create</Text>
-              <Text style={styles.headerTitle}>New Booking</Text>
+              <Text style={styles.headerEyebrow}>Bookings</Text>
+              <Text style={styles.headerTitle}>Create New Booking</Text>
             </View>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} style={styles.closeBtn}>
               <CloseIcon color="#b8ab95" />
@@ -654,6 +824,33 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                 {selectedClient ? 'Booking Details' : 'Or Enter Client Details'}
               </Text>
               <View style={styles.dividerLine} />
+            </View>
+
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Company Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={companyName}
+                onChangeText={handleCompanyNameChange}
+                placeholder="Enter company name"
+                placeholderTextColor={C.muted}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Phone Number *</Text>
+              <TextInput
+                style={styles.input}
+                value={phoneNumber}
+                onChangeText={(text) => {
+                  setPhoneNumber(text);
+                  if (!contact) setContact(text);
+                }}
+                placeholder="Company phone number"
+                placeholderTextColor={C.muted}
+                keyboardType="phone-pad"
+              />
             </View>
 
             {/* ── Client Name with autocomplete ── */}
@@ -695,6 +892,47 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               </View>
             </View>
 
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Contact Person (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={contactPerson}
+                onChangeText={setContactPerson}
+                placeholder="Reference person at client organization"
+                placeholderTextColor={C.muted}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Package Type *</Text>
+              <TextInput
+                style={styles.input}
+                value={packageType}
+                onChangeText={setPackageType}
+                placeholder="e.g. 7-Day Safari Package"
+                placeholderTextColor={C.muted}
+              />
+            </View>
+
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Type *</Text>
+              <View style={styles.segRow}>
+                {BOOKING_TYPES.map(option => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.seg, bookingType === option.value && styles.segActive]}
+                    onPress={() => {
+                      setBookingType(option.value);
+                      setStatus('Pending');
+                    }}
+                  >
+                    <Text style={[styles.segText, bookingType === option.value && styles.segTextActive]}>{option.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             {/* ── Date pickers ── */}
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
@@ -732,19 +970,69 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
             {/* ── Cost + Currency ── */}
             <View style={styles.row}>
-              <View style={{ flex: 2 }}>
+              <View style={{ flex: 1 }}>
                 <View style={fieldStyles.wrap}>
-                  <Text style={fieldStyles.label}>Total Cost *</Text>
+                  <Text style={fieldStyles.label}>Daily Rate *</Text>
                   <TextInput
                     style={styles.input}
-                    value={totalCost}
-                    onChangeText={setTotalCost}
+                    value={dailyRate}
+                    onChangeText={handleDailyRateChange}
                     placeholder="0.00"
                     placeholderTextColor={C.muted}
                     keyboardType="decimal-pad"
                   />
                 </View>
               </View>
+              <View style={{ flex: 1 }}>
+                <View style={fieldStyles.wrap}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={fieldStyles.label}>Total Amount</Text>
+                    {costAutoCalc && vehicleId && startDate && endDate && (() => {
+                      const v = vehicles.find(vv => vv.id === vehicleId);
+                      const rate = v ? getDailyRate(v.capacity) : null;
+                      const days = countDays(startDate, endDate);
+                      return rate !== null ? (
+                        <Text style={styles.autoCalcTag}>
+                          ${rate}/day × {days}d
+                        </Text>
+                      ) : null;
+                    })()}
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    value={totalCost}
+                    onChangeText={handleTotalCostChange}
+                    placeholder="0.00"
+                    placeholderTextColor={C.muted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <View style={fieldStyles.wrap}>
+                  <Text style={fieldStyles.label}>Amount Paid</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={amountPaid}
+                    onChangeText={setAmountPaid}
+                    placeholder="0.00"
+                    placeholderTextColor={C.muted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+              <View style={{ flex: 1, marginBottom: 14 }}>
+                <Text style={fieldStyles.label}>Balance Due</Text>
+                <View style={styles.readOnlyBox}>
+                  <Text style={styles.readOnlyText}>{currency} {calculateBalance(totalCost, amountPaid).toFixed(2)}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.row}>
               <View style={{ flex: 1, marginBottom: 14 }}>
                 <Text style={fieldStyles.label}>Currency</Text>
                 <View style={styles.segCol}>
@@ -787,45 +1075,163 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
             <View style={fieldStyles.wrap}>
               <Text style={fieldStyles.label}>Assign Vehicle (Optional)</Text>
               <TouchableOpacity
-                style={[fieldStyles.iconInput, vehicleOpen && { borderColor: C.primary }]}
+                style={[
+                  fieldStyles.iconInput,
+                  vehicleOpen && { borderColor: C.primary },
+                  !vehicleId && { borderColor: C.border },
+                ]}
                 onPress={() => setVehicleOpen(!vehicleOpen)}
                 activeOpacity={0.8}
               >
-                <TruckIcon />
-                <Text style={[fieldStyles.iconInputText, !selectedVehicle && { color: C.muted }]}>
-                  {selectedVehicle
-                    ? `${selectedVehicle.make} ${selectedVehicle.model} · ${selectedVehicle.license_plate}`
-                    : 'Select vehicle…'}
-                </Text>
+                <TruckIcon color={selectedVehicle ? C.primary : C.muted} />
+                <View style={{ flex: 1 }}>
+                  {selectedVehicle ? (
+                    <>
+                      <Text style={[fieldStyles.iconInputText, { flex: 0 }]}>
+                        {selectedVehicle.make} {selectedVehicle.model} · {selectedVehicle.license_plate}
+                      </Text>
+                      <Text style={styles.vehicleCapacityLine}>
+                        {selectedVehicle.capacity}
+                        {getDailyRate(selectedVehicle.capacity) !== null
+                          ? ` · $${getDailyRate(selectedVehicle.capacity)}/day`
+                          : ''}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={[fieldStyles.iconInputText, { color: C.muted }]}>
+                      Select vehicle...
+                    </Text>
+                  )}
+                </View>
                 <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth={2.5} strokeLinecap="round">
                   <Path d={vehicleOpen ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
                 </Svg>
               </TouchableOpacity>
               {vehicleOpen && (
                 <View style={styles.dropdown}>
+                  {vehicles.map(v => {
+                    const rate = getDailyRate(v.capacity);
+                    return (
+                      <TouchableOpacity
+                        key={v.id}
+                        style={[styles.dropdownItem, vehicleId === v.id && styles.dropdownItemActive]}
+                        onPress={() => { setVehicleId(v.id); setVehicleOpen(false); }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.dropdownText, vehicleId === v.id && { color: C.primary, fontWeight: '700' }]}>
+                            {v.make} {v.model} · {v.license_plate}
+                          </Text>
+                          <Text style={styles.vehicleCapacityDropdown}>
+                            {v.capacity}
+                            {rate !== null ? ` · $${rate}/day` : ''}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                          <View style={[styles.statusDot, {
+                            backgroundColor: v.status === 'available' ? C.success : v.status === 'maintenance' ? C.warning : C.muted,
+                          }]} />
+                          {vehicleId === v.id && <CheckIcon color={C.primary} />}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Assign Driver / Guide (Optional)</Text>
+              <TouchableOpacity
+                style={[fieldStyles.iconInput, driverOpen && { borderColor: C.primary }]}
+                onPress={() => setDriverOpen(!driverOpen)}
+                activeOpacity={0.8}
+              >
+                <UserIcon color={driverId ? C.primary : C.muted} />
+                <Text style={[fieldStyles.iconInputText, !driverId && { color: C.muted }]}>
+                  {driverId ? guides.find(g => g.id === driverId)?.full_name || 'Selected guide' : 'Select driver/guide...'}
+                </Text>
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth={2.5} strokeLinecap="round">
+                  <Path d={driverOpen ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
+                </Svg>
+              </TouchableOpacity>
+              {driverOpen && (
+                <View style={styles.dropdown}>
                   <TouchableOpacity
-                    style={styles.dropdownItem}
-                    onPress={() => { setVehicleId(''); setVehicleOpen(false); }}
+                    style={[styles.dropdownItem, !driverId && styles.dropdownItemActive]}
+                    onPress={() => { setDriverId(''); setDriverOpen(false); }}
                   >
-                    <Text style={[styles.dropdownText, { color: C.muted }]}>No vehicle</Text>
+                    <Text style={styles.dropdownText}>None</Text>
                   </TouchableOpacity>
-                  {vehicles.map(v => (
+                  {guides.map(guide => (
                     <TouchableOpacity
-                      key={v.id}
-                      style={[styles.dropdownItem, vehicleId === v.id && styles.dropdownItemActive]}
-                      onPress={() => { setVehicleId(v.id); setVehicleOpen(false); }}
+                      key={guide.id}
+                      style={[styles.dropdownItem, driverId === guide.id && styles.dropdownItemActive]}
+                      onPress={() => { setDriverId(guide.id); setDriverOpen(false); }}
                     >
-                      <Text style={[styles.dropdownText, vehicleId === v.id && { color: C.primary, fontWeight: '700' }]}>
-                        {v.make} {v.model} · {v.license_plate}
-                      </Text>
-                      <View style={[styles.statusDot, {
-                        backgroundColor: v.status === 'available' ? C.success : v.status === 'maintenance' ? C.warning : C.muted,
-                      }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.dropdownText, driverId === guide.id && { color: C.primary, fontWeight: '700' }]}>
+                          {guide.full_name}
+                        </Text>
+                        {!!guide.phone && <Text style={styles.vehicleCapacityDropdown}>{guide.phone}</Text>}
+                      </View>
+                      {driverId === guide.id && <CheckIcon color={C.primary} />}
                     </TouchableOpacity>
                   ))}
                 </View>
               )}
             </View>
+
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Payment Method</Text>
+              <View style={styles.segRow}>
+                {PAYMENT_METHODS.map(method => (
+                  <TouchableOpacity
+                    key={method.value}
+                    style={[styles.seg, paymentMethod === method.value && styles.segActive]}
+                    onPress={() => {
+                      setPaymentMethod(method.value);
+                      setTransactionId('');
+                      setBankName('');
+                    }}
+                  >
+                    <Text style={[styles.segText, paymentMethod === method.value && styles.segTextActive]}>{method.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {paymentMethod === 'bank_transfer' && (
+              <View style={fieldStyles.wrap}>
+                <Text style={fieldStyles.label}>Bank *</Text>
+                <View style={styles.segRow}>
+                  {['stanbic_bank', 'im_bank'].map(bank => (
+                    <TouchableOpacity
+                      key={bank}
+                      style={[styles.seg, bankName === bank && styles.segActive]}
+                      onPress={() => setBankName(bank)}
+                    >
+                      <Text style={[styles.segText, bankName === bank && styles.segTextActive]}>
+                        {bank === 'stanbic_bank' ? 'Stanbic Bank' : 'I&M Bank'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {(paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && (
+              <View style={fieldStyles.wrap}>
+                <Text style={fieldStyles.label}>Transaction ID *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={transactionId}
+                  onChangeText={setTransactionId}
+                  placeholder="Enter transaction ID"
+                  placeholderTextColor={C.muted}
+                  autoCapitalize="characters"
+                />
+              </View>
+            )}
 
             {/* ── Notes ── */}
             <View style={fieldStyles.wrap}>
@@ -872,6 +1278,8 @@ const styles = StyleSheet.create({
   body:               { padding: 20 },
   row:                { flexDirection: 'row', gap: 12 },
   input:              { backgroundColor: C.input, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: C.text, borderWidth: 1, borderColor: C.border, fontWeight: '500' },
+  readOnlyBox:        { backgroundColor: C.input, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.border, minHeight: 46, justifyContent: 'center' },
+  readOnlyText:       { fontSize: 15, color: C.text, fontWeight: '800' },
   textarea:           { minHeight: 88, paddingTop: 12 },
 
   // Divider
@@ -893,11 +1301,14 @@ const styles = StyleSheet.create({
   segTextActive:      { color: C.primary, fontWeight: '800' },
 
   // Vehicle dropdown
-  dropdown:           { backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginTop: 6, overflow: 'hidden', maxHeight: 220 },
-  dropdownItem:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f0ebe0' },
-  dropdownItemActive: { backgroundColor: C.primary + '0a' },
-  dropdownText:       { fontSize: 14, color: C.text, flex: 1 },
-  statusDot:          { width: 8, height: 8, borderRadius: 4, marginLeft: 8 },
+  dropdown:               { backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginTop: 6, overflow: 'hidden', maxHeight: 280 },
+  dropdownItem:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0ebe0', gap: 10 },
+  dropdownItemActive:     { backgroundColor: C.primary + '0a' },
+  dropdownText:           { fontSize: 14, color: C.text },
+  statusDot:              { width: 8, height: 8, borderRadius: 4 },
+  vehicleCapacityLine:    { fontSize: 11, color: C.primary, fontWeight: '600', marginTop: 1 },
+  vehicleCapacityDropdown:{ fontSize: 11, color: C.muted, marginTop: 2 },
+  autoCalcTag:            { fontSize: 10, fontWeight: '700', color: C.success, textTransform: 'uppercase', letterSpacing: 0.3 },
 
   // Submit
   submitBtn:          { backgroundColor: C.primary, borderRadius: 18, paddingVertical: 16, alignItems: 'center', marginTop: 8 },

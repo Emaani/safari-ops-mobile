@@ -161,8 +161,8 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
       // Map client and profile names to bookings
       const bookingsWithNames = bookings.map(b => ({
         ...b,
-        profiles: b.assigned_user_id && profiles[b.assigned_user_id]
-          ? { full_name: profiles[b.assigned_user_id] }
+        profiles: (b.assigned_to || b.assigned_user_id) && profiles[b.assigned_to || b.assigned_user_id!]
+          ? { full_name: profiles[b.assigned_to || b.assigned_user_id!] }
           : undefined,
         client: (b.actual_client_id && clients[b.actual_client_id]) || (b.client_id && clients[b.client_id!])
           ? { company_name: clients[b.actual_client_id || b.client_id!] }

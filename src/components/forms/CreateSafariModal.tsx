@@ -205,9 +205,15 @@ const pickerSheet = StyleSheet.create({
 // ─── Client Search (same pattern as NewBookingModal) ─────────────────────────
 interface ClientResult {
   id: string;
+  client_id?: string | null;
   company_name: string;
+  contact_person?: string | null;
   email?: string | null;
-  phone?: string | null;
+  phone_number?: string | null;
+}
+
+function escapePostgrestSearch(value: string): string {
+  return value.trim().replace(/[%,]/g, '');
 }
 
 function ClientSearch({
@@ -231,8 +237,8 @@ function ClientSearch({
     try {
       const { data, error } = await supabase
         .from('clients')
-        .select('id, company_name, email, phone')
-        .or(`company_name.ilike.%${q.trim()}%,email.ilike.%${q.trim()}%,phone.ilike.%${q.trim()}%`)
+        .select('id, client_id, company_name, contact_person, email, phone_number')
+        .or(`company_name.ilike.%${escapePostgrestSearch(q)}%,email.ilike.%${escapePostgrestSearch(q)}%,phone_number.ilike.%${escapePostgrestSearch(q)}%,contact_person.ilike.%${escapePostgrestSearch(q)}%,client_id.ilike.%${escapePostgrestSearch(q)}%`)
         .limit(8);
       if (!error && data) { setResults(data as ClientResult[]); setShowResults(true); }
     } finally {
@@ -264,9 +270,9 @@ function ClientSearch({
             <CheckIcon />
             <View style={{ marginLeft: 10, flex: 1 }}>
               <Text style={srchStyles.selectedName}>{selectedClient.company_name}</Text>
-              {(selectedClient.email || selectedClient.phone) && (
+              {(selectedClient.client_id || selectedClient.email || selectedClient.phone_number) && (
                 <Text style={srchStyles.selectedSub}>
-                  {[selectedClient.email, selectedClient.phone].filter(Boolean).join(' · ')}
+                  {[selectedClient.client_id, selectedClient.email, selectedClient.phone_number].filter(Boolean).join(' · ')}
                 </Text>
               )}
             </View>
@@ -314,9 +320,9 @@ function ClientSearch({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={srchStyles.resultName}>{c.company_name}</Text>
-                {(c.email || c.phone) && (
+                {(c.client_id || c.email || c.phone_number) && (
                   <Text style={srchStyles.resultSub} numberOfLines={1}>
-                    {[c.email, c.phone].filter(Boolean).join(' · ')}
+                    {[c.client_id, c.email, c.phone_number].filter(Boolean).join(' · ')}
                   </Text>
                 )}
               </View>
@@ -405,9 +411,9 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
   const handleClientSelect = useCallback((c: ClientResult) => {
     setSelectedClient(c);
-    setClientName(c.company_name);
+    setClientName(c.contact_person || c.company_name);
     if (c.email)  setEmail(c.email);
-    if (c.phone)  setContact(c.phone);
+    if (c.phone_number)  setContact(c.phone_number);
   }, []);
 
   const handleClientClear = useCallback(() => {
