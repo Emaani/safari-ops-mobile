@@ -389,6 +389,84 @@ export async function setBadgeCount(count: number): Promise<void> {
   }
 }
 
+// ─── CR-targeted push notifications ──────────────────────────────────────────
+
+/**
+ * Fetch all active push tokens for a given user ID from the push_tokens table.
+ */
+async function getPushTokensForUser(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('push_tokens')
+    .select('token')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  if (error) {
+    console.warn('[CRPush] Failed to fetch push tokens for user:', error.message);
+    return [];
+  }
+  return (data || []).map((row: any) => row.token as string).filter(Boolean);
+}
+
+/**
+ * Send a targeted push notification to a specific user:
+ *  1. Calls the Expo Push API for their registered device tokens.
+ *  2. Inserts a notification row so it appears in the in-app Notifications screen.
+ *
+ * @param targetUserId   The Supabase user ID of the recipient.
+ * @param title          Notification title.
+ * @param body           Notification body text.
+ * @param data           Optional payload (cr_id, screen, etc.).
+ * @param type           NotificationType for the in-app record.
+ */
+export async function sendCRNotificationToUser(
+  targetUserId: string,
+  title: string,
+  body: string,
+  data: Record<string, any> = {},
+  type: import('../types/notification').NotificationType = 'cr_created',
+): Promise<void> {
+  if (!targetUserId) return;
+
+  // 1. Fire OS push via Expo Push API
+  const tokens = await getPushTokensForUser(targetUserId);
+  if (tokens.length > 0) {
+    const messages = tokens.map((token) => ({
+      to:    token,
+      title,
+      body,
+      data,
+      sound: 'default',
+      priority: 'high',
+      channelId: 'default',
+    }));
+
+    try {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body:    JSON.stringify(messages.length === 1 ? messages[0] : messages),
+      });
+      console.log(`[CRPush] Sent push to ${tokens.length} token(s) for user ${targetUserId}`);
+    } catch (err) {
+      console.warn('[CRPush] Expo push delivery failed:', err);
+      // Non-fatal — in-app notification still created below
+    }
+  } else {
+    console.log(`[CRPush] No active push tokens for user ${targetUserId} — skipping OS push`);
+  }
+
+  // 2. Persist in-app notification row
+  await createNotification({
+    userId:   targetUserId,
+    type,
+    title,
+    message:  body,
+    priority: 'high',
+    data:     { ...data, suppress_banner: false },
+  }).catch((err) => console.warn('[CRPush] Failed to persist notification row:', err));
+}
+
 /**
  * Clear all notifications
  */

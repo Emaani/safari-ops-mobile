@@ -8,7 +8,7 @@ import {
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { Animated, AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, AppState, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { ErrorBoundary } from './src/components/system/ErrorBoundary';
@@ -318,7 +318,12 @@ function AppNavigator() {
           name="MainTabs"
           component={MainTabNavigator}
           options={({ navigation }) => ({
-            title:       t('app.name'),
+            headerTitle: () => (
+              <Image
+                source={require('./assets/jackal-header-logo.png')}
+                style={{ width: 42, height: 42, resizeMode: 'contain' }}
+              />
+            ),
             headerRight: isRTL
               ? undefined
               : () => <NotificationBell navigation={navigation} userId={user?.id || ''} />,

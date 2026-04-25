@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   StyleSheet,
   SafeAreaView,
@@ -545,7 +546,7 @@ export function DashboardScreen() {
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
               <View style={styles.headerTextContainer}>
-                <Text style={styles.headerEyebrow}>Jackal Adventures</Text>
+                <Image source={require('../../assets/jackal-header-logo.png')} style={styles.headerLogo} />
                 <Text style={styles.headerTitle}>Operations</Text>
               </View>
             </View>
@@ -571,7 +572,7 @@ export function DashboardScreen() {
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerEyebrow}>Jackal Adventures</Text>
+              <Image source={require('../../assets/jackal-header-logo.png')} style={styles.headerLogo} />
               <Text style={styles.headerTitle}>
                 Welcome back,{' '}
                 {user?.user_metadata?.full_name?.split(' ')[0] ||
@@ -621,7 +622,7 @@ export function DashboardScreen() {
           <View style={styles.heroGlowRight} />
           <View style={styles.heroTopRow}>
             <View style={styles.heroTextBlock}>
-              <Text style={styles.heroEyebrow}>Jackal Adventures</Text>
+              <Image source={require('../../assets/jackal-header-logo.png')} style={styles.heroLogo} />
               <Text style={styles.heroTitle}>
                 {dashboardMonthFilter === 'all'
                   ? 'All months at a glance'
@@ -657,7 +658,7 @@ export function DashboardScreen() {
         <View style={styles.quickActionsRow}>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowNewBooking(true)}>
             <Text style={styles.quickActionEmoji}>🗓</Text>
-            <Text style={styles.quickActionLabel}>New Booking</Text>
+            <Text style={styles.quickActionLabel}>Create New Booking</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowAddExpense(true)}>
             <Text style={styles.quickActionEmoji}>💰</Text>
@@ -962,6 +963,18 @@ const styles = StyleSheet.create({
   },
   headerTextContainer: {
     flexDirection: 'column',
+  },
+  headerLogo: {
+    width: 36,
+    height: 36,
+    resizeMode: 'contain',
+    marginBottom: 6,
+  },
+  heroLogo: {
+    width: 32,
+    height: 32,
+    resizeMode: 'contain',
+    marginBottom: 4,
   },
   headerEyebrow: {
     fontSize: 11,

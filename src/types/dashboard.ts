@@ -105,7 +105,14 @@ export interface CashRequisition {
   created_at: string;
   amount_usd?: number;
   description?: string;
+  purpose?: string;
+  department?: string;
+  payment_mode?: string;
+  payee_name?: string;
   requested_by?: string;
+  requester_name?: string;
+  requester_email?: string;
+  requester_id?: string | null;
   approver_id?: string | null;
   approved_at?: string | null;
   declined_at?: string | null;

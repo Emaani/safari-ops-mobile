@@ -92,6 +92,7 @@ export interface OutstandingPaymentData {
   id: string;
   booking_number?: string;
   client_name: string;
+  status?: string;
   balance_due: number;
   total_cost: number;
   amount_paid: number;
@@ -505,19 +506,22 @@ export function useDashboardCalculations(
     console.log(`  Conversion Rate: ${conversionRates[displayCurrency]}`);
     console.log(`  Total Revenue Display: ${totalRevenueDisplay}`);
 
-    // Outstanding Payments - Pending bookings with balance due (matches web dashboard)
-    const outstandingPaymentsTotal = dashboardFilteredBookings
-      .filter((b) => b.status === 'Pending' && ((b.total_amount || b.total_cost || 0) - b.amount_paid) > 0)
-      .reduce((sum, b) => {
-        const totalAmt = b.total_amount || b.total_cost || 0;
-        const balanceDue = totalAmt - b.amount_paid;
-        const balanceInBase = convertToBaseCurrency(
-          balanceDue,
-          b.currency,
-          conversionRates
-        );
-        return sum + balanceInBase;
-      }, 0);
+    // Outstanding Payments — any non-cancelled booking with balance_due > 0 (matches web dashboard)
+    // Uses the DB balance_due column when available, falls back to total_amount - amount_paid
+    const getBalanceDue = (b: (typeof dashboardFilteredBookings)[0]): number => {
+      if (typeof b.balance_due === 'number' && b.balance_due > 0) return b.balance_due;
+      const totalAmt = b.total_amount || b.total_cost || 0;
+      return Math.max(0, totalAmt - b.amount_paid);
+    };
+
+    const outstandingBookings = dashboardFilteredBookings.filter(
+      (b) => !['Cancelled', 'cancelled'].includes(b.status) && getBalanceDue(b) > 0
+    );
+
+    const outstandingPaymentsTotal = outstandingBookings.reduce((sum, b) => {
+      const balanceInBase = convertToBaseCurrency(getBalanceDue(b), b.currency, conversionRates);
+      return sum + balanceInBase;
+    }, 0);
 
     const outstandingPaymentsDisplay = convertFromBaseCurrency(
       outstandingPaymentsTotal,
@@ -525,9 +529,7 @@ export function useDashboardCalculations(
       conversionRates
     );
 
-    const outstandingPaymentsCount = dashboardFilteredBookings.filter(
-      (b) => b.status === 'Pending' && ((b.total_amount || b.total_cost || 0) - b.amount_paid) > 0
-    ).length;
+    const outstandingPaymentsCount = outstandingBookings.length;
 
     // Build set of valid CR numbers for deduplication
     const validCRNumbers = new Set(dashboardFilteredCRs.map((cr) => cr.cr_number));
@@ -1045,15 +1047,15 @@ export function useDashboardCalculations(
     // ========================================================================
     // FIXED: Use dashboardFilteredBookings to respect month/year filters
 
-    const outstandingPayments: OutstandingPaymentData[] = dashboardFilteredBookings
-      .filter((b) => b.status === 'Pending' && ((b.total_amount || b.total_cost || 0) - b.amount_paid) > 0)
+    const outstandingPayments: OutstandingPaymentData[] = outstandingBookings
       .map((b) => {
         const totalAmt = b.total_amount || b.total_cost || 0;
-        const balanceDue = totalAmt - b.amount_paid;
+        const balanceDue = getBalanceDue(b);
         return {
           id: b.id,
-          booking_number: b.booking_number,
+          booking_number: b.booking_number || b.booking_reference,
           client_name: b.client?.company_name || b.client_name || b.profiles?.full_name || 'Unknown',
+          status: b.status,
           balance_due: convertFromBaseCurrency(
             convertToBaseCurrency(balanceDue, b.currency, conversionRates),
             displayCurrency,

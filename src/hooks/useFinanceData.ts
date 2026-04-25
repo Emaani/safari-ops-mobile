@@ -101,9 +101,8 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
       .from('cash_requisitions')
       .select('*')
       .eq('soft_deleted', false)
-      .not('status', 'in', '(Declined,Rejected)')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
 
     if (error) throw error;
 
@@ -298,8 +297,10 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
   const expenseItems = useMemo((): ExpenseItem[] => {
     const items: ExpenseItem[] = [];
 
-    // 1. Cash Requisitions
-    data.cashRequisitions.forEach((cr) => {
+    // 1. Cash Requisitions — exclude Declined/Rejected from Expenses tab (not real outflows)
+    data.cashRequisitions
+    .filter(cr => cr.status !== 'Declined' && cr.status !== 'Rejected' && cr.status !== 'Cancelled')
+    .forEach((cr) => {
       items.push({
         id:        `cr-${cr.id}`,
         source:    'cash_requisition',

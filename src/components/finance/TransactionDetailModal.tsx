@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
+import { sendCRNotificationToUser } from '../../services/notificationService';
 import type { FinancialTransaction, CashRequisition } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
 
@@ -171,22 +172,41 @@ export function TransactionDetailModal({
           onPress: async () => {
             setActioning(true);
             try {
+              // Note: only `approved_at` exists in the DB schema — there is no `declined_at` column.
+              const updatePayload: Record<string, unknown> = { status: newStatus };
+              if (newStatus === 'Approved') {
+                updatePayload.approved_at = new Date().toISOString();
+              }
+
               const { error } = await supabase
                 .from('cash_requisitions')
-                .update({
-                  status: newStatus,
-                  ...(newStatus === 'Approved'
-                    ? { approved_at: new Date().toISOString() }
-                    : { declined_at: new Date().toISOString() }),
-                })
+                .update(updatePayload)
                 .eq('id', cr.id);
 
               if (error) throw error;
 
+              // Notify the requester on their device
+              const requesterId = (cr as any).requester_id as string | null | undefined;
+              if (requesterId) {
+                const approvedTitle = newStatus === 'Approved'
+                  ? '✅ Cash Requisition Approved'
+                  : '❌ Cash Requisition Declined';
+                const approvedBody = newStatus === 'Approved'
+                  ? `Your requisition ${cr.cr_number} has been approved and is ready for disbursement.`
+                  : `Your requisition ${cr.cr_number} has been declined. Please contact your approver for details.`;
+                sendCRNotificationToUser(
+                  requesterId,
+                  approvedTitle,
+                  approvedBody,
+                  { cr_id: cr.id, cr_number: cr.cr_number, screen: 'Finance' },
+                  newStatus === 'Approved' ? 'cr_approved' : 'cr_rejected',
+                ).catch(console.error);
+              }
+
               onRefetch?.();
               onClose();
               Alert.alert(
-                newStatus === 'Approved' ? 'Requisition Approved' : 'Requisition Declined',
+                newStatus === 'Approved' ? '✅ Requisition Approved' : 'Requisition Declined',
                 `${cr.cr_number} has been ${newStatus.toLowerCase()}.`
               );
             } catch (e: any) {
@@ -305,9 +325,24 @@ export function TransactionDetailModal({
             <Text style={styles.cardTitle}>Requisition Details</Text>
             <InfoRow label="CR Number"    value={cr.cr_number} />
             <InfoRow label="Category"     value={cr.expense_category} />
-            <InfoRow label="Requested By" value={cr.requested_by} />
+            <InfoRow label="Requested By" value={(cr as any).requester_name || cr.requested_by} />
             <InfoRow label="Date Needed"  value={dateNeeded} />
             <InfoRow label="Date Created" value={createdDate} />
+            {cr.approver && (
+              <InfoRow
+                label="Assigned Approver"
+                value={cr.approver.full_name?.trim() || cr.approver.email || undefined}
+              />
+            )}
+            {cr.approved_at && (
+              <InfoRow
+                label="Approved At"
+                value={new Date(cr.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              />
+            )}
+            {cr.status === 'Declined' && (
+              <InfoRow label="Decision" value="Declined by approver" />
+            )}
           </View>
 
           {cr.description && (

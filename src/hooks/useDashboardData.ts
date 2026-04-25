@@ -91,7 +91,7 @@ export function useDashboardData({
     let query = supabase
       .from('bookings')
       .select(
-        'id, booking_reference, start_date, end_date, status, amount_paid, total_amount, currency, assigned_vehicle_id, assigned_to, client_id, client_name, created_at'
+        'id, booking_reference, start_date, end_date, status, amount_paid, total_amount, balance_due, currency, assigned_vehicle_id, assigned_to, client_id, client_name, created_at'
       )
       .order('start_date', { ascending: false });
 
