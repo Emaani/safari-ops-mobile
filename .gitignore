@@ -44,3 +44,6 @@ yarn-error.*
 /ios
 /android
 jackalapp/
+
+# iOS signing credentials (certs, provisioning profiles, keys)
+native/ios-signing/
