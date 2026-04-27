@@ -24,7 +24,10 @@ import { FadeSlideIn } from '../components/ui';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { useBookingsData } from '../hooks/useBookingsData';
 import { useBookingsRealtimeSync } from '../hooks/useBookingsRealtimeSync';
+import { useFleetData } from '../hooks/useFleetData';
+import { useAuth } from '../contexts/AuthContext';
 import { BookingCard, BookingDetailModal } from '../components/bookings';
+import { NewBookingModal } from '../components/forms';
 import type { Booking, BookingStatus } from '../types/dashboard';
 
 // ============================================================================
@@ -45,11 +48,12 @@ const COLORS = {
 };
 
 const STATUS_FILTERS: { label: string; value: BookingStatus | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Confirmed', value: 'Confirmed' },
-  { label: 'In-Progress', value: 'In-Progress' },
-  { label: 'Completed', value: 'Completed' },
-  { label: 'Pending', value: 'Pending' },
+  { label: 'All',          value: 'all'         },
+  { label: 'Confirmed',    value: 'Confirmed'   },
+  { label: 'In-Progress',  value: 'In-Progress' },
+  { label: 'Completed',    value: 'Completed'   },
+  { label: 'Pending',      value: 'Pending'     },
+  { label: 'Cancelled',    value: 'Cancelled'   },
 ];
 
 type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc' | 'client-asc' | 'client-desc';
@@ -191,19 +195,22 @@ export function BookingsScreen() {
   // STATE
   // ========================================================================
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
-  const [sortOption, setSortOption] = useState<SortOption>('date-desc');
-  const [showSortMenu, setShowSortMenu] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [statusFilter,    setStatusFilter]    = useState<BookingStatus | 'all'>('all');
+  const [sortOption,      setSortOption]      = useState<SortOption>('date-desc');
+  const [showSortMenu,    setShowSortMenu]    = useState(false);
+  const [refreshing,      setRefreshing]      = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisible,    setModalVisible]    = useState(false);
+  const [showNewBooking,  setShowNewBooking]  = useState(false);
 
   // ========================================================================
   // HOOKS
   // ========================================================================
 
+  const { user } = useAuth();
   const { bookings, loading, error, refetch } = useBookingsData();
+  const { vehicles } = useFleetData();
 
   // Real-time sync
   useBookingsRealtimeSync(refetch);
@@ -236,8 +243,11 @@ export function BookingsScreen() {
       const query = searchQuery.toLowerCase();
       result = result.filter(
         (b) =>
-          (b.booking_number || b.id).toLowerCase().includes(query) ||
-          (b.client?.company_name || '').toLowerCase().includes(query)
+          (b.booking_reference || b.booking_number || b.id).toLowerCase().includes(query) ||
+          (b.client_name || b.client?.company_name || b.contact_person || '').toLowerCase().includes(query) ||
+          (b.package_type || '').toLowerCase().includes(query) ||
+          (b.status || '').toLowerCase().includes(query) ||
+          (b.email || '').toLowerCase().includes(query)
       );
     }
 
@@ -307,6 +317,18 @@ export function BookingsScreen() {
 
   const renderHeader = () => (
     <>
+      {/* New Booking button */}
+      <TouchableOpacity
+        style={styles.newBookingBtn}
+        onPress={() => setShowNewBooking(true)}
+        activeOpacity={0.85}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round">
+          <Path d="M12 5v14M5 12h14" />
+        </Svg>
+        <Text style={styles.newBookingBtnText}>New Booking / Reservation</Text>
+      </TouchableOpacity>
+
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <StatCard title="Total"     value={stats.total}     color={COLORS.purple}  bgColor="#ede8f9" delay={0}   />
@@ -321,7 +343,7 @@ export function BookingsScreen() {
           <SearchIcon size={18} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by booking # or client..."
+            placeholder="Search by booking #, client, package, status..."
             placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -496,6 +518,15 @@ export function BookingsScreen() {
         visible={modalVisible}
         onClose={handleCloseModal}
       />
+
+      {/* New Booking Modal */}
+      <NewBookingModal
+        visible={showNewBooking}
+        onClose={() => setShowNewBooking(false)}
+        onSuccess={() => { setShowNewBooking(false); refetch(); }}
+        vehicles={vehicles}
+        userId={user?.id}
+      />
     </SafeAreaView>
   );
 }
@@ -589,6 +620,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 32,
+  },
+  newBookingBtn: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    justifyContent:   'center',
+    gap:              8,
+    backgroundColor:  COLORS.primary,
+    borderRadius:     14,
+    paddingVertical:  14,
+    marginBottom:     16,
+  },
+  newBookingBtnText: {
+    color:       '#fff',
+    fontSize:    15,
+    fontWeight:  '800',
+    letterSpacing: 0.1,
   },
   statsContainer: {
     flexDirection: 'row',

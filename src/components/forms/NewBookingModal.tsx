@@ -67,6 +67,7 @@ type BookingStatus   = 'Confirmed' | 'Pending' | 'In-Progress' | 'Completed' | '
 type BookingCurrency = 'USD' | 'UGX' | 'KES';
 type BookingType = 'booking' | 'reservation';
 type PaymentMethod = '' | 'mtn_uganda' | 'airtel_uganda' | 'mpesa_kenya' | 'bank_transfer' | 'cash';
+type VehicleSource = 'fleet' | 'external';
 
 const CURRENCIES: BookingCurrency[] = ['USD', 'UGX', 'KES'];
 const STATUS_OPTIONS: BookingStatus[] = ['Confirmed', 'Pending', 'In-Progress', 'Completed', 'Cancelled'];
@@ -579,6 +580,12 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   const [driverId, setDriverId] = useState('');
   const [guides, setGuides] = useState<Array<{ id: string; full_name: string; phone?: string | null }>>([]);
 
+  // Vehicle source: fleet (internal) or external vendor
+  const [vehicleSource,    setVehicleSource]    = useState<VehicleSource>('fleet');
+  const [vendorName,       setVendorName]       = useState('');
+  const [vendorPlate,      setVendorPlate]      = useState('');
+  const [vendorReason,     setVendorReason]     = useState('');
+
   // Track whether cost was auto-calculated (shows indicator) or manually edited
   const [costAutoCalc, setCostAutoCalc] = useState(false);
 
@@ -616,6 +623,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     setStartDate(''); setEndDate(''); setPackageType(''); setTotalCost(''); setDailyRate(''); setAmountPaid('');
     setCurrency('USD'); setStatus('Pending'); setBookingType('booking'); setPaymentMethod(''); setTransactionId(''); setBankName('');
     setVehicleId(''); setDriverId(''); setNotes(''); setVehicleOpen(false); setDriverOpen(false);
+    setVehicleSource('fleet'); setVendorName(''); setVendorPlate(''); setVendorReason('');
     setCostAutoCalc(false);
   }, []);
 
@@ -742,8 +750,14 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         contract_status:     'Pending',
         booking_type:        bookingType,
         notes:               notes.trim() || null,
-        assigned_vehicle_id: vehicleId    || null,
+        assigned_vehicle_id: vehicleSource === 'fleet' ? (vehicleId || null) : null,
         assigned_driver_id:  driverId || null,
+        is_vendor_vehicle:   vehicleSource === 'external',
+        vendor_vehicle_details: vehicleSource === 'external' ? {
+          vendor_name:   vendorName.trim() || null,
+          license_plate: vendorPlate.trim() || null,
+          reason:        vendorReason.trim() || null,
+        } : null,
         assigned_to:         userId || user?.id || null,
         created_by:          user?.id || userId || null,
         vehicles:            [],
@@ -784,7 +798,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     } finally {
       setSubmitting(false);
     }
-  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, status, bookingType, vehicleId, driverId, notes, userId, reset, onSuccess]);
+  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess]);
 
   const selectedVehicle = vehicles.find(v => v.id === vehicleId);
 
@@ -1071,7 +1085,75 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               </View>
             </View>
 
+            {/* ── Vehicle Source Toggle ── */}
+            <View style={fieldStyles.wrap}>
+              <Text style={fieldStyles.label}>Vehicle Source</Text>
+              <View style={styles.segRow}>
+                {([
+                  { value: 'fleet' as VehicleSource, label: 'Fleet Vehicle' },
+                  { value: 'external' as VehicleSource, label: 'External / Vendor' },
+                ] as { value: VehicleSource; label: string }[]).map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.seg, vehicleSource === opt.value && styles.segActive]}
+                    onPress={() => {
+                      setVehicleSource(opt.value);
+                      setVehicleId('');
+                      setVendorName(''); setVendorPlate(''); setVendorReason('');
+                    }}
+                  >
+                    <Text style={[styles.segText, vehicleSource === opt.value && styles.segTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* External vendor vehicle fields */}
+            {vehicleSource === 'external' && (
+              <>
+                <View style={fieldStyles.wrap}>
+                  <Text style={fieldStyles.label}>Vendor / Company Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={vendorName}
+                    onChangeText={setVendorName}
+                    placeholder="e.g. Kampala Car Rentals Ltd"
+                    placeholderTextColor={C.muted}
+                    autoCapitalize="words"
+                  />
+                </View>
+                <View style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <View style={fieldStyles.wrap}>
+                      <Text style={fieldStyles.label}>Vehicle Plate</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={vendorPlate}
+                        onChangeText={setVendorPlate}
+                        placeholder="e.g. UAA 123B"
+                        placeholderTextColor={C.muted}
+                        autoCapitalize="characters"
+                      />
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={fieldStyles.wrap}>
+                      <Text style={fieldStyles.label}>Reason</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={vendorReason}
+                        onChangeText={setVendorReason}
+                        placeholder="Why external vehicle?"
+                        placeholderTextColor={C.muted}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+
             {/* ── Vehicle ── */}
+            {vehicleSource === 'fleet' && (
             <View style={fieldStyles.wrap}>
               <Text style={fieldStyles.label}>Assign Vehicle (Optional)</Text>
               <TouchableOpacity
@@ -1138,6 +1220,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                 </View>
               )}
             </View>
+
+            )}
 
             <View style={fieldStyles.wrap}>
               <Text style={fieldStyles.label}>Assign Driver / Guide (Optional)</Text>
