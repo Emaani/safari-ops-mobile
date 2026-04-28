@@ -1401,9 +1401,32 @@ function MediaManagementTab() {
             To enable this feature, run the following SQL in your Supabase SQL editor:
           </Text>
           <View style={md.sqlBox}>
-            <Text style={md.sqlText}>
-              {`create table public.media_assets (\n  id uuid default gen_random_uuid() primary key,\n  file_name text not null,\n  file_type text,\n  file_size bigint,\n  public_url text,\n  bucket text,\n  folder text,\n  uploaded_by uuid,\n  created_at timestamptz default now()\n);\n\nalter table public.media_assets enable row level security;\n\ngrant all on public.media_assets to authenticated;`}
-            </Text>
+            <Text style={md.sqlText}>{
+`create table public.media_assets (
+  id uuid default gen_random_uuid() primary key,
+  file_name text not null,
+  file_type text,
+  file_size bigint,
+  public_url text,
+  bucket text,
+  folder text,
+  uploaded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now()
+);
+
+alter table public.media_assets
+  enable row level security;
+
+create policy "Authenticated users can manage media"
+  on public.media_assets
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+grant all on public.media_assets to authenticated;
+grant select on public.media_assets to anon;`
+            }</Text>
           </View>
           <TouchableOpacity style={md.retryBtn} onPress={onRefresh}>
             <Text style={md.retryBtnT}>Retry After Setup</Text>
