@@ -1223,10 +1223,903 @@ const fabStyle = StyleSheet.create({
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// AIRPORTS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface Airport {
+  id: string;
+  airport_name: string;
+  code?: string;
+  city?: string;
+  country?: string;
+  type?: string; // International / Domestic / Regional
+  status?: string;
+}
+
+function AirportFormModal({ visible, airport, defaultCountry, onClose, onSaved }: {
+  visible: boolean; airport: Airport | null; defaultCountry: string;
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState(defaultCountry);
+  const [type, setType] = useState('International');
+  const [status, setStatus] = useState('Active');
+  const [saving, setSaving] = useState(false);
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+
+  useEffect(() => {
+    if (airport) {
+      setName(airport.airport_name || ''); setCode(airport.code || '');
+      setCity(airport.city || ''); setCountry(airport.country || defaultCountry);
+      setType(airport.type || 'International'); setStatus(airport.status || 'Active');
+    } else {
+      setName(''); setCode(''); setCity(''); setCountry(defaultCountry);
+      setType('International'); setStatus('Active');
+    }
+  }, [airport, visible, defaultCountry]);
+
+  const save = useCallback(async () => {
+    if (!name.trim()) { Alert.alert('Required', 'Airport name is required.'); return; }
+    setSaving(true);
+    try {
+      const payload: Record<string, any> = {
+        airport_name: name.trim(), code: code.trim() || null, city: city.trim() || null,
+        country, type, status,
+      };
+      const { error } = airport
+        ? await supabase.from('safari_airports').update(payload).eq('id', airport.id)
+        : await supabase.from('safari_airports').insert(payload);
+      if (error) throw error;
+      Alert.alert('Saved', airport ? 'Airport updated.' : 'Airport added.');
+      onSaved(); onClose();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    finally { setSaving(false); }
+  }, [name, code, city, country, type, status, airport, onSaved, onClose]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={gm.header}>
+            <Text style={gm.title}>{airport ? 'Edit Airport' : 'Add Airport'}</Text>
+            <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+            <FieldLabel label="Airport Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Entebbe International Airport" />
+            <FieldLabel label="IATA Code" /><TextF value={code} onChange={setCode} placeholder="EBB" />
+            <FieldLabel label="City" /><TextF value={city} onChange={setCity} placeholder="Entebbe" />
+            <FieldLabel label="Country" />
+            <TouchableOpacity style={gm.selector} onPress={() => setShowStatusPicker(true)}>
+              <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{country}</Text><Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+            <FieldLabel label="Type" />
+            <TouchableOpacity style={gm.selector} onPress={() => setShowTypePicker(true)}>
+              <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{type}</Text><Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{airport ? 'Update' : 'Add Airport'}</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+          <PickerModal visible={showTypePicker} title="Airport Type"
+            options={['International', 'Domestic', 'Regional'].map(t => ({ value: t, label: t }))}
+            selected={type} onSelect={o => setType(o.value)} onClose={() => setShowTypePicker(false)} />
+          <PickerModal visible={showStatusPicker} title="Country"
+            options={['Uganda', 'Kenya', 'Tanzania', 'Rwanda'].map(c => ({ value: c, label: c }))}
+            selected={country} onSelect={o => setCountry(o.value)} onClose={() => setShowStatusPicker(false)} />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const TYPE_BADGE: Record<string, { bg: string; text: string }> = {
+  International: { bg: '#dce8f5', text: '#1a5a8f' },
+  Domestic:      { bg: C.primarySoft, text: C.primary },
+  Regional:      { bg: C.goldSoft, text: C.gold },
+};
+
+function AirportsTab() {
+  const [airports, setAirports] = useState<Airport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [countryFilter, setCountryFilter] = useState('All');
+  const [editAirport, setEditAirport] = useState<Airport | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  const fetchAirports = useCallback(async () => {
+    const { data } = await supabase.from('safari_airports').select('*').order('airport_name');
+    setAirports((data || []) as Airport[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchAirports().finally(() => setLoading(false)); }, [fetchAirports]);
+
+  const deleteAirport = useCallback((a: Airport) => {
+    Alert.alert('Delete Airport', `Remove ${a.airport_name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        await supabase.from('safari_airports').delete().eq('id', a.id);
+        fetchAirports();
+      }},
+    ]);
+  }, [fetchAirports]);
+
+  const filtered = useMemo(() => {
+    let list = airports;
+    if (countryFilter !== 'All') list = list.filter(a => a.country === countryFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(a => a.airport_name.toLowerCase().includes(q) || a.code?.toLowerCase().includes(q) || a.city?.toLowerCase().includes(q));
+    }
+    return list;
+  }, [airports, countryFilter, search]);
+
+  if (loading) return <LoadingView label="Loading airports…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={ts.searchWrap}>
+        <View style={ts.searchBox}>
+          <Ico.Search s={15} c={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search airports, cities, codes…" placeholderTextColor={C.textMuted} />
+        </View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }} contentContainerStyle={ts.chipRow}>
+        {['All', 'Uganda', 'Kenya', 'Tanzania', 'Rwanda'].map(c => (
+          <TouchableOpacity key={c} style={[ts.chip, countryFilter === c && { backgroundColor: C.primary }]} onPress={() => setCountryFilter(c)}>
+            <Text style={[ts.chipT, countryFilter === c ? { color: '#fff' } : { color: C.textMuted }]}>{c}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: a }) => {
+          const typeCfg = TYPE_BADGE[a.type || 'Domestic'] || TYPE_BADGE.Domestic;
+          return (
+            <View style={apStyle.card}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Text style={apStyle.name}>{a.airport_name}</Text>
+                  {a.code ? <View style={apStyle.codeBadge}><Text style={apStyle.codeText}>{a.code}</Text></View> : null}
+                </View>
+                <Text style={apStyle.city}>{[a.city, a.country].filter(Boolean).join(' · ')}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  {a.type ? <View style={[apStyle.typeBadge, { backgroundColor: typeCfg.bg }]}><Text style={[apStyle.typeText, { color: typeCfg.text }]}>{a.type}</Text></View> : null}
+                  <View style={[apStyle.typeBadge, { backgroundColor: a.status === 'Active' ? C.primarySoft : C.input }]}>
+                    <Text style={[apStyle.typeText, { color: a.status === 'Active' ? C.primary : C.textMuted }]}>{a.status || 'Active'}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={{ gap: 8 }}>
+                <TouchableOpacity style={op.iconBtn} onPress={() => { setEditAirport(a); setShowModal(true); }}>
+                  <Ico.Edit s={14} c={C.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteAirport(a)}>
+                  <Ico.Trash s={14} c={C.danger} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }}
+        ListEmptyComponent={<EmptyView title="No airports found" sub="Add airports using the + button below." />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+      />
+      <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditAirport(null); setShowModal(true); }}>
+        <Ico.Plus s={22} c="#fff" />
+      </TouchableOpacity>
+      <AirportFormModal visible={showModal} airport={editAirport} defaultCountry={countryFilter === 'All' ? 'Uganda' : countryFilter}
+        onClose={() => setShowModal(false)} onSaved={fetchAirports} />
+    </View>
+  );
+}
+
+const apStyle = StyleSheet.create({
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border, gap: 10 },
+  name: { fontSize: 14, fontWeight: '800', color: C.text, flex: 1, letterSpacing: -0.2 },
+  codeBadge: { backgroundColor: C.hero, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  codeText: { fontSize: 11, fontWeight: '800', color: '#fffaf3', letterSpacing: 1 },
+  city: { fontSize: 12, color: C.textMuted },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  typeText: { fontSize: 11, fontWeight: '700' },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HOTELS & LODGES TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface Lodge {
+  id: string;
+  lodge_name: string;
+  destination?: string;
+  lodge_type?: string;
+  price_double_usd?: number;
+  price_single_usd?: number;
+  price_sto_double_usd?: number;
+  price_sto_single_usd?: number;
+  updated_at?: string;
+}
+
+function LodgeFormModal({ visible, lodge, onClose, onSaved }: {
+  visible: boolean; lodge: Lodge | null; onClose: () => void; onSaved: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [dest, setDest] = useState('');
+  const [type, setType] = useState('Lodge');
+  const [pDouble, setPDouble] = useState('');
+  const [pSingle, setPSingle] = useState('');
+  const [pStoDouble, setPStoDouble] = useState('');
+  const [pStoSingle, setPStoSingle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showTypePicker, setShowTypePicker] = useState(false);
+
+  useEffect(() => {
+    if (lodge) {
+      setName(lodge.lodge_name || ''); setDest(lodge.destination || ''); setType(lodge.lodge_type || 'Lodge');
+      setPDouble(lodge.price_double_usd?.toString() || ''); setPSingle(lodge.price_single_usd?.toString() || '');
+      setPStoDouble(lodge.price_sto_double_usd?.toString() || ''); setPStoSingle(lodge.price_sto_single_usd?.toString() || '');
+    } else {
+      setName(''); setDest(''); setType('Lodge');
+      setPDouble(''); setPSingle(''); setPStoDouble(''); setPStoSingle('');
+    }
+  }, [lodge, visible]);
+
+  const save = useCallback(async () => {
+    if (!name.trim()) { Alert.alert('Required', 'Lodge name is required.'); return; }
+    setSaving(true);
+    try {
+      const payload: Record<string, any> = {
+        lodge_name: name.trim(), destination: dest.trim() || null, lodge_type: type,
+        price_double_usd: pDouble ? parseFloat(pDouble) : null,
+        price_single_usd: pSingle ? parseFloat(pSingle) : null,
+        price_sto_double_usd: pStoDouble ? parseFloat(pStoDouble) : null,
+        price_sto_single_usd: pStoSingle ? parseFloat(pStoSingle) : null,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = lodge
+        ? await supabase.from('safari_lodges').update(payload).eq('id', lodge.id)
+        : await supabase.from('safari_lodges').insert(payload);
+      if (error) throw error;
+      Alert.alert('Saved', lodge ? 'Lodge updated.' : 'Lodge added.');
+      onSaved(); onClose();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    finally { setSaving(false); }
+  }, [name, dest, type, pDouble, pSingle, pStoDouble, pStoSingle, lodge, onSaved, onClose]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={gm.header}>
+            <Text style={gm.title}>{lodge ? 'Edit Lodge' : 'Add Hotel / Lodge'}</Text>
+            <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+            <FieldLabel label="Lodge / Hotel Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Forest Lodge" />
+            <FieldLabel label="Destination" /><TextF value={dest} onChange={setDest} placeholder="e.g. Bwindi Impenetrable Forest" />
+            <FieldLabel label="Type" />
+            <TouchableOpacity style={gm.selector} onPress={() => setShowTypePicker(true)}>
+              <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{type}</Text><Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 16, marginBottom: 4, fontWeight: '700' }}>RACK RATES (USD)</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <FieldLabel label="Double" /><TextF value={pDouble} onChange={setPDouble} placeholder="350" keyboardType="decimal-pad" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FieldLabel label="Single" /><TextF value={pSingle} onChange={setPSingle} placeholder="250" keyboardType="decimal-pad" />
+              </View>
+            </View>
+            <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 16, marginBottom: 4, fontWeight: '700' }}>STO / CONTRACT RATES (USD)</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <FieldLabel label="STO Double" /><TextF value={pStoDouble} onChange={setPStoDouble} placeholder="280" keyboardType="decimal-pad" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FieldLabel label="STO Single" /><TextF value={pStoSingle} onChange={setPStoSingle} placeholder="200" keyboardType="decimal-pad" />
+              </View>
+            </View>
+            <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{lodge ? 'Update Lodge' : 'Add Lodge'}</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+          <PickerModal visible={showTypePicker} title="Lodge Type"
+            options={['Lodge', 'Hotel', 'Tented Camp', 'Budget Hotel', 'Resort', 'Guesthouse', 'Hostel'].map(t => ({ value: t, label: t }))}
+            selected={type} onSelect={o => setType(o.value)} onClose={() => setShowTypePicker(false)} />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function HotelsLodgesTab() {
+  const [lodges, setLodges] = useState<Lodge[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [editLodge, setEditLodge] = useState<Lodge | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  const fetchLodges = useCallback(async () => {
+    const { data } = await supabase.from('safari_lodges')
+      .select('id, destination, lodge_name, lodge_type, price_double_usd, price_single_usd, price_sto_double_usd, price_sto_single_usd, updated_at')
+      .order('destination').order('lodge_name');
+    setLodges((data || []) as Lodge[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchLodges().finally(() => setLoading(false)); }, [fetchLodges]);
+
+  const deleteLodge = useCallback((l: Lodge) => {
+    Alert.alert('Delete Lodge', `Remove "${l.lodge_name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        await supabase.from('safari_lodges').delete().eq('id', l.id);
+        fetchLodges();
+      }},
+    ]);
+  }, [fetchLodges]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return lodges;
+    const q = search.toLowerCase();
+    return lodges.filter(l => l.lodge_name.toLowerCase().includes(q) || l.destination?.toLowerCase().includes(q));
+  }, [lodges, search]);
+
+  if (loading) return <LoadingView label="Loading hotels & lodges…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={ts.searchWrap}>
+        <View style={ts.searchBox}>
+          <Ico.Search s={15} c={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search lodges, destinations…" placeholderTextColor={C.textMuted} />
+        </View>
+      </View>
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: l }) => (
+          <View style={ldStyle.card}>
+            <View style={{ flex: 1 }}>
+              <Text style={ldStyle.name}>{l.lodge_name}</Text>
+              {l.destination ? <Text style={ldStyle.dest}>{l.destination}</Text> : null}
+              {l.lodge_type ? <View style={ldStyle.typeBadge}><Text style={ldStyle.typeText}>{l.lodge_type}</Text></View> : null}
+              <View style={ldStyle.priceGrid}>
+                {l.price_double_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>Double</Text><Text style={ldStyle.priceVal}>${l.price_double_usd}</Text></View> : null}
+                {l.price_single_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>Single</Text><Text style={ldStyle.priceVal}>${l.price_single_usd}</Text></View> : null}
+                {l.price_sto_double_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>STO Dbl</Text><Text style={[ldStyle.priceVal, { color: C.gold }]}>${l.price_sto_double_usd}</Text></View> : null}
+                {l.price_sto_single_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>STO Sgl</Text><Text style={[ldStyle.priceVal, { color: C.gold }]}>${l.price_sto_single_usd}</Text></View> : null}
+              </View>
+            </View>
+            <View style={{ gap: 8, paddingLeft: 10 }}>
+              <TouchableOpacity style={op.iconBtn} onPress={() => { setEditLodge(l); setShowModal(true); }}>
+                <Ico.Edit s={14} c={C.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteLodge(l)}>
+                <Ico.Trash s={14} c={C.danger} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={<EmptyView title="No lodges found" sub="Add hotels & lodges using the + button." />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+      />
+      <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditLodge(null); setShowModal(true); }}>
+        <Ico.Plus s={22} c="#fff" />
+      </TouchableOpacity>
+      <LodgeFormModal visible={showModal} lodge={editLodge} onClose={() => setShowModal(false)} onSaved={fetchLodges} />
+    </View>
+  );
+}
+
+const ldStyle = StyleSheet.create({
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  name: { fontSize: 14, fontWeight: '800', color: C.text, marginBottom: 2, letterSpacing: -0.2 },
+  dest: { fontSize: 12, color: C.textMuted, marginBottom: 6 },
+  typeBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 8 },
+  typeText: { fontSize: 11, fontWeight: '700', color: C.primary },
+  priceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  priceBox: { backgroundColor: C.input, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, minWidth: 72, alignItems: 'center' },
+  priceLabel: { fontSize: 9, color: C.textMuted, fontWeight: '700', textTransform: 'uppercase', marginBottom: 2 },
+  priceVal: { fontSize: 13, fontWeight: '800', color: C.primary },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NATIONAL PARKS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface NationalPark {
+  id: string;
+  park_name: string;
+  country?: string;
+  region?: string;
+  category?: string;
+  description?: string;
+}
+
+function NationalParksTab() {
+  const [parks, setParks] = useState<NationalPark[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [countryFilter, setCountryFilter] = useState('All');
+  const [showForm, setShowForm] = useState(false);
+  const [editPark, setEditPark] = useState<NationalPark | null>(null);
+  // inline edit state
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Partial<NationalPark>>({});
+  const [saving, setSaving] = useState(false);
+
+  const fetchParks = useCallback(async () => {
+    const { data } = await supabase.from('national_parks').select('*').order('park_name');
+    setParks((data || []) as NationalPark[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchParks().finally(() => setLoading(false)); }, [fetchParks]);
+
+  const startEdit = (p: NationalPark) => { setEditing(p.id); setEditValues({ park_name: p.park_name, country: p.country, region: p.region, category: p.category, description: p.description }); };
+  const cancelEdit = () => { setEditing(null); setEditValues({}); };
+
+  const saveEdit = useCallback(async (id: string) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('national_parks').update(editValues).eq('id', id);
+      if (error) throw error;
+      setParks(prev => prev.map(p => p.id === id ? { ...p, ...editValues } : p));
+      setEditing(null); setEditValues({});
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    finally { setSaving(false); }
+  }, [editValues]);
+
+  const deletePark = useCallback((p: NationalPark) => {
+    Alert.alert('Delete Park', `Remove "${p.park_name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        await supabase.from('national_parks').delete().eq('id', p.id);
+        fetchParks();
+      }},
+    ]);
+  }, [fetchParks]);
+
+  const filtered = useMemo(() => {
+    let list = parks;
+    if (countryFilter !== 'All') list = list.filter(p => p.country === countryFilter);
+    if (search.trim()) { const q = search.toLowerCase(); list = list.filter(p => p.park_name.toLowerCase().includes(q) || p.region?.toLowerCase().includes(q)); }
+    return list;
+  }, [parks, countryFilter, search]);
+
+  if (loading) return <LoadingView label="Loading national parks…" />;
+
+  const CAT_COLORS: Record<string, { bg: string; text: string }> = {
+    'A+': { bg: '#fde8e0', text: '#c96d4d' },
+    A: { bg: C.goldSoft, text: C.gold },
+    B: { bg: C.primarySoft, text: C.primary },
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={ts.searchWrap}>
+        <View style={ts.searchBox}>
+          <Ico.Search s={15} c={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search parks, regions…" placeholderTextColor={C.textMuted} />
+        </View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }} contentContainerStyle={ts.chipRow}>
+        {['All', 'Uganda', 'Kenya', 'Tanzania', 'Rwanda'].map(c => (
+          <TouchableOpacity key={c} style={[ts.chip, countryFilter === c && { backgroundColor: C.primary }]} onPress={() => setCountryFilter(c)}>
+            <Text style={[ts.chipT, countryFilter === c ? { color: '#fff' } : { color: C.textMuted }]}>{c}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: p }) => {
+          const isEditing = editing === p.id;
+          const catCfg = CAT_COLORS[p.category || ''];
+          return (
+            <View style={pkStyle.card}>
+              {isEditing ? (
+                <View style={{ flex: 1 }}>
+                  <TextInput style={pkStyle.editInput} value={editValues.park_name || ''} onChangeText={v => setEditValues(e => ({ ...e, park_name: v }))} placeholder="Park name" />
+                  <TextInput style={pkStyle.editInput} value={editValues.region || ''} onChangeText={v => setEditValues(e => ({ ...e, region: v }))} placeholder="Region" />
+                  <TextInput style={pkStyle.editInput} value={editValues.description || ''} onChangeText={v => setEditValues(e => ({ ...e, description: v }))} placeholder="Description" multiline />
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity style={[pkStyle.actionBtn, { backgroundColor: C.primary, flex: 1 }]} onPress={() => saveEdit(p.id)} disabled={saving}>
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{saving ? '...' : 'Save'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[pkStyle.actionBtn, { backgroundColor: C.input, flex: 1 }]} onPress={cancelEdit}>
+                      <Text style={{ color: C.textMuted, fontWeight: '700', fontSize: 13 }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Text style={pkStyle.name}>{p.park_name}</Text>
+                      {catCfg ? <View style={[pkStyle.catBadge, { backgroundColor: catCfg.bg }]}><Text style={[pkStyle.catText, { color: catCfg.text }]}>{p.category}</Text></View> : null}
+                    </View>
+                    {p.region ? <Text style={pkStyle.region}>{p.region}{p.country ? ` · ${p.country}` : ''}</Text> : null}
+                    {p.description ? <Text style={pkStyle.desc} numberOfLines={2}>{p.description}</Text> : null}
+                  </View>
+                  <View style={{ gap: 8 }}>
+                    <TouchableOpacity style={op.iconBtn} onPress={() => startEdit(p)}><Ico.Edit s={14} c={C.primary} /></TouchableOpacity>
+                    <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deletePark(p)}><Ico.Trash s={14} c={C.danger} /></TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          );
+        }}
+        ListEmptyComponent={<EmptyView title="No parks found" sub="Add national parks using the + button." />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+      />
+      <TouchableOpacity style={fabStyle.fab} onPress={async () => {
+        const name = await new Promise<string | null>(res => Alert.prompt ? Alert.prompt('Add Park', 'Enter park name:', res, 'plain-text') : res(null));
+        if (!name) return;
+        const { error } = await supabase.from('national_parks').insert({ park_name: name.trim(), country: countryFilter === 'All' ? 'Uganda' : countryFilter });
+        if (!error) fetchParks();
+      }}>
+        <Ico.Plus s={22} c="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const pkStyle = StyleSheet.create({
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border, gap: 10 },
+  name: { fontSize: 14, fontWeight: '800', color: C.text, flex: 1, letterSpacing: -0.2 },
+  catBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  catText: { fontSize: 11, fontWeight: '800' },
+  region: { fontSize: 12, color: C.textMuted, marginBottom: 4 },
+  desc: { fontSize: 12, color: C.textMuted, lineHeight: 17 },
+  editInput: { backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13, color: C.text, marginBottom: 6 },
+  actionBtn: { paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAYMENTS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface PaymentBooking {
+  id: string;
+  booking_reference: string;
+  customer_name?: string;
+  status?: string;
+  start_date?: string;
+  end_date?: string;
+  total_price_usd?: number;
+  amount_paid?: number;
+  updated_at?: string;
+  clients?: { company_name: string } | null;
+  safari_packages?: { name: string; duration_days?: number } | null;
+}
+
+function PaymentsTab() {
+  const [bookings, setBookings] = useState<PaymentBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    supabase.from('safari_bookings')
+      .select(`booking_reference, id, customer_name, status, start_date, end_date, total_price_usd, amount_paid, updated_at,
+        clients(company_name), safari_packages(name, duration_days)`)
+      .gte('amount_paid', 0)
+      .order('updated_at', { ascending: false })
+      .then(({ data }) => { setBookings((data || []) as unknown as PaymentBooking[]); setLoading(false); });
+  }, []);
+
+  const fullyPaid = useMemo(() => bookings.filter(b => (b.amount_paid || 0) >= (b.total_price_usd || 0) && (b.total_price_usd || 0) > 0), [bookings]);
+  const totalRevenue = useMemo(() => fullyPaid.reduce((s, b) => s + (b.amount_paid || 0), 0), [fullyPaid]);
+  const avgValue = fullyPaid.length > 0 ? totalRevenue / fullyPaid.length : 0;
+  const activeCount = bookings.filter(b => b.status === 'active').length;
+  const completedCount = bookings.filter(b => b.status === 'completed').length;
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return bookings;
+    return bookings.filter(b => b.booking_reference?.toLowerCase().includes(q) || b.customer_name?.toLowerCase().includes(q) || b.clients?.company_name?.toLowerCase().includes(q));
+  }, [bookings, search]);
+
+  const getPayStatus = (b: PaymentBooking) => {
+    const paid = b.amount_paid || 0; const total = b.total_price_usd || 0;
+    if (paid <= 0) return { label: 'Unpaid', color: C.danger };
+    if (paid >= total && total > 0) return { label: 'Fully Paid', color: C.success };
+    return { label: 'Partial', color: C.gold };
+  };
+
+  if (loading) return <LoadingView label="Loading payment records…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Summary KPIs */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}>
+        {[
+          { l: 'Fully Paid', v: fullyPaid.length.toString(), c: C.success },
+          { l: 'Total Revenue', v: formatCurrency(totalRevenue, 'USD'), c: C.primary },
+          { l: 'Avg. Value', v: formatCurrency(avgValue, 'USD'), c: C.primary },
+          { l: 'Active', v: activeCount.toString(), c: C.gold },
+          { l: 'Completed', v: completedCount.toString(), c: C.textMuted },
+        ].map((k, i) => (
+          <View key={i} style={paStyle.kpiCard}>
+            <Text style={paStyle.kpiLabel}>{k.l}</Text>
+            <Text style={[paStyle.kpiValue, { color: k.c }]}>{k.v}</Text>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={ts.searchWrap}>
+        <View style={ts.searchBox}>
+          <Ico.Search s={15} c={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search bookings, customers…" placeholderTextColor={C.textMuted} />
+        </View>
+      </View>
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: b }) => {
+          const ps = getPayStatus(b);
+          return (
+            <View style={paStyle.card}>
+              <View style={[paStyle.statusBar, { backgroundColor: ps.color }]} />
+              <View style={{ flex: 1, paddingHorizontal: 12, paddingVertical: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={paStyle.ref}>{b.booking_reference}</Text>
+                  <View style={[paStyle.payBadge, { backgroundColor: ps.color + '20' }]}>
+                    <Text style={[paStyle.payText, { color: ps.color }]}>{ps.label}</Text>
+                  </View>
+                </View>
+                <Text style={paStyle.client}>{b.clients?.company_name || b.customer_name || '—'}</Text>
+                {b.safari_packages?.name ? <Text style={paStyle.pkg}>{b.safari_packages.name}{b.safari_packages.duration_days ? ` · ${b.safari_packages.duration_days} days` : ''}</Text> : null}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                  <Text style={paStyle.date}>{fmtDate(b.start_date)} → {fmtDate(b.end_date)}</Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={paStyle.paid}>{formatCurrency(b.amount_paid || 0, 'USD')}</Text>
+                    {(b.total_price_usd || 0) > 0 ? <Text style={paStyle.total}>of {formatCurrency(b.total_price_usd || 0, 'USD')}</Text> : null}
+                  </View>
+                </View>
+              </View>
+            </View>
+          );
+        }}
+        ListEmptyComponent={<EmptyView title="No payment records" sub="Payment records appear when safari bookings have amounts." />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+      />
+    </View>
+  );
+}
+
+const paStyle = StyleSheet.create({
+  kpiCard: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, minWidth: 120, alignItems: 'center' },
+  kpiLabel: { fontSize: 11, color: C.textMuted, fontWeight: '600', marginBottom: 4 },
+  kpiValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  card: { flexDirection: 'row', backgroundColor: C.card, borderRadius: 14, marginBottom: 8, overflow: 'hidden', borderWidth: 1, borderColor: C.border },
+  statusBar: { width: 5 },
+  ref: { fontSize: 14, fontWeight: '800', color: C.text, letterSpacing: -0.2 },
+  payBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+  payText: { fontSize: 11, fontWeight: '700' },
+  client: { fontSize: 13, color: C.textMuted, marginBottom: 2 },
+  pkg: { fontSize: 12, color: C.gold, fontWeight: '600' },
+  date: { fontSize: 11, color: C.textMuted },
+  paid: { fontSize: 14, fontWeight: '800', color: C.success },
+  total: { fontSize: 10, color: C.textMuted },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SAFARI CLIENTS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface SafariClient {
+  id: string;
+  company_name: string;
+  phone_number?: string;
+  contact_person?: string;
+  email?: string;
+  address?: string;
+  kyc_status?: string;
+  notes?: string;
+  created_at?: string;
+  client_type?: string;
+}
+
+function ClientFormModal({ visible, client, onClose, onSaved }: {
+  visible: boolean; client: SafariClient | null; onClose: () => void; onSaved: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [contact, setContact] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [kyc, setKyc] = useState('Incomplete');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showKycPicker, setShowKycPicker] = useState(false);
+
+  useEffect(() => {
+    if (client) {
+      setName(client.company_name || ''); setContact(client.contact_person || '');
+      setPhone(client.phone_number || ''); setEmail(client.email || '');
+      setAddress(client.address || ''); setKyc(client.kyc_status || 'Incomplete'); setNotes(client.notes || '');
+    } else { setName(''); setContact(''); setPhone(''); setEmail(''); setAddress(''); setKyc('Incomplete'); setNotes(''); }
+  }, [client, visible]);
+
+  const save = useCallback(async () => {
+    if (!name.trim()) { Alert.alert('Required', 'Customer name is required.'); return; }
+    if (!email.trim()) { Alert.alert('Required', 'Email is required.'); return; }
+    setSaving(true);
+    try {
+      const payload: Record<string, any> = {
+        company_name: name.trim(), contact_person: contact.trim() || null,
+        phone_number: phone.trim() || null, email: email.trim(), address: address.trim() || null,
+        kyc_status: kyc, notes: notes.trim() || null, updated_at: new Date().toISOString(),
+      };
+      if (!client) { payload.client_type = 'safari'; payload.created_at = new Date().toISOString(); }
+      const { error } = client
+        ? await supabase.from('clients').update(payload).eq('id', client.id)
+        : await supabase.from('clients').insert(payload);
+      if (error) throw error;
+      Alert.alert('Saved', client ? 'Client updated.' : 'Client added.');
+      onSaved(); onClose();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    finally { setSaving(false); }
+  }, [name, contact, phone, email, address, kyc, notes, client, onSaved, onClose]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={gm.header}>
+            <Text style={gm.title}>{client ? 'Edit Client' : 'Add Safari Client'}</Text>
+            <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+            <FieldLabel label="Customer Name *" /><TextF value={name} onChange={setName} placeholder="Client or company name" />
+            <FieldLabel label="Contact Person" /><TextF value={contact} onChange={setContact} placeholder="Primary contact" />
+            <FieldLabel label="Email *" /><TextF value={email} onChange={setEmail} placeholder="email@example.com" keyboardType="email-address" />
+            <FieldLabel label="Phone Number" /><TextF value={phone} onChange={setPhone} placeholder="+256 700 000000" keyboardType="phone-pad" />
+            <FieldLabel label="Address" /><TextF value={address} onChange={setAddress} placeholder="Physical address…" multiline />
+            <FieldLabel label="KYC Status" />
+            <TouchableOpacity style={gm.selector} onPress={() => setShowKycPicker(true)}>
+              <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{kyc}</Text><Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+            <FieldLabel label="Notes" /><TextF value={notes} onChange={setNotes} placeholder="Additional notes…" multiline />
+            <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{client ? 'Update Client' : 'Add Client'}</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+          <PickerModal visible={showKycPicker} title="KYC Status"
+            options={[{ value: 'Incomplete', label: 'Incomplete' }, { value: 'Pending Review', label: 'Pending Review' }, { value: 'Complete', label: 'Complete' }]}
+            selected={kyc} onSelect={o => setKyc(o.value)} onClose={() => setShowKycPicker(false)} />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const KYC_CFG: Record<string, { bg: string; text: string }> = {
+  Complete:        { bg: C.primarySoft, text: C.primary },
+  'Pending Review':{ bg: C.goldSoft,    text: C.gold    },
+  Incomplete:      { bg: '#fde8e0',     text: C.danger  },
+};
+
+function ClientsTab() {
+  const [clients, setClients] = useState<SafariClient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [editClient, setEditClient] = useState<SafariClient | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  const fetchClients = useCallback(async () => {
+    const { data } = await supabase.from('clients')
+      .select('id, company_name, phone_number, contact_person, email, address, kyc_status, notes, created_at, client_type')
+      .or("client_type.eq.safari,client_type.is.null")
+      .order('created_at', { ascending: false });
+    setClients((data || []) as SafariClient[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchClients().finally(() => setLoading(false)); }, [fetchClients]);
+
+  const deleteClient = useCallback((c: SafariClient) => {
+    Alert.alert('Delete Client', `Remove "${c.company_name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const { error } = await supabase.from('clients').delete().eq('id', c.id);
+        if (error) { Alert.alert('Cannot Delete', error.message.includes('foreign') ? 'This client has linked safari bookings and cannot be deleted.' : error.message); return; }
+        fetchClients();
+      }},
+    ]);
+  }, [fetchClients]);
+
+  const totalCount = clients.length;
+  const verifiedCount = clients.filter(c => c.kyc_status === 'Complete').length;
+  const pendingCount = clients.filter(c => c.kyc_status === 'Pending Review').length;
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return clients;
+    const q = search.toLowerCase();
+    return clients.filter(c => c.company_name.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone_number?.includes(q));
+  }, [clients, search]);
+
+  if (loading) return <LoadingView label="Loading safari clients…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* KPI row */}
+      <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 10 }}>
+        {[
+          { l: 'Total Clients', v: totalCount.toString(), c: C.primary },
+          { l: 'Verified',      v: verifiedCount.toString(), c: C.success },
+          { l: 'Pending KYC',  v: pendingCount.toString(), c: C.gold },
+        ].map((k, i) => (
+          <View key={i} style={[paStyle.kpiCard, { flex: 1 }]}>
+            <Text style={paStyle.kpiLabel}>{k.l}</Text>
+            <Text style={[paStyle.kpiValue, { color: k.c, fontSize: 22 }]}>{k.v}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={ts.searchWrap}>
+        <View style={ts.searchBox}>
+          <Ico.Search s={15} c={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search clients, emails…" placeholderTextColor={C.textMuted} />
+        </View>
+      </View>
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: c }) => {
+          const kyc = KYC_CFG[c.kyc_status || 'Incomplete'] || KYC_CFG.Incomplete;
+          return (
+            <View style={clStyle.card}>
+              <View style={clStyle.avatar}><Text style={clStyle.avatarT}>{c.company_name?.[0]?.toUpperCase() || '?'}</Text></View>
+              <View style={{ flex: 1, paddingHorizontal: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <Text style={clStyle.name} numberOfLines={1}>{c.company_name}</Text>
+                  <View style={[clStyle.kycBadge, { backgroundColor: kyc.bg }]}>
+                    <Text style={[clStyle.kycText, { color: kyc.text }]}>{c.kyc_status || 'Incomplete'}</Text>
+                  </View>
+                </View>
+                {c.email ? <Text style={clStyle.sub}>{c.email}</Text> : null}
+                {c.phone_number ? <Text style={clStyle.sub}>{c.phone_number}</Text> : null}
+                {c.contact_person ? <Text style={clStyle.sub}>Contact: {c.contact_person}</Text> : null}
+              </View>
+              <View style={{ gap: 8 }}>
+                <TouchableOpacity style={op.iconBtn} onPress={() => { setEditClient(c); setShowModal(true); }}>
+                  <Ico.Edit s={14} c={C.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteClient(c)}>
+                  <Ico.Trash s={14} c={C.danger} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }}
+        ListEmptyComponent={<EmptyView title="No safari clients" sub="Add clients using the + button below." />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+      />
+      <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditClient(null); setShowModal(true); }}>
+        <Ico.Plus s={22} c="#fff" />
+      </TouchableOpacity>
+      <ClientFormModal visible={showModal} client={editClient} onClose={() => setShowModal(false)} onSaved={fetchClients} />
+    </View>
+  );
+}
+
+const clStyle = StyleSheet.create({
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  avatarT: { fontSize: 18, fontWeight: '800', color: C.primary },
+  name: { fontSize: 14, fontWeight: '700', color: C.text, flex: 1 },
+  kycBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  kycText: { fontSize: 10, fontWeight: '700' },
+  sub: { fontSize: 12, color: C.textMuted, marginTop: 1 },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type MainTab = 'bookings' | 'ops' | 'packages' | 'analytics';
+type MainTab = 'bookings' | 'ops' | 'airports' | 'hotels' | 'parks' | 'payments' | 'analytics' | 'clients';
 
 export function SafariManagementScreen() {
   const [tab, setTab] = useState<MainTab>('bookings');
@@ -1235,8 +2128,12 @@ export function SafariManagementScreen() {
   const TABS: { key: MainTab; label: string }[] = [
     { key: 'bookings',  label: 'Bookings' },
     { key: 'ops',       label: 'Operations' },
-    { key: 'packages',  label: 'Packages' },
+    { key: 'airports',  label: 'Airports' },
+    { key: 'hotels',    label: 'Hotels & Lodges' },
+    { key: 'parks',     label: 'Parks' },
+    { key: 'payments',  label: 'Payments' },
     { key: 'analytics', label: 'Analytics' },
+    { key: 'clients',   label: 'Clients' },
   ];
 
   return (
@@ -1260,8 +2157,12 @@ export function SafariManagementScreen() {
       <View style={{ flex: 1 }}>
         {tab === 'bookings'  && <BookingsTab />}
         {tab === 'ops'       && <OperationsTab />}
-        {tab === 'packages'  && <PackagesTab />}
+        {tab === 'airports'  && <AirportsTab />}
+        {tab === 'hotels'    && <HotelsLodgesTab />}
+        {tab === 'parks'     && <NationalParksTab />}
+        {tab === 'payments'  && <PaymentsTab />}
         {tab === 'analytics' && <AnalyticsTab />}
+        {tab === 'clients'   && <ClientsTab />}
       </View>
     </View>
   );

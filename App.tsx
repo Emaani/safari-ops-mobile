@@ -57,7 +57,7 @@ const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 type TabScreenConfig = {
-  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'More';
+  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'More' | 'Safari' | 'Marketing';
   component: React.ComponentType<any>;
   labelKey: string;
   icon: ({ color, size }: { color: string; size: number }) => React.JSX.Element;
@@ -340,13 +340,8 @@ function AppNavigator() {
           options={{ title: t('common.notifications') }}
         />
         <Stack.Screen
-          name="SafariManagement"
-          component={SafariManagementScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Marketing"
-          component={MarketingScreen}
+          name="Fleet"
+          component={FleetScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
@@ -361,11 +356,12 @@ function MainTabNavigator() {
 
   const tabs = useMemo<TabScreenConfig[]>(() => {
     const items: TabScreenConfig[] = [
-      { name: 'Dashboard', component: DashboardScreen, labelKey: 'common.dashboard', icon: DashboardIcon },
-      { name: 'Bookings',  component: BookingsScreen,  labelKey: 'common.bookings',  icon: BookingsIcon  },
-      { name: 'Fleet',     component: FleetScreen,     labelKey: 'common.fleet',     icon: FleetIcon     },
-      { name: 'Finance',   component: FinanceScreen,   labelKey: 'common.finance',   icon: FinanceIcon   },
-      { name: 'More',      component: MoreScreen,      labelKey: 'common.more',      icon: MoreIcon      },
+      { name: 'Dashboard', component: DashboardScreen,       labelKey: 'common.dashboard', icon: DashboardIcon  },
+      { name: 'Bookings',  component: BookingsScreen,        labelKey: 'common.bookings',  icon: BookingsIcon   },
+      { name: 'Safari',    component: SafariManagementScreen, labelKey: 'common.safari',   icon: SafariIcon     },
+      { name: 'Finance',   component: FinanceScreen,         labelKey: 'common.finance',   icon: FinanceIcon    },
+      { name: 'Marketing', component: MarketingScreen,       labelKey: 'common.marketing', icon: MarketingIcon  },
+      { name: 'More',      component: MoreScreen,            labelKey: 'common.more',      icon: MoreIcon       },
     ];
     return isRTL ? [...items].reverse() : items;
   }, [isRTL]);
@@ -378,23 +374,23 @@ function MainTabNavigator() {
         tabBarInactiveTintColor: theme.colors.textSoft,
         tabBarStyle: {
           position:        'absolute',
-          left:            16,
-          right:           16,
-          bottom:          16,
+          left:            10,
+          right:           10,
+          bottom:          14,
           borderTopWidth:  0,
           backgroundColor: theme.colors.surface,
-          height:          74,
-          paddingBottom:   10,
-          paddingTop:      10,
-          borderRadius:    24,
+          height:          68,
+          paddingBottom:   8,
+          paddingTop:      8,
+          borderRadius:    22,
           shadowColor:     theme.colors.shadow,
           shadowOffset:    { width: 0, height: 14 },
           shadowOpacity:   theme.dark ? 0.35 : 0.12,
           shadowRadius:    20,
           elevation:       10,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
-        tabBarItemStyle:  { borderRadius: 18, marginHorizontal: 4 },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
+        tabBarItemStyle:  { borderRadius: 16, marginHorizontal: 1 },
       }}
     >
       {tabs.map((tab) => (
@@ -553,6 +549,25 @@ function MoreIcon({ color, size }: { color: string; size: number }) {
       <Circle cx="12" cy="12" r="1" fill={color} />
       <Circle cx="12" cy="5"  r="1" fill={color} />
       <Circle cx="12" cy="19" r="1" fill={color} />
+    </Svg>
+  );
+}
+
+function SafariIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
+    </Svg>
+  );
+}
+
+function MarketingIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M22 12h-4l-3 9L9 3l-3 9H2" />
     </Svg>
   );
 }

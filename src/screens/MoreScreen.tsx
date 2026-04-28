@@ -360,12 +360,10 @@ export default function MoreScreen() {
     tab: string;
     isStack?: boolean;
   }[] = [
-    { emoji: '📅', label: 'Create New Booking',      description: 'Add a new safari trip reservation',        tab: 'Bookings'         },
-    { emoji: '🚙', label: 'Add Vehicle',              description: 'Register a new vehicle in the fleet',      tab: 'Fleet'            },
-    { emoji: '📝', label: 'Submit Cash Requisition',  description: 'Request cash or log an expense',           tab: 'Finance'          },
-    { emoji: '📊', label: 'View Dashboard',            description: 'Review KPIs, charts and reports',         tab: 'Dashboard'        },
-    { emoji: '🧭', label: 'Safari Management',         description: 'Bookings, guides, packages & analytics',  tab: 'SafariManagement', isStack: true },
-    { emoji: '📣', label: 'Marketing & Portal',        description: 'Manage portal visibility and promotions', tab: 'Marketing',        isStack: true },
+    { emoji: '📅', label: 'Create New Booking',      description: 'Add a new safari trip reservation',        tab: 'Bookings'   },
+    { emoji: '🚙', label: 'Fleet Management',         description: 'Manage vehicles, repairs and assignments', tab: 'Fleet', isStack: true },
+    { emoji: '📝', label: 'Submit Cash Requisition',  description: 'Request cash or log an expense',           tab: 'Finance'    },
+    { emoji: '📊', label: 'View Dashboard',            description: 'Review KPIs, charts and reports',         tab: 'Dashboard'  },
   ];
 
   const handleLogout = useCallback(() => {
