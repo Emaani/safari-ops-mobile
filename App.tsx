@@ -57,7 +57,7 @@ const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 type TabScreenConfig = {
-  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'Safari' | 'Marketing';
+  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'Safari' | 'Marketing' | 'More';
   component: React.ComponentType<any>;
   labelKey: string;
   icon: ({ color, size }: { color: string; size: number }) => React.JSX.Element;
@@ -357,6 +357,7 @@ function MainTabNavigator() {
       { name: 'Finance',   component: FinanceScreen,          labelKey: 'common.finance',   icon: FinanceIcon    },
       { name: 'Safari',    component: SafariManagementScreen, labelKey: 'common.safari',    icon: SafariIcon     },
       { name: 'Marketing', component: MarketingScreen,        labelKey: 'common.marketing', icon: MarketingIcon  },
+      { name: 'More',      component: MoreScreen,             labelKey: 'common.more',      icon: MoreIcon       },
     ];
     return isRTL ? [...items].reverse() : items;
   }, [isRTL]);
@@ -564,6 +565,18 @@ function MarketingIcon({ color, size }: { color: string; size: number }) {
       <Path d="M3 11v2a1 1 0 0 0 1 1h2l3 4v-12L6 10H4a1 1 0 0 0-1 1z" />
       <Path d="M19 5c1.5 1.5 2 3.5 2 7s-.5 5.5-2 7" />
       <Path d="M15.5 8.5c.8.8 1.2 2 1.2 3.5s-.4 2.7-1.2 3.5" />
+    </Svg>
+  );
+}
+
+function MoreIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* Horizontal dots — more options */}
+      <Circle cx="5"  cy="12" r="1.2" fill={color} stroke="none" />
+      <Circle cx="12" cy="12" r="1.2" fill={color} stroke="none" />
+      <Circle cx="19" cy="12" r="1.2" fill={color} stroke="none" />
     </Svg>
   );
 }
