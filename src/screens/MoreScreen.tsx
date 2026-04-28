@@ -358,11 +358,14 @@ export default function MoreScreen() {
     label: string;
     description: string;
     tab: string;
+    isStack?: boolean;
   }[] = [
-    { emoji: '📅', label: 'Create New Booking',    description: 'Add a new safari trip reservation', tab: 'Bookings'  },
-    { emoji: '🚙', label: 'Add Vehicle',            description: 'Register a new vehicle in the fleet', tab: 'Fleet'   },
-    { emoji: '📝', label: 'Submit Cash Requisition',description: 'Request cash or log an expense',     tab: 'Finance'  },
-    { emoji: '📊', label: 'View Dashboard',          description: 'Review KPIs, charts and reports',   tab: 'Dashboard'},
+    { emoji: '📅', label: 'Create New Booking',      description: 'Add a new safari trip reservation',        tab: 'Bookings'         },
+    { emoji: '🚙', label: 'Add Vehicle',              description: 'Register a new vehicle in the fleet',      tab: 'Fleet'            },
+    { emoji: '📝', label: 'Submit Cash Requisition',  description: 'Request cash or log an expense',           tab: 'Finance'          },
+    { emoji: '📊', label: 'View Dashboard',            description: 'Review KPIs, charts and reports',         tab: 'Dashboard'        },
+    { emoji: '🧭', label: 'Safari Management',         description: 'Bookings, guides, packages & analytics',  tab: 'SafariManagement', isStack: true },
+    { emoji: '📣', label: 'Marketing & Portal',        description: 'Manage portal visibility and promotions', tab: 'Marketing',        isStack: true },
   ];
 
   const handleLogout = useCallback(() => {
@@ -397,11 +400,14 @@ export default function MoreScreen() {
     void setBiometricEnabled(!biometricEnabled);
   }, [biometricAvailable, biometricEnabled, setBiometricEnabled, t]);
 
-  const navigateToTab = useCallback((tab: string) => {
-    // MoreScreen is inside the tab navigator, so navigation already IS the tab
-    // navigator. Calling getParent() gives the root Stack which only knows
-    // 'MainTabs' and 'Notifications' — not the individual tab names.
-    navigation.navigate(tab as never);
+  const navigateToTab = useCallback((tab: string, isStack?: boolean) => {
+    if (isStack) {
+      // Stack screens sit on the root Stack navigator (parent of the tab navigator)
+      navigation.getParent()?.navigate(tab as never);
+    } else {
+      // Tab screens are siblings within the same tab navigator
+      navigation.navigate(tab as never);
+    }
   }, [navigation]);
 
   return (
@@ -615,7 +621,7 @@ export default function MoreScreen() {
                   { flexDirection: isRTL ? 'row-reverse' : 'row', borderTopWidth: 1, borderTopColor: theme.colors.border },
                 ]}
                 activeOpacity={0.75}
-                onPress={() => navigateToTab(action.tab)}
+                onPress={() => navigateToTab(action.tab, action.isStack)}
               >
                 <View style={styles.menuRowLeft}>
                   <View style={[styles.quickActionEmoji, { backgroundColor: theme.colors.surfaceMuted }]}>

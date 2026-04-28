@@ -33,6 +33,8 @@ import FinanceScreen from './src/screens/FinanceScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import MoreScreen from './src/screens/MoreScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import { SafariManagementScreen } from './src/screens/SafariManagementScreen';
+import { MarketingScreen } from './src/screens/MarketingScreen';
 import { initializeSDK } from './src/sdk-init';
 import { realtimeManager } from './src/lib/realtimeManager';
 import { suppressProductionLogs } from './src/lib/devLog';
@@ -336,6 +338,16 @@ function AppNavigator() {
           name="Notifications"
           component={NotificationsScreen}
           options={{ title: t('common.notifications') }}
+        />
+        <Stack.Screen
+          name="SafariManagement"
+          component={SafariManagementScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Marketing"
+          component={MarketingScreen}
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>
