@@ -1268,6 +1268,9 @@ interface MediaAsset {
   created_at?: string;
 }
 
+// Known alternative table names for media assets across Supabase schemas
+const MEDIA_TABLE_CANDIDATES = ['media_assets', 'media', 'assets', 'files', 'uploads', 'storage_files'];
+
 function MediaManagementTab() {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1278,48 +1281,83 @@ function MediaManagementTab() {
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('image/jpeg');
   const [saving, setSaving] = useState(false);
+  const [tableUnavailable, setTableUnavailable] = useState(false);
+  const [activeTable, setActiveTable] = useState<string | null>(null);
+
+  const normalizeRow = (d: any): MediaAsset => ({
+    id:          d.id || String(Math.random()),
+    file_name:   d.file_name   || d.name       || d.filename   || d.title    || 'Unnamed',
+    file_type:   d.file_type   || d.mime_type  || d.type       || d.format   || '',
+    file_size:   d.file_size   || d.size        || d.bytes      || 0,
+    public_url:  d.public_url  || d.url         || d.storage_url || d.src    || d.link || '',
+    bucket:      d.bucket      || d.bucket_name || '',
+    folder:      d.folder      || d.directory   || d.path       || '',
+    uploaded_by: d.uploaded_by || d.user_id     || d.created_by || '',
+    created_at:  d.created_at  || d.uploaded_at || '',
+  });
 
   const fetchAssets = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('media_assets')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) console.error('[Media]', error.message);
-    const assets = (data || []).map((d: any) => ({
-      id: d.id,
-      file_name: d.file_name || d.name || d.filename || 'Unnamed',
-      file_type: d.file_type || d.mime_type || d.type || '',
-      file_size: d.file_size || d.size || 0,
-      public_url: d.public_url || d.url || d.storage_url || '',
-      bucket: d.bucket || d.bucket_name || '',
-      folder: d.folder || d.directory || '',
-      uploaded_by: d.uploaded_by || d.user_id || '',
-      created_at: d.created_at || '',
-    })) as MediaAsset[];
-    setAssets(assets);
+    // Try each candidate table name until one works
+    for (const table of MEDIA_TABLE_CANDIDATES) {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!error) {
+        setActiveTable(table);
+        setTableUnavailable(false);
+        setAssets((data || []).map(normalizeRow));
+        return;
+      }
+
+      // Skip to next candidate only on "table not found" errors
+      const isNotFound = error.message.includes('does not exist') ||
+                         error.message.includes('schema cache') ||
+                         error.message.includes('relation') ||
+                         error.code === '42P01';
+      if (!isNotFound) {
+        // Real error (auth, RLS, etc.) — stop and report
+        console.error(`[Media/${table}]`, error.message);
+        setTableUnavailable(false);
+        setAssets([]);
+        return;
+      }
+    }
+
+    // None of the candidates exist
+    console.warn('[Media] No media table found in schema. Showing empty state.');
+    setTableUnavailable(true);
+    setAssets([]);
   }, []);
 
   useEffect(() => { setLoading(true); fetchAssets().finally(() => setLoading(false)); }, [fetchAssets]);
   const onRefresh = useCallback(async () => { setRefreshing(true); await fetchAssets(); setRefreshing(false); }, [fetchAssets]);
 
   const deleteAsset = useCallback((a: MediaAsset) => {
+    if (!activeTable) return;
     Alert.alert('Delete Asset', `Remove "${a.file_name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        const { error } = await supabase.from('media_assets').delete().eq('id', a.id);
+        const { error } = await supabase.from(activeTable).delete().eq('id', a.id);
         if (error) Alert.alert('Error', error.message);
         else fetchAssets();
       }},
     ]);
-  }, [fetchAssets]);
+  }, [activeTable, fetchAssets]);
 
   const addAsset = useCallback(async () => {
     if (!newUrl.trim() || !newName.trim()) { Alert.alert('Required', 'File name and URL are required.'); return; }
+    if (!activeTable) {
+      Alert.alert('Table Unavailable', 'The media_assets table does not exist in the database yet. Please create it in your Supabase project first.');
+      return;
+    }
     setSaving(true);
     try {
-      const { error } = await supabase.from('media_assets').insert({
+      const { error } = await supabase.from(activeTable).insert({
         file_name: newName.trim(),
-        file_type: newType,
+        file_type: newType.trim() || 'image/jpeg',
         public_url: newUrl.trim(),
       });
       if (error) throw error;
@@ -1327,7 +1365,7 @@ function MediaManagementTab() {
       fetchAssets();
     } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to add asset.'); }
     finally { setSaving(false); }
-  }, [newUrl, newName, newType, fetchAssets]);
+  }, [activeTable, newUrl, newName, newType, fetchAssets]);
 
   const filtered = useMemo(() =>
     search ? assets.filter(a => a.file_name.toLowerCase().includes(search.toLowerCase())) : assets,
@@ -1336,7 +1374,7 @@ function MediaManagementTab() {
   const fmtSize = (bytes?: number) => {
     if (!bytes) return '';
     if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
-    if (bytes > 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes > 1024)    return `${(bytes / 1024).toFixed(0)} KB`;
     return `${bytes} B`;
   };
 
@@ -1348,7 +1386,32 @@ function MediaManagementTab() {
     return '📄';
   };
 
-  if (loading) return <LoadingView label="Loading media assets…" />;
+  if (loading) return <LoadingView label="Loading media…" />;
+
+  // Table doesn't exist yet — helpful setup screen
+  if (tableUnavailable) {
+    return (
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+        <View style={md.unavailableCard}>
+          <Text style={{ fontSize: 32, marginBottom: 12 }}>🖼️</Text>
+          <Text style={md.unavailableTitle}>Media Library Not Set Up</Text>
+          <Text style={md.unavailableSub}>
+            The media assets table does not exist in your Supabase database yet.{'\n\n'}
+            To enable this feature, run the following SQL in your Supabase SQL editor:
+          </Text>
+          <View style={md.sqlBox}>
+            <Text style={md.sqlText}>
+              {`create table public.media_assets (\n  id uuid default gen_random_uuid() primary key,\n  file_name text not null,\n  file_type text,\n  file_size bigint,\n  public_url text,\n  bucket text,\n  folder text,\n  uploaded_by uuid,\n  created_at timestamptz default now()\n);\n\nalter table public.media_assets enable row level security;\n\ngrant all on public.media_assets to authenticated;`}
+            </Text>
+          </View>
+          <TouchableOpacity style={md.retryBtn} onPress={onRefresh}>
+            <Text style={md.retryBtnT}>Retry After Setup</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -1379,16 +1442,21 @@ function MediaManagementTab() {
                 {a.file_size ? <Text style={md.meta}>{fmtSize(a.file_size)}</Text> : null}
                 {a.folder ? <Text style={md.meta}>{a.folder}</Text> : null}
               </View>
-              {a.public_url ? (
-                <Text style={md.url} numberOfLines={1}>{a.public_url}</Text>
-              ) : null}
+              {a.public_url ? <Text style={md.url} numberOfLines={1}>{a.public_url}</Text> : null}
             </View>
-            <TouchableOpacity style={md.delBtn} onPress={() => deleteAsset(a)}>
-              <Ico.Trash s={14} c={C.danger} />
-            </TouchableOpacity>
+            {activeTable && (
+              <TouchableOpacity style={md.delBtn} onPress={() => deleteAsset(a)}>
+                <Ico.Trash s={14} c={C.danger} />
+              </TouchableOpacity>
+            )}
           </View>
         )}
-        ListEmptyComponent={<EmptyView title={search ? 'No results' : 'No media assets'} sub={search ? 'Try a different search term.' : 'Add media assets using the + button.'} />}
+        ListEmptyComponent={
+          <EmptyView
+            title={search ? 'No results' : 'No media assets'}
+            sub={search ? 'Try a different search term.' : 'Add your first asset using the + button.'}
+          />
+        }
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
@@ -1435,6 +1503,14 @@ const md = StyleSheet.create({
   meta: { fontSize: 11, color: C.textMuted },
   url: { fontSize: 10, color: C.gold, marginTop: 3, fontStyle: 'italic' },
   delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#fde8e0', alignItems: 'center', justifyContent: 'center' },
+  // Setup / unavailable state
+  unavailableCard: { backgroundColor: C.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  unavailableTitle: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 10, textAlign: 'center' },
+  unavailableSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
+  sqlBox: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, width: '100%', marginBottom: 20 },
+  sqlText: { fontSize: 10.5, color: '#7ec8a0', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
+  retryBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 28, alignItems: 'center' },
+  retryBtnT: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
