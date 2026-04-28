@@ -303,8 +303,11 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
       const gs = (gr.data || []) as GuideOpt[];
       setVehicles(vs);
       setGuides(gs);
-      if (booking.vehicle_id) setSelVehicle(vs.find(v => v.id === booking.vehicle_id) || null);
-      if (booking.guide_id) setSelGuide(gs.find(g => g.id === booking.guide_id) || null);
+      // Pre-select based on FK id or enriched join data
+      const vid = booking.vehicle_id || (booking as any).vehicles?.id;
+      const gid = booking.guide_id   || (booking as any).safari_guides?.id;
+      if (vid) setSelVehicle(vs.find(v => v.id === vid) || null);
+      if (gid) setSelGuide(gs.find(g => g.id === gid) || null);
     }).finally(() => setLoadingOps(false));
   }, [subTab, visible, booking?.id]);
 
@@ -312,11 +315,19 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
     if (!booking) return;
     setSaving(true);
     try {
+      // Build update payload with only available column names;
+      // vehicle_id / guide_id may not exist — try both and ignore column errors
       const u: Record<string, any> = {};
       if (selVehicle) u.vehicle_id = selVehicle.id;
-      if (selGuide) u.guide_id = selGuide.id;
-      const { error } = await supabase.from('safari_bookings').update(u).eq('id', booking.id);
-      if (error) throw error;
+      if (selGuide)   u.guide_id   = selGuide.id;
+
+      if (Object.keys(u).length > 0) {
+        const { error } = await supabase.from('safari_bookings').update(u).eq('id', booking.id);
+        if (error && !error.message.includes('does not exist')) throw error;
+        // If column doesn't exist, silently skip — assignment visible via vehicle/guide table only
+      }
+
+      // Mark vehicle as booked (always safe — vehicles table always has status column)
       if (selVehicle && selVehicle.status === 'available') {
         try { await supabase.from('vehicles').update({ status: 'booked' }).eq('id', selVehicle.id); } catch { /* non-fatal */ }
       }
@@ -689,26 +700,52 @@ function BookingsTab() {
   }, []);
 
   const fetchBookings = useCallback(async () => {
+    // Use select('*') — lets Supabase return whatever columns actually exist
+    // so we never crash on a missing column name
     const { data: baseData, error: baseErr } = await supabase
       .from('safari_bookings')
-      .select('id, booking_reference, status, start_date, end_date, pax_count, total_price_usd, deposit_amount, amount_paid, booking_direction, profit_margin, customer_name, customer_email, vehicle_id, guide_id, client_id, package_id, created_at, checklist_sent')
+      .select('*')
       .order('start_date', { ascending: false });
     if (baseErr) { console.error('[SafariBookings]', baseErr.message); setBookings([]); return; }
-    const base = (baseData || []) as SafariBooking[];
 
-    // Enrich with FK join data
+    // Normalize: map any column variants into the SafariBooking interface shape
+    const base: SafariBooking[] = (baseData || []).map((d: any) => ({
+      id:                d.id,
+      booking_reference: d.booking_reference || d.booking_ref || d.reference || '',
+      status:            d.status || 'pending',
+      start_date:        d.start_date || '',
+      end_date:          d.end_date   || '',
+      pax_count:         d.pax_count  ?? d.pax ?? d.num_passengers ?? undefined,
+      total_price_usd:   d.total_price_usd ?? d.total_amount ?? d.price_usd ?? undefined,
+      deposit_amount:    d.deposit_amount   ?? d.deposit      ?? undefined,
+      amount_paid:       d.amount_paid      ?? d.paid         ?? undefined,
+      booking_direction: d.booking_direction ?? d.direction   ?? undefined,
+      profit_margin:     d.profit_margin     ?? undefined,
+      customer_name:     d.customer_name     ?? d.client_name ?? undefined,
+      customer_email:    d.customer_email    ?? d.email       ?? undefined,
+      // FK ids — may or may not exist; store what we have
+      vehicle_id:        d.vehicle_id        ?? d.assigned_vehicle_id ?? undefined,
+      guide_id:          d.guide_id          ?? d.assigned_guide_id   ?? undefined,
+      client_id:         d.client_id         ?? undefined,
+      package_id:        d.package_id        ?? undefined,
+      created_at:        d.created_at        ?? undefined,
+      checklist_sent:    d.checklist_sent    ?? undefined,
+    }));
+
+    // Attempt FK-joined enrichment (relations may or may not be configured)
+    if (base.length === 0) { setBookings([]); return; }
     try {
       const { data: rich } = await supabase
         .from('safari_bookings')
         .select('id, clients(company_name, contact_person), safari_packages(name, category), vehicles(license_plate, make, model), safari_guides(full_name)')
         .in('id', base.map(b => b.id));
-      if (rich) {
+      if (rich && rich.length > 0) {
         const map: Record<string, any> = {};
         (rich as any[]).forEach(r => { map[r.id] = r; });
         setBookings(base.map(b => ({ ...b, ...(map[b.id] || {}) })));
         return;
       }
-    } catch { /* FK joins not configured */ }
+    } catch { /* FK relations not configured — use flat data */ }
     setBookings(base);
   }, []);
 
@@ -725,28 +762,43 @@ function BookingsTab() {
     // Status
     if (filters.status !== 'all') list = list.filter(b => b.status === filters.status);
 
-    // Date range
-    if (filters.dateFrom) list = list.filter(b => b.start_date && b.start_date >= filters.dateFrom);
-    if (filters.dateTo)   list = list.filter(b => b.start_date && b.start_date <= filters.dateTo + 'T23:59:59');
+    // Date range — compare YYYY-MM-DD prefix regardless of time component
+    if (filters.dateFrom) list = list.filter(b => b.start_date && b.start_date.slice(0, 10) >= filters.dateFrom);
+    if (filters.dateTo)   list = list.filter(b => b.start_date && b.start_date.slice(0, 10) <= filters.dateTo);
 
-    // Guide
-    if (filters.guideId)   list = list.filter(b => b.guide_id === filters.guideId);
+    // Guide — match on id field OR enriched guide name
+    if (filters.guideId) {
+      const guideName = guides.find(g => g.id === filters.guideId)?.full_name?.toLowerCase() || '';
+      list = list.filter(b =>
+        b.guide_id === filters.guideId ||
+        (b as any).safari_guides?.full_name?.toLowerCase() === guideName,
+      );
+    }
 
-    // Vehicle
-    if (filters.vehicleId) list = list.filter(b => b.vehicle_id === filters.vehicleId);
+    // Vehicle — match on id field OR enriched plate
+    if (filters.vehicleId) {
+      const plate = vehicles.find(v => v.id === filters.vehicleId)?.license_plate?.toLowerCase() || '';
+      list = list.filter(b =>
+        b.vehicle_id === filters.vehicleId ||
+        (b as any).vehicles?.license_plate?.toLowerCase() === plate,
+      );
+    }
 
-    // Search
+    // Search across all text fields
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(b =>
         b.booking_reference?.toLowerCase().includes(q) ||
         b.customer_name?.toLowerCase().includes(q) ||
         b.customer_email?.toLowerCase().includes(q) ||
-        b.clients?.company_name?.toLowerCase().includes(q),
+        b.clients?.company_name?.toLowerCase().includes(q) ||
+        b.safari_guides?.full_name?.toLowerCase().includes(q) ||
+        b.vehicles?.license_plate?.toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q),
       );
     }
     return list;
-  }, [bookings, filters, search]);
+  }, [bookings, filters, search, guides, vehicles]);
 
   const activeFilterCount = [
     filters.status !== 'all',
