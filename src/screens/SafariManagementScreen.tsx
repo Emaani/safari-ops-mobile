@@ -502,13 +502,28 @@ function BookingsTab() {
   const [showDetail, setShowDetail] = useState(false);
 
   const fetch = useCallback(async () => {
-    const { data, error } = await supabase
+    // First fetch base booking columns (always works regardless of FK setup)
+    const { data: baseData, error: baseErr } = await supabase
       .from('safari_bookings')
-      .select(`id, booking_reference, status, start_date, end_date, pax_count, total_price_usd, deposit_amount, amount_paid, booking_direction, profit_margin, customer_name, customer_email, vehicle_id, guide_id, client_id, package_id, created_at,
-        clients(company_name, contact_person), safari_packages(name, category), vehicles(license_plate, make, model), safari_guides(full_name)`)
-      .order('created_at', { ascending: false });
-    if (error) console.error('[SafariBookings]', error.message);
-    setBookings((data || []) as unknown as SafariBooking[]);
+      .select('id, booking_reference, status, start_date, end_date, pax_count, total_price_usd, deposit_amount, amount_paid, booking_direction, profit_margin, customer_name, customer_email, vehicle_id, guide_id, client_id, package_id, created_at, checklist_sent')
+      .order('start_date', { ascending: false });
+    if (baseErr) { console.error('[SafariBookings]', baseErr.message); setBookings([]); return; }
+    const bookings = (baseData || []) as SafariBooking[];
+
+    // Enrich with joined relation data where FK relationships exist
+    try {
+      const { data: rich } = await supabase
+        .from('safari_bookings')
+        .select('id, clients(company_name, contact_person), safari_packages(name, category), vehicles(license_plate, make, model), safari_guides(full_name)')
+        .in('id', bookings.map(b => b.id));
+      if (rich) {
+        const richMap: Record<string, any> = {};
+        (rich as any[]).forEach(r => { richMap[r.id] = r; });
+        setBookings(bookings.map(b => ({ ...b, ...(richMap[b.id] || {}) })));
+        return;
+      }
+    } catch { /* FK joins not configured — show flat data */ }
+    setBookings(bookings);
   }, []);
 
   useEffect(() => { setLoading(true); fetch().finally(() => setLoading(false)); }, [fetch]);

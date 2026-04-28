@@ -369,7 +369,8 @@ function MainTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown:          false,
+        headerShown:             false,
+        tabBarShowLabel:         false,
         tabBarActiveTintColor:   theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.textSoft,
         tabBarStyle: {
@@ -379,9 +380,9 @@ function MainTabNavigator() {
           bottom:          14,
           borderTopWidth:  0,
           backgroundColor: theme.colors.surface,
-          height:          68,
-          paddingBottom:   8,
-          paddingTop:      8,
+          height:          58,
+          paddingBottom:   0,
+          paddingTop:      0,
           borderRadius:    22,
           shadowColor:     theme.colors.shadow,
           shadowOffset:    { width: 0, height: 14 },
@@ -389,8 +390,7 @@ function MainTabNavigator() {
           shadowRadius:    20,
           elevation:       10,
         },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
-        tabBarItemStyle:  { borderRadius: 16, marginHorizontal: 1 },
+        tabBarItemStyle:  { borderRadius: 16, marginHorizontal: 2 },
       }}
     >
       {tabs.map((tab) => (
@@ -399,8 +399,7 @@ function MainTabNavigator() {
           name={tab.name}
           component={tab.component}
           options={{
-            tabBarLabel: t(tab.labelKey),
-            tabBarIcon: ({ color, size }) => tab.icon({ color, size }),
+            tabBarIcon: ({ color, size }) => tab.icon({ color, size: 24 }),
           }}
         />
       ))}

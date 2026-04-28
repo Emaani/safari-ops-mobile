@@ -163,6 +163,85 @@ function TextF({ value, onChange, placeholder, keyboardType, multiline }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// VEHICLE PORTAL EDIT MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PORTAL_CATEGORIES = ['Safari 4x4', 'Luxury SUV', 'Minibus', 'Budget 4x4', 'Van', 'Sedan', 'Other'];
+
+function VehicleEditModal({ vehicle, visible, onClose, onSaved }: {
+  vehicle: PortalVehicle | null; visible: boolean; onClose: () => void; onSaved: () => void;
+}) {
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [dailyRate, setDailyRate] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showCatPicker, setShowCatPicker] = useState(false);
+
+  useEffect(() => {
+    if (vehicle && visible) {
+      setCategory(vehicle.portal_category || '');
+      setDescription(vehicle.portal_description || '');
+      setImageUrl(vehicle.portal_image_url || '');
+      setDailyRate(vehicle.daily_rate_usd ? String(vehicle.daily_rate_usd) : '');
+    }
+  }, [vehicle, visible]);
+
+  const save = useCallback(async () => {
+    if (!vehicle) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('vehicles').update({
+        portal_category: category.trim() || null,
+        portal_description: description.trim() || null,
+        portal_image_url: imageUrl.trim() || null,
+        daily_rate_usd: dailyRate ? parseFloat(dailyRate) : null,
+      }).eq('id', vehicle.id);
+      if (error) throw error;
+      onSaved(); onClose();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    finally { setSaving(false); }
+  }, [vehicle, category, description, imageUrl, dailyRate, onSaved, onClose]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={pm.header}>
+            <Text style={pm.headerTitle}>{vehicle?.license_plate} — Portal Settings</Text>
+            <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+            <View style={{ backgroundColor: C.primarySoft, borderRadius: 12, padding: 12, marginBottom: 8 }}>
+              <Text style={{ fontSize: 12, color: C.primary, fontWeight: '600' }}>
+                {vehicle?.make} {vehicle?.model}{vehicle?.capacity ? ` · ${vehicle.capacity} seats` : ''}
+              </Text>
+            </View>
+            <FieldLabel label="Portal Category" />
+            <TouchableOpacity style={pm.selector} onPress={() => setShowCatPicker(true)}>
+              <Text style={{ flex: 1, fontSize: 14, color: category ? C.text : C.textMuted }}>{category || 'Select category…'}</Text>
+              <Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+            <FieldLabel label="Portal Description" />
+            <TextF value={description} onChange={setDescription} placeholder="Brief description shown on the customer portal…" multiline />
+            <FieldLabel label="Portal Image URL" />
+            <TextF value={imageUrl} onChange={setImageUrl} placeholder="https://…" keyboardType="url" />
+            <FieldLabel label="Daily Rate (USD)" />
+            <TextF value={dailyRate} onChange={setDailyRate} placeholder="0.00" keyboardType="decimal-pad" />
+            <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>Save Portal Settings</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+          <PickerModal visible={showCatPicker} title="Portal Category"
+            options={PORTAL_CATEGORIES.map(c => ({ value: c, label: c }))}
+            selected={category} onSelect={o => setCategory(o.value)} onClose={() => setShowCatPicker(false)} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // VEHICLE CATALOG TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -171,11 +250,12 @@ function VehicleCatalogTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
+  const [editVehicle, setEditVehicle] = useState<PortalVehicle | null>(null);
 
   const fetchVehicles = useCallback(async () => {
     const { data, error } = await supabase
       .from('vehicles')
-      .select('id, license_plate, make, model, capacity, status, portal_visible, portal_description, portal_category, daily_rate_usd')
+      .select('id, license_plate, make, model, capacity, status, portal_visible, portal_description, portal_image_url, portal_category, daily_rate_usd')
       .order('license_plate');
     if (error) console.error('[Marketing/Vehicles]', error.message);
     setVehicles((data || []) as PortalVehicle[]);
@@ -204,7 +284,6 @@ function VehicleCatalogTab() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Info banner */}
       <View style={vc.banner}>
         <Ico.Globe s={16} c={C.primary} />
         <Text style={vc.bannerText}>{visibleCount} of {vehicles.length} vehicles visible on customer portal</Text>
@@ -213,7 +292,7 @@ function VehicleCatalogTab() {
         data={vehicles}
         keyExtractor={i => i.id}
         renderItem={({ item: v }) => (
-          <View style={vc.card}>
+          <TouchableOpacity style={vc.card} onPress={() => setEditVehicle(v)} activeOpacity={0.82}>
             <View style={[vc.statusDot, { backgroundColor: v.status === 'available' ? C.success + '20' : C.gold + '20' }]}>
               <Text style={{ fontSize: 9, fontWeight: '700', color: v.status === 'available' ? C.success : C.gold }}>{v.status?.toUpperCase()}</Text>
             </View>
@@ -222,6 +301,7 @@ function VehicleCatalogTab() {
               <Text style={vc.model}>{v.make} {v.model}{v.capacity ? ` · ${v.capacity}` : ''}</Text>
               {v.portal_category ? <Text style={vc.cat}>{v.portal_category}</Text> : null}
               {v.daily_rate_usd ? <Text style={vc.rate}>{formatCurrency(v.daily_rate_usd, 'USD')} / day</Text> : null}
+              {v.portal_description ? <Text style={vc.desc} numberOfLines={1}>{v.portal_description}</Text> : null}
             </View>
             <View style={vc.toggleWrap}>
               {toggling[v.id]
@@ -238,12 +318,13 @@ function VehicleCatalogTab() {
                 </>
               }
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={<EmptyView title="No vehicles found" sub="Add vehicles in the Fleet tab first." />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
+      <VehicleEditModal visible={!!editVehicle} vehicle={editVehicle} onClose={() => setEditVehicle(null)} onSaved={fetchVehicles} />
     </View>
   );
 }
@@ -257,8 +338,69 @@ const vc = StyleSheet.create({
   model: { fontSize: 12, color: C.textMuted, marginTop: 2 },
   cat: { fontSize: 11, color: C.gold, fontWeight: '600', marginTop: 3 },
   rate: { fontSize: 12, fontWeight: '700', color: C.primary, marginTop: 3 },
+  desc: { fontSize: 11, color: C.textMuted, marginTop: 3, fontStyle: 'italic' },
   toggleWrap: { alignItems: 'center', gap: 4 },
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SAFARI PACKAGE PORTAL EDIT MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PackageEditModal({ pkg, visible, onClose, onSaved }: {
+  pkg: SafariPackage | null; visible: boolean; onClose: () => void; onSaved: () => void;
+}) {
+  const [highlight, setHighlight] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (pkg && visible) {
+      setHighlight(pkg.portal_highlight || '');
+      setImageUrl(pkg.portal_image_url || '');
+    }
+  }, [pkg, visible]);
+
+  const save = useCallback(async () => {
+    if (!pkg) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('safari_packages').update({
+        portal_highlight: highlight.trim() || null,
+        portal_image_url: imageUrl.trim() || null,
+      }).eq('id', pkg.id);
+      if (error) throw error;
+      onSaved(); onClose();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    finally { setSaving(false); }
+  }, [pkg, highlight, imageUrl, onSaved, onClose]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={pm.header}>
+            <Text style={pm.headerTitle} numberOfLines={1}>{pkg?.name} — Portal</Text>
+            <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+            <View style={{ backgroundColor: C.primarySoft, borderRadius: 12, padding: 12, marginBottom: 8 }}>
+              <Text style={{ fontSize: 12, color: C.primary, fontWeight: '600' }}>
+                {pkg?.category}{pkg?.country ? ` · ${pkg.country}` : ''}{pkg?.duration_days ? ` · ${pkg.duration_days} days` : ''}
+              </Text>
+            </View>
+            <FieldLabel label="Portal Highlight" />
+            <TextF value={highlight} onChange={setHighlight} placeholder="e.g. Best gorilla trekking experience in Uganda" />
+            <FieldLabel label="Portal Image URL" />
+            <TextF value={imageUrl} onChange={setImageUrl} placeholder="https://…" keyboardType="url" />
+            <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>Save Portal Settings</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SAFARI CATALOG TAB
@@ -269,11 +411,12 @@ function SafariCatalogTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
+  const [editPkg, setEditPkg] = useState<SafariPackage | null>(null);
 
   const fetchPkgs = useCallback(async () => {
     const { data, error } = await supabase
       .from('safari_packages')
-      .select('id, package_code, name, description, category, country, duration_days, price_usd, is_active, portal_visible, portal_highlight')
+      .select('id, package_code, name, description, category, country, duration_days, price_usd, is_active, portal_visible, portal_highlight, portal_image_url')
       .order('name');
     if (error) console.error('[Marketing/Packages]', error.message);
     setPackages((data || []) as SafariPackage[]);
@@ -310,7 +453,7 @@ function SafariCatalogTab() {
         data={packages}
         keyExtractor={i => i.id}
         renderItem={({ item: p }) => (
-          <View style={sc2.card}>
+          <TouchableOpacity style={sc2.card} onPress={() => setEditPkg(p)} activeOpacity={0.82}>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <Text style={sc2.name} numberOfLines={1}>{p.name}</Text>
@@ -341,12 +484,13 @@ function SafariCatalogTab() {
                 </>
               }
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={<EmptyView title="No packages found" sub="Create safari packages in the Safari Management screen." />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
+      <PackageEditModal visible={!!editPkg} pkg={editPkg} onClose={() => setEditPkg(null)} onSaved={fetchPkgs} />
     </View>
   );
 }
