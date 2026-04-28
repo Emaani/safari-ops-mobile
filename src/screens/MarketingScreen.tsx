@@ -771,45 +771,89 @@ function WebsiteAnalyticsTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
 
+  const buildEmptyMetrics = () => [
+    { label: 'Sessions',    value: '—', sub: 'No data yet', color: C.primary },
+    { label: 'Page Views',  value: '—', sub: '',            color: C.gold },
+    { label: 'Bounce Rate', value: '—', sub: '',            color: C.textMuted },
+    { label: 'Conversions', value: '—', sub: '',            color: C.success },
+  ];
+
   const fetch = useCallback(async () => {
     try {
-      // Fetch from analytics_summary table (aggregated by period)
-      const { data } = await supabase
+      // Try analytics_summary first (most specific)
+      const { data: summary } = await supabase
         .from('analytics_summary')
         .select('*')
-        .eq('period', period)
-        .order('recorded_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (data) {
+      if (summary) {
+        // Flexibly pick column names regardless of exact schema
+        const d = summary as Record<string, any>;
+        const sessions   = d.sessions   ?? d.total_sessions   ?? d.visitors   ?? 0;
+        const pageViews  = d.page_views ?? d.total_pageviews  ?? d.pageviews  ?? 0;
+        const bounceRate = d.bounce_rate ?? d.bounceRate ?? 0;
+        const conversions = d.conversions ?? d.total_conversions ?? 0;
+        const convRate   = pageViews > 0 ? ((conversions / pageViews) * 100).toFixed(1) : '0.0';
+
         setMetrics([
-          { label: 'Sessions',     value: (data.sessions    ?? 0).toLocaleString(), sub: `${data.sessions_change >= 0 ? '+' : ''}${data.sessions_change ?? 0}%`, color: C.primary },
-          { label: 'Page Views',   value: (data.page_views  ?? 0).toLocaleString(), sub: `${data.pv_change >= 0 ? '+' : ''}${data.pv_change ?? 0}%`, color: C.gold },
-          { label: 'Bounce Rate',  value: `${data.bounce_rate ?? 0}%`,              sub: 'avg session',  color: C.textMuted },
-          { label: 'Conversions',  value: (data.conversions ?? 0).toLocaleString(), sub: `${data.conv_rate ?? 0}% rate`, color: C.success },
+          { label: 'Sessions',    value: Number(sessions).toLocaleString(),    sub: `Last ${period}`,          color: C.primary },
+          { label: 'Page Views',  value: Number(pageViews).toLocaleString(),   sub: `${convRate}% conv rate`, color: C.gold },
+          { label: 'Bounce Rate', value: `${Number(bounceRate).toFixed(1)}%`,  sub: 'avg engagement',          color: C.textMuted },
+          { label: 'Conversions', value: Number(conversions).toLocaleString(), sub: 'total actions',           color: C.success },
         ]);
-        try { setTopPages(JSON.parse(data.top_pages || '[]')); } catch { setTopPages([]); }
-      } else {
-        // Fallback: fetch page events from analytics_events if exists
-        const { data: events } = await supabase
-          .from('analytics_events')
-          .select('page_path, count')
-          .order('count', { ascending: false })
-          .limit(5);
-        if (events && events.length > 0) {
-          const total = events.reduce((s: number, e: any) => s + (e.count || 0), 0);
-          setTopPages(events.map((e: any) => ({ path: e.page_path || '/', views: e.count || 0, pct: total ? Math.round((e.count / total) * 100) : 0 })));
+
+        // Top pages — stored as JSON array or separate field
+        const raw = d.top_pages ?? d.popular_pages ?? d.pages ?? null;
+        if (typeof raw === 'string') {
+          try { setTopPages(JSON.parse(raw)); } catch { setTopPages([]); }
+        } else if (Array.isArray(raw)) {
+          setTopPages(raw as TopPage[]);
+        } else {
+          setTopPages([]);
         }
-        setMetrics([
-          { label: 'Sessions',    value: '—', sub: 'No data yet', color: C.primary },
-          { label: 'Page Views',  value: '—', sub: 'Connect analytics', color: C.gold },
-          { label: 'Bounce Rate', value: '—', sub: '', color: C.textMuted },
-          { label: 'Conversions', value: '—', sub: '', color: C.success },
-        ]);
+        return;
       }
-    } catch { /* table may not exist yet */ }
-    finally { setLoading(false); setRefreshing(false); }
+
+      // Fallback: aggregate from analytics_events
+      const { data: events } = await supabase
+        .from('analytics_events')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (events && events.length > 0) {
+        const ev = events as Record<string, any>[];
+        const totalViews = ev.length;
+        // Group by page path for top pages
+        const pathCounts: Record<string, number> = {};
+        ev.forEach(e => {
+          const p = e.page_path || e.path || e.url || '/';
+          pathCounts[p] = (pathCounts[p] || 0) + 1;
+        });
+        const sortedPages = Object.entries(pathCounts)
+          .sort(([,a],[,b]) => b - a)
+          .slice(0, 5)
+          .map(([path, views]) => ({ path, views, pct: Math.round((views / totalViews) * 100) }));
+        setTopPages(sortedPages);
+
+        const uniqueSessions = new Set(ev.map(e => e.session_id || e.visitor_id || e.id)).size;
+        setMetrics([
+          { label: 'Sessions',    value: uniqueSessions.toLocaleString(),  sub: `Last ${period}`, color: C.primary },
+          { label: 'Page Views',  value: totalViews.toLocaleString(),      sub: 'total views',     color: C.gold },
+          { label: 'Bounce Rate', value: '—', sub: '',                                             color: C.textMuted },
+          { label: 'Conversions', value: '—', sub: '',                                             color: C.success },
+        ]);
+        return;
+      }
+
+      setMetrics(buildEmptyMetrics());
+      setTopPages([]);
+    } catch (e) {
+      console.error('[Analytics]', e);
+      setMetrics(buildEmptyMetrics());
+    } finally { setLoading(false); setRefreshing(false); }
   }, [period]);
 
   useEffect(() => { setLoading(true); fetch(); }, [fetch]);
@@ -1010,10 +1054,24 @@ function BlogManagementTab() {
   const fetchPosts = useCallback(async () => {
     const { data, error } = await supabase
       .from('blog_posts')
-      .select('id, title, excerpt, status, cover_image_url, tags, views, author_name, published_at, created_at')
+      .select('*')
       .order('created_at', { ascending: false });
     if (error) console.error('[Blog]', error.message);
-    setPosts((data || []) as BlogPost[]);
+    // Normalize flexible column names to BlogPost interface
+    const posts = (data || []).map((d: any) => ({
+      id: d.id,
+      title: d.title || d.heading || '',
+      excerpt: d.excerpt || d.summary || d.description || '',
+      content: d.content || d.body || '',
+      status: d.status || d.publish_status || 'draft',
+      cover_image_url: d.cover_image_url || d.cover_image || d.thumbnail_url || d.image_url || '',
+      tags: Array.isArray(d.tags) ? d.tags : (typeof d.tags === 'string' ? d.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []),
+      views: d.views ?? d.view_count ?? d.page_views ?? 0,
+      author_name: d.author_name || d.author || '',
+      published_at: d.published_at || d.publish_date || '',
+      created_at: d.created_at || '',
+    })) as BlogPost[];
+    setPosts(posts);
   }, []);
 
   useEffect(() => { setLoading(true); fetchPosts().finally(() => setLoading(false)); }, [fetchPosts]);
@@ -1116,10 +1174,24 @@ function BlogAnalyticsTab() {
   const fetchPosts = useCallback(async () => {
     const { data, error } = await supabase
       .from('blog_posts')
-      .select('id, title, status, views, published_at, tags')
-      .order('views', { ascending: false });
+      .select('*')
+      .order('created_at', { ascending: false });
     if (error) console.error('[BlogAnalytics]', error.message);
-    setPosts((data || []) as BlogPost[]);
+    const posts = (data || []).map((d: any) => ({
+      id: d.id,
+      title: d.title || d.heading || '',
+      excerpt: d.excerpt || d.summary || '',
+      status: d.status || d.publish_status || 'draft',
+      cover_image_url: '',
+      tags: Array.isArray(d.tags) ? d.tags : [],
+      views: d.views ?? d.view_count ?? d.page_views ?? 0,
+      author_name: d.author_name || '',
+      published_at: d.published_at || d.publish_date || '',
+      created_at: d.created_at || '',
+    })) as BlogPost[];
+    // Sort by views descending for analytics view
+    posts.sort((a, b) => (b.views || 0) - (a.views || 0));
+    setPosts(posts);
   }, []);
 
   useEffect(() => { setLoading(true); fetchPosts().finally(() => setLoading(false)); }, [fetchPosts]);
@@ -1210,10 +1282,21 @@ function MediaManagementTab() {
   const fetchAssets = useCallback(async () => {
     const { data, error } = await supabase
       .from('media_assets')
-      .select('id, file_name, file_type, file_size, public_url, bucket, folder, uploaded_by, created_at')
+      .select('*')
       .order('created_at', { ascending: false });
     if (error) console.error('[Media]', error.message);
-    setAssets((data || []) as MediaAsset[]);
+    const assets = (data || []).map((d: any) => ({
+      id: d.id,
+      file_name: d.file_name || d.name || d.filename || 'Unnamed',
+      file_type: d.file_type || d.mime_type || d.type || '',
+      file_size: d.file_size || d.size || 0,
+      public_url: d.public_url || d.url || d.storage_url || '',
+      bucket: d.bucket || d.bucket_name || '',
+      folder: d.folder || d.directory || '',
+      uploaded_by: d.uploaded_by || d.user_id || '',
+      created_at: d.created_at || '',
+    })) as MediaAsset[];
+    setAssets(assets);
   }, []);
 
   useEffect(() => { setLoading(true); fetchAssets().finally(() => setLoading(false)); }, [fetchAssets]);

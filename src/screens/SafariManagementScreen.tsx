@@ -115,6 +115,11 @@ const Ico = {
       <Rect x="18" y="3" width="4" height="18" /><Rect x="10" y="8" width="4" height="13" /><Rect x="2" y="13" width="4" height="8" />
     </Svg>
   ),
+  Filter: ({ s = 16, c = C.primary }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
+      <Path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+    </Svg>
+  ),
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -491,97 +496,358 @@ const dm = StyleSheet.create({
   permitBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginTop: 4 },
 });
 
+// ─── Date-range helpers ───────────────────────────────────────────────────────
+type DatePreset = 'all' | 'today' | 'week' | 'month' | 'custom';
+function presetRange(p: DatePreset): { from: string | null; to: string | null } {
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (p === 'today') return { from: fmt(today), to: fmt(today) };
+  if (p === 'week') {
+    const end = new Date(today); end.setDate(end.getDate() + 6);
+    return { from: fmt(today), to: fmt(end) };
+  }
+  if (p === 'month') {
+    const end = new Date(today); end.setDate(end.getDate() + 29);
+    return { from: fmt(today), to: fmt(end) };
+  }
+  return { from: null, to: null };
+}
+
+// ─── Filter Sheet Modal ───────────────────────────────────────────────────────
+interface FilterState {
+  status: string;
+  datePreset: DatePreset;
+  dateFrom: string;
+  dateTo: string;
+  guideId: string;
+  vehicleId: string;
+}
+const DEFAULT_FILTERS: FilterState = {
+  status: 'all', datePreset: 'all', dateFrom: '', dateTo: '', guideId: '', vehicleId: '',
+};
+
+function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClose }: {
+  visible: boolean;
+  filters: FilterState;
+  guides: { id: string; full_name: string }[];
+  vehicles: { id: string; license_plate: string; make?: string; model?: string }[];
+  onApply: (f: FilterState) => void;
+  onClose: () => void;
+}) {
+  const [local, setLocal] = useState<FilterState>(filters);
+  const set = (patch: Partial<FilterState>) => setLocal(prev => ({ ...prev, ...patch }));
+
+  useEffect(() => { if (visible) setLocal(filters); }, [visible, filters]);
+
+  const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+    { key: 'all',   label: 'All Dates' },
+    { key: 'today', label: 'Today' },
+    { key: 'week',  label: 'Next 7 Days' },
+    { key: 'month', label: 'Next 30 Days' },
+    { key: 'custom',label: 'Custom Range' },
+  ];
+
+  const activeFilterCount = [
+    local.status !== 'all',
+    local.datePreset !== 'all',
+    !!local.guideId,
+    !!local.vehicleId,
+  ].filter(Boolean).length;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={onClose}>
+        <View style={fs.sheet}>
+          <View style={fs.handle} />
+          <View style={fs.header}>
+            <Text style={fs.title}>Filter Bookings</Text>
+            <TouchableOpacity onPress={() => set(DEFAULT_FILTERS)}>
+              <Text style={fs.reset}>Reset All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+            {/* Status */}
+            <Text style={fs.sectionLabel}>Status</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              {STATUS_KEYS.map(s => {
+                const on = local.status === s;
+                const col = s === 'all' ? C.primary : (STATUS_CFG[s]?.text || C.textMuted);
+                return (
+                  <TouchableOpacity key={s} style={[fs.chip, on && { backgroundColor: col, borderColor: col }]} onPress={() => set({ status: s })}>
+                    <Text style={[fs.chipT, on && { color: '#fff' }]}>{s === 'all' ? 'All' : STATUS_CFG[s]?.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Date Range */}
+            <Text style={fs.sectionLabel}>Date Range</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {DATE_PRESETS.map(p => (
+                <TouchableOpacity key={p.key}
+                  style={[fs.chip, local.datePreset === p.key && { backgroundColor: C.primary, borderColor: C.primary }]}
+                  onPress={() => { set({ datePreset: p.key, ...presetRange(p.key) }); }}>
+                  <Text style={[fs.chipT, local.datePreset === p.key && { color: '#fff' }]}>{p.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {local.datePreset === 'custom' && (
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={fs.inputLabel}>From (YYYY-MM-DD)</Text>
+                  <TextInput style={fs.dateInput} value={local.dateFrom}
+                    onChangeText={v => set({ dateFrom: v })} placeholder="2025-01-01"
+                    placeholderTextColor={C.textMuted} keyboardType="numbers-and-punctuation" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={fs.inputLabel}>To (YYYY-MM-DD)</Text>
+                  <TextInput style={fs.dateInput} value={local.dateTo}
+                    onChangeText={v => set({ dateTo: v })} placeholder="2025-12-31"
+                    placeholderTextColor={C.textMuted} keyboardType="numbers-and-punctuation" />
+                </View>
+              </View>
+            )}
+
+            {/* Guide */}
+            <Text style={fs.sectionLabel}>Assigned Guide</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              <TouchableOpacity style={[fs.chip, !local.guideId && { backgroundColor: C.primary, borderColor: C.primary }]}
+                onPress={() => set({ guideId: '' })}>
+                <Text style={[fs.chipT, !local.guideId && { color: '#fff' }]}>Any Guide</Text>
+              </TouchableOpacity>
+              {guides.map(g => (
+                <TouchableOpacity key={g.id}
+                  style={[fs.chip, local.guideId === g.id && { backgroundColor: C.primary, borderColor: C.primary }]}
+                  onPress={() => set({ guideId: g.id })}>
+                  <Text style={[fs.chipT, local.guideId === g.id && { color: '#fff' }]} numberOfLines={1}>{g.full_name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Vehicle */}
+            <Text style={fs.sectionLabel}>Assigned Vehicle</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
+              <TouchableOpacity style={[fs.chip, !local.vehicleId && { backgroundColor: C.primary, borderColor: C.primary }]}
+                onPress={() => set({ vehicleId: '' })}>
+                <Text style={[fs.chipT, !local.vehicleId && { color: '#fff' }]}>Any Vehicle</Text>
+              </TouchableOpacity>
+              {vehicles.map(v => (
+                <TouchableOpacity key={v.id}
+                  style={[fs.chip, local.vehicleId === v.id && { backgroundColor: C.primary, borderColor: C.primary }]}
+                  onPress={() => set({ vehicleId: v.id })}>
+                  <Text style={[fs.chipT, local.vehicleId === v.id && { color: '#fff' }]}>{v.license_plate}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </ScrollView>
+
+          <TouchableOpacity style={fs.applyBtn} onPress={() => { onApply(local); onClose(); }}>
+            <Text style={fs.applyT}>Apply Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</Text>
+          </TouchableOpacity>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const fs = StyleSheet.create({
+  sheet: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  handle: { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  title: { fontSize: 17, fontWeight: '800', color: C.text },
+  reset: { fontSize: 13, fontWeight: '700', color: C.danger },
+  sectionLabel: { fontSize: 11, fontWeight: '800', color: C.textMuted, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: C.input, borderWidth: 1, borderColor: C.border },
+  chipT: { fontSize: 12, fontWeight: '700', color: C.textMuted },
+  inputLabel: { fontSize: 11, fontWeight: '700', color: C.textMuted, marginBottom: 4 },
+  dateInput: { backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: C.text },
+  applyBtn: { backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  applyT: { fontSize: 15, fontWeight: '800', color: '#fff' },
+});
+
 // ─── Bookings Tab ──────────────────────────────────────────────────────────────
 function BookingsTab() {
   const [bookings, setBookings] = useState<SafariBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState<SafariBooking | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [guides, setGuides] = useState<{ id: string; full_name: string }[]>([]);
+  const [vehicles, setVehicles] = useState<{ id: string; license_plate: string; make?: string; model?: string }[]>([]);
 
-  const fetch = useCallback(async () => {
-    // First fetch base booking columns (always works regardless of FK setup)
+  const fetchLookups = useCallback(async () => {
+    const [{ data: g }, { data: v }] = await Promise.all([
+      supabase.from('safari_guides').select('id, full_name').eq('status', 'available').order('full_name'),
+      supabase.from('vehicles').select('id, license_plate, make, model').order('license_plate'),
+    ]);
+    setGuides((g || []) as any);
+    setVehicles((v || []) as any);
+  }, []);
+
+  const fetchBookings = useCallback(async () => {
     const { data: baseData, error: baseErr } = await supabase
       .from('safari_bookings')
       .select('id, booking_reference, status, start_date, end_date, pax_count, total_price_usd, deposit_amount, amount_paid, booking_direction, profit_margin, customer_name, customer_email, vehicle_id, guide_id, client_id, package_id, created_at, checklist_sent')
       .order('start_date', { ascending: false });
     if (baseErr) { console.error('[SafariBookings]', baseErr.message); setBookings([]); return; }
-    const bookings = (baseData || []) as SafariBooking[];
+    const base = (baseData || []) as SafariBooking[];
 
-    // Enrich with joined relation data where FK relationships exist
+    // Enrich with FK join data
     try {
       const { data: rich } = await supabase
         .from('safari_bookings')
         .select('id, clients(company_name, contact_person), safari_packages(name, category), vehicles(license_plate, make, model), safari_guides(full_name)')
-        .in('id', bookings.map(b => b.id));
+        .in('id', base.map(b => b.id));
       if (rich) {
-        const richMap: Record<string, any> = {};
-        (rich as any[]).forEach(r => { richMap[r.id] = r; });
-        setBookings(bookings.map(b => ({ ...b, ...(richMap[b.id] || {}) })));
+        const map: Record<string, any> = {};
+        (rich as any[]).forEach(r => { map[r.id] = r; });
+        setBookings(base.map(b => ({ ...b, ...(map[b.id] || {}) })));
         return;
       }
-    } catch { /* FK joins not configured — show flat data */ }
-    setBookings(bookings);
+    } catch { /* FK joins not configured */ }
+    setBookings(base);
   }, []);
 
-  useEffect(() => { setLoading(true); fetch().finally(() => setLoading(false)); }, [fetch]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await fetch(); setRefreshing(false); }, [fetch]);
+  const fetchAll = useCallback(async () => {
+    await Promise.all([fetchBookings(), fetchLookups()]);
+  }, [fetchBookings, fetchLookups]);
+
+  useEffect(() => { setLoading(true); fetchAll().finally(() => setLoading(false)); }, [fetchAll]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }, [fetchAll]);
 
   const filtered = useMemo(() => {
     let list = bookings;
-    if (statusFilter !== 'all') list = list.filter(b => b.status === statusFilter);
+
+    // Status
+    if (filters.status !== 'all') list = list.filter(b => b.status === filters.status);
+
+    // Date range
+    if (filters.dateFrom) list = list.filter(b => b.start_date && b.start_date >= filters.dateFrom);
+    if (filters.dateTo)   list = list.filter(b => b.start_date && b.start_date <= filters.dateTo + 'T23:59:59');
+
+    // Guide
+    if (filters.guideId)   list = list.filter(b => b.guide_id === filters.guideId);
+
+    // Vehicle
+    if (filters.vehicleId) list = list.filter(b => b.vehicle_id === filters.vehicleId);
+
+    // Search
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(b => b.booking_reference?.toLowerCase().includes(q) || b.customer_name?.toLowerCase().includes(q) || b.clients?.company_name?.toLowerCase().includes(q));
+      list = list.filter(b =>
+        b.booking_reference?.toLowerCase().includes(q) ||
+        b.customer_name?.toLowerCase().includes(q) ||
+        b.customer_email?.toLowerCase().includes(q) ||
+        b.clients?.company_name?.toLowerCase().includes(q),
+      );
     }
     return list;
-  }, [bookings, statusFilter, search]);
+  }, [bookings, filters, search]);
+
+  const activeFilterCount = [
+    filters.status !== 'all',
+    filters.datePreset !== 'all',
+    !!filters.guideId,
+    !!filters.vehicleId,
+  ].filter(Boolean).length;
 
   if (loading) return <LoadingView label="Loading safari bookings…" />;
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Search */}
+      {/* Search + Filter row */}
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search ref, client…" placeholderTextColor={C.textMuted} />
-        </View>
-      </View>
-      {/* Status chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }} contentContainerStyle={ts.chipRow}>
-        {STATUS_KEYS.map(s => {
-          const active = statusFilter === s;
-          const count = s === 'all' ? bookings.length : bookings.filter(b => b.status === s).length;
-          const col = s === 'all' ? C.primary : (STATUS_CFG[s]?.text || C.textMuted);
-          return (
-            <TouchableOpacity key={s} style={[ts.chip, active ? { backgroundColor: col } : {}]} onPress={() => setStatusFilter(s)}>
-              <Text style={[ts.chipT, active ? { color: '#fff' } : { color: col }]}>
-                {s === 'all' ? 'All' : STATUS_CFG[s]?.label} {count > 0 ? `(${count})` : ''}
-              </Text>
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
+            placeholder="Search ref, client, email…" placeholderTextColor={C.textMuted} />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ico.Close s={16} c={C.textMuted} />
             </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+          )}
+        </View>
+        <TouchableOpacity style={[ts.filterBtn, activeFilterCount > 0 && ts.filterBtnActive]} onPress={() => setShowFilters(true)}>
+          <Ico.Filter s={16} c={activeFilterCount > 0 ? '#fff' : C.primary} />
+          {activeFilterCount > 0 && <Text style={ts.filterCount}>{activeFilterCount}</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {/* Active filter summary chips */}
+      {activeFilterCount > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingBottom: 8 }}>
+          {filters.status !== 'all' && (
+            <View style={[ts.activeBadge, { backgroundColor: STATUS_CFG[filters.status]?.bg || C.input }]}>
+              <Text style={[ts.activeBadgeT, { color: STATUS_CFG[filters.status]?.text || C.textMuted }]}>
+                {STATUS_CFG[filters.status]?.label}
+              </Text>
+            </View>
+          )}
+          {filters.datePreset !== 'all' && (
+            <View style={ts.activeBadge}>
+              <Text style={ts.activeBadgeT}>
+                {filters.datePreset === 'custom' ? `${filters.dateFrom} → ${filters.dateTo}` :
+                 filters.datePreset === 'today' ? 'Today' :
+                 filters.datePreset === 'week' ? 'Next 7 Days' : 'Next 30 Days'}
+              </Text>
+            </View>
+          )}
+          {filters.guideId && (
+            <View style={ts.activeBadge}>
+              <Text style={ts.activeBadgeT}>{guides.find(g => g.id === filters.guideId)?.full_name || 'Guide'}</Text>
+            </View>
+          )}
+          {filters.vehicleId && (
+            <View style={ts.activeBadge}>
+              <Text style={ts.activeBadgeT}>{vehicles.find(v => v.id === filters.vehicleId)?.license_plate || 'Vehicle'}</Text>
+            </View>
+          )}
+          <TouchableOpacity style={[ts.activeBadge, { backgroundColor: C.danger + '18', borderColor: C.danger + '30' }]}
+            onPress={() => setFilters(DEFAULT_FILTERS)}>
+            <Text style={[ts.activeBadgeT, { color: C.danger }]}>Clear All</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
+      {/* Results count */}
+      <Text style={ts.resultCount}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</Text>
+
       <FlatList
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item }) => <BookingCard b={item} onPress={() => { setSelected(item); setShowDetail(true); }} />}
-        ListEmptyComponent={<EmptyView title="No bookings found" sub="Try adjusting filters or search." />}
+        ListEmptyComponent={<EmptyView title="No bookings found" sub="Try adjusting your filters or search." />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
-      <BookingDetailModal booking={selected} visible={showDetail} onClose={() => setShowDetail(false)} onRefetch={fetch} />
+
+      <BookingDetailModal booking={selected} visible={showDetail} onClose={() => setShowDetail(false)} onRefetch={fetchBookings} />
+      <BookingFilterSheet
+        visible={showFilters}
+        filters={filters}
+        guides={guides}
+        vehicles={vehicles}
+        onApply={setFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </View>
   );
 }
 
 const ts = StyleSheet.create({
-  searchWrap: { paddingHorizontal: 14, paddingVertical: 10 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14, color: C.text, paddingVertical: 0 },
+  filterBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.primarySoft, borderWidth: 1, borderColor: C.primary + '40', alignItems: 'center', justifyContent: 'center' },
+  filterBtnActive: { backgroundColor: C.primary, borderColor: C.primary },
+  filterCount: { position: 'absolute', top: -4, right: -4, backgroundColor: C.gold, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  activeBadge: { backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  activeBadgeT: { fontSize: 11, fontWeight: '700', color: C.textMuted },
+  resultCount: { fontSize: 11, fontWeight: '700', color: C.textMuted, paddingHorizontal: 14, marginBottom: 4 },
   chipRow: { paddingHorizontal: 14, paddingVertical: 6, gap: 8, flexDirection: 'row', alignItems: 'center' },
   chip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: C.input, borderWidth: 1, borderColor: C.border },
   chipT: { fontSize: 12, fontWeight: '700' },
