@@ -757,16 +757,621 @@ const fabSt = StyleSheet.create({
 // MAIN MARKETING SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type MarketingTab = 'vehicles' | 'safaris' | 'promotions';
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEBSITE ANALYTICS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface AnalyticsMetric { label: string; value: string; sub?: string; color: string }
+interface TopPage { path: string; views: number; pct: number }
+
+function WebsiteAnalyticsTab() {
+  const [metrics, setMetrics] = useState<AnalyticsMetric[]>([]);
+  const [topPages, setTopPages] = useState<TopPage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+
+  const fetch = useCallback(async () => {
+    try {
+      // Fetch from analytics_summary table (aggregated by period)
+      const { data } = await supabase
+        .from('analytics_summary')
+        .select('*')
+        .eq('period', period)
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setMetrics([
+          { label: 'Sessions',     value: (data.sessions    ?? 0).toLocaleString(), sub: `${data.sessions_change >= 0 ? '+' : ''}${data.sessions_change ?? 0}%`, color: C.primary },
+          { label: 'Page Views',   value: (data.page_views  ?? 0).toLocaleString(), sub: `${data.pv_change >= 0 ? '+' : ''}${data.pv_change ?? 0}%`, color: C.gold },
+          { label: 'Bounce Rate',  value: `${data.bounce_rate ?? 0}%`,              sub: 'avg session',  color: C.textMuted },
+          { label: 'Conversions',  value: (data.conversions ?? 0).toLocaleString(), sub: `${data.conv_rate ?? 0}% rate`, color: C.success },
+        ]);
+        try { setTopPages(JSON.parse(data.top_pages || '[]')); } catch { setTopPages([]); }
+      } else {
+        // Fallback: fetch page events from analytics_events if exists
+        const { data: events } = await supabase
+          .from('analytics_events')
+          .select('page_path, count')
+          .order('count', { ascending: false })
+          .limit(5);
+        if (events && events.length > 0) {
+          const total = events.reduce((s: number, e: any) => s + (e.count || 0), 0);
+          setTopPages(events.map((e: any) => ({ path: e.page_path || '/', views: e.count || 0, pct: total ? Math.round((e.count / total) * 100) : 0 })));
+        }
+        setMetrics([
+          { label: 'Sessions',    value: '—', sub: 'No data yet', color: C.primary },
+          { label: 'Page Views',  value: '—', sub: 'Connect analytics', color: C.gold },
+          { label: 'Bounce Rate', value: '—', sub: '', color: C.textMuted },
+          { label: 'Conversions', value: '—', sub: '', color: C.success },
+        ]);
+      }
+    } catch { /* table may not exist yet */ }
+    finally { setLoading(false); setRefreshing(false); }
+  }, [period]);
+
+  useEffect(() => { setLoading(true); fetch(); }, [fetch]);
+  const onRefresh = useCallback(() => { setRefreshing(true); fetch(); }, [fetch]);
+
+  if (loading) return <LoadingView label="Loading analytics…" />;
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+      {/* Period selector */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+        {(['7d','30d','90d'] as const).map(p => (
+          <TouchableOpacity key={p} style={[an.periodBtn, period === p && an.periodBtnOn]} onPress={() => setPeriod(p)}>
+            <Text style={[an.periodT, period === p && an.periodTOn]}>{p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Metric cards 2×2 */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        {metrics.map(m => (
+          <View key={m.label} style={an.metCard}>
+            <Text style={an.metLabel}>{m.label}</Text>
+            <Text style={[an.metVal, { color: m.color }]}>{m.value}</Text>
+            {m.sub ? <Text style={an.metSub}>{m.sub}</Text> : null}
+          </View>
+        ))}
+      </View>
+
+      {/* Top pages */}
+      {topPages.length > 0 && (
+        <View style={an.sect}>
+          <Text style={an.sectTitle}>Top Pages</Text>
+          {topPages.map((p, i) => (
+            <View key={i} style={an.pageRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={an.pagePath} numberOfLines={1}>{p.path}</Text>
+                <View style={[an.bar, { width: `${Math.min(p.pct, 100)}%` as any }]} />
+              </View>
+              <Text style={an.pageViews}>{p.views.toLocaleString()}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {topPages.length === 0 && metrics[0]?.value === '—' && (
+        <View style={an.connectCard}>
+          <Text style={an.connectTitle}>Analytics Not Connected</Text>
+          <Text style={an.connectSub}>Connect your analytics source in the Jackal Dashboard settings to view website traffic, engagement metrics, and conversion data here.</Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const an = StyleSheet.create({
+  periodBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  periodBtnOn: { backgroundColor: C.primary, borderColor: C.primary },
+  periodT: { fontSize: 12, fontWeight: '600', color: C.textMuted },
+  periodTOn: { color: '#fff' },
+  metCard: { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
+  metLabel: { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  metVal: { fontSize: 24, fontWeight: '800', letterSpacing: -0.6, marginBottom: 2 },
+  metSub: { fontSize: 11, color: C.textMuted },
+  sect: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  sectTitle: { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
+  pageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border + '50', gap: 12 },
+  pagePath: { fontSize: 12, color: C.text, fontWeight: '500', marginBottom: 4 },
+  bar: { height: 4, backgroundColor: C.primary + '40', borderRadius: 2 },
+  pageViews: { fontSize: 13, fontWeight: '700', color: C.primary, minWidth: 50, textAlign: 'right' },
+  connectCard: { backgroundColor: C.card, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  connectTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 8, textAlign: 'center' },
+  connectSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20 },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLOG MANAGEMENT TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type BlogStatus = 'draft' | 'published' | 'archived';
+
+interface BlogPost {
+  id: string;
+  title: string;
+  excerpt?: string;
+  content?: string;
+  status: BlogStatus;
+  cover_image_url?: string;
+  tags?: string[];
+  views?: number;
+  author_name?: string;
+  published_at?: string;
+  created_at?: string;
+}
+
+const BLOG_STATUS_CFG: Record<BlogStatus, { bg: string; text: string; label: string }> = {
+  draft:     { bg: C.input,      text: C.textMuted, label: 'Draft' },
+  published: { bg: C.primarySoft, text: C.primary,  label: 'Published' },
+  archived:  { bg: '#f5e8ce',    text: C.gold,      label: 'Archived' },
+};
+
+function BlogFormModal({ visible, post, onClose, onSaved }: {
+  visible: boolean; post: BlogPost | null; onClose: () => void; onSaved: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [excerpt, setExcerpt] = useState('');
+  const [content, setContent] = useState('');
+  const [status, setStatus] = useState<BlogStatus>('draft');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [tags, setTags] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setTitle(post?.title || '');
+      setExcerpt(post?.excerpt || '');
+      setContent(post?.content || '');
+      setStatus(post?.status || 'draft');
+      setCoverUrl(post?.cover_image_url || '');
+      setTags((post?.tags || []).join(', '));
+    }
+  }, [visible, post]);
+
+  const save = useCallback(async () => {
+    if (!title.trim()) { Alert.alert('Required', 'Title is required.'); return; }
+    setSaving(true);
+    try {
+      const payload: Record<string, any> = {
+        title: title.trim(),
+        excerpt: excerpt.trim() || null,
+        content: content.trim() || null,
+        status,
+        cover_image_url: coverUrl.trim() || null,
+        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+        published_at: status === 'published' ? new Date().toISOString() : null,
+      };
+      let err;
+      if (post?.id) {
+        ({ error: err } = await supabase.from('blog_posts').update(payload).eq('id', post.id));
+      } else {
+        ({ error: err } = await supabase.from('blog_posts').insert(payload));
+      }
+      if (err) throw err;
+      onSaved(); onClose();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save post.'); }
+    finally { setSaving(false); }
+  }, [title, excerpt, content, status, coverUrl, tags, post, onSaved, onClose]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={pm.header}>
+            <Text style={pm.headerTitle}>{post ? 'Edit Post' : 'New Blog Post'}</Text>
+            <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+            <FieldLabel label="Title *" />
+            <TextF value={title} onChange={setTitle} placeholder="Post title…" />
+            <FieldLabel label="Excerpt" />
+            <TextF value={excerpt} onChange={setExcerpt} placeholder="Brief description shown in listings…" multiline />
+            <FieldLabel label="Content" />
+            <TextF value={content} onChange={setContent} placeholder="Full article content…" multiline />
+            <FieldLabel label="Cover Image URL" />
+            <TextF value={coverUrl} onChange={setCoverUrl} placeholder="https://…" keyboardType="url" />
+            <FieldLabel label="Tags (comma-separated)" />
+            <TextF value={tags} onChange={setTags} placeholder="gorilla, safari, uganda" />
+            <FieldLabel label="Status" />
+            <TouchableOpacity style={pm.selector} onPress={() => setShowStatusPicker(true)}>
+              <View style={[{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: BLOG_STATUS_CFG[status].bg }]}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: BLOG_STATUS_CFG[status].text }}>{BLOG_STATUS_CFG[status].label}</Text>
+              </View>
+              <Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>{post ? 'Save Changes' : 'Create Post'}</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+          <PickerModal visible={showStatusPicker} title="Post Status"
+            options={(['draft','published','archived'] as BlogStatus[]).map(s => ({ value: s, label: BLOG_STATUS_CFG[s].label }))}
+            selected={status} onSelect={o => setStatus(o.value as BlogStatus)} onClose={() => setShowStatusPicker(false)} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function BlogManagementTab() {
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<BlogStatus | 'all'>('all');
+  const [editPost, setEditPost] = useState<BlogPost | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  const fetchPosts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .select('id, title, excerpt, status, cover_image_url, tags, views, author_name, published_at, created_at')
+      .order('created_at', { ascending: false });
+    if (error) console.error('[Blog]', error.message);
+    setPosts((data || []) as BlogPost[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchPosts().finally(() => setLoading(false)); }, [fetchPosts]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchPosts(); setRefreshing(false); }, [fetchPosts]);
+
+  const deletePost = useCallback((p: BlogPost) => {
+    Alert.alert('Delete Post', `Remove "${p.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const { error } = await supabase.from('blog_posts').delete().eq('id', p.id);
+        if (error) Alert.alert('Error', error.message);
+        else fetchPosts();
+      }},
+    ]);
+  }, [fetchPosts]);
+
+  const filtered = useMemo(() =>
+    statusFilter === 'all' ? posts : posts.filter(p => p.status === statusFilter),
+  [posts, statusFilter]);
+
+  if (loading) return <LoadingView label="Loading blog posts…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Status filter pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10 }}>
+        {(['all','published','draft','archived'] as const).map(f => (
+          <TouchableOpacity key={f} style={[bl.filterPill, statusFilter === f && bl.filterPillOn]} onPress={() => setStatusFilter(f)}>
+            <Text style={[bl.filterT, statusFilter === f && bl.filterTOn]}>{f === 'all' ? 'All' : BLOG_STATUS_CFG[f as BlogStatus].label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: p }) => {
+          const st = BLOG_STATUS_CFG[p.status] || BLOG_STATUS_CFG.draft;
+          return (
+            <TouchableOpacity style={bl.card} onPress={() => { setEditPost(p); setShowModal(true); }} activeOpacity={0.82}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
+                  <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
+                </View>
+                <TouchableOpacity style={bl.deleteBtn} onPress={() => deletePost(p)}>
+                  <Ico.Trash s={14} c={C.danger} />
+                </TouchableOpacity>
+              </View>
+              <Text style={bl.title} numberOfLines={2}>{p.title}</Text>
+              {p.excerpt ? <Text style={bl.excerpt} numberOfLines={2}>{p.excerpt}</Text> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                {p.views != null ? <Text style={bl.meta}>{p.views.toLocaleString()} views</Text> : null}
+                {p.published_at ? <Text style={bl.meta}>{new Date(p.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text> : null}
+                {(p.tags || []).slice(0, 2).map(t => (
+                  <View key={t} style={bl.tag}><Text style={bl.tagT}>{t}</Text></View>
+                ))}
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={<EmptyView title="No blog posts" sub="Create your first post using the + button." />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+      />
+
+      <TouchableOpacity style={fabSt.fab} onPress={() => { setEditPost(null); setShowModal(true); }}>
+        <Ico.Plus s={22} c="#fff" />
+      </TouchableOpacity>
+      <BlogFormModal visible={showModal} post={editPost} onClose={() => setShowModal(false)} onSaved={fetchPosts} />
+    </View>
+  );
+}
+
+const bl = StyleSheet.create({
+  filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  filterPillOn: { backgroundColor: C.primary, borderColor: C.primary },
+  filterT: { fontSize: 12, fontWeight: '600', color: C.textMuted },
+  filterTOn: { color: '#fff' },
+  card: { backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+  statusT: { fontSize: 11, fontWeight: '700' },
+  deleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#fde8e0', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 15, fontWeight: '800', color: C.text, letterSpacing: -0.3, marginBottom: 4 },
+  excerpt: { fontSize: 12, color: C.textMuted, lineHeight: 17 },
+  meta: { fontSize: 11, color: C.textMuted },
+  tag: { backgroundColor: C.primarySoft, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  tagT: { fontSize: 10, fontWeight: '700', color: C.primary },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLOG ANALYTICS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function BlogAnalyticsTab() {
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchPosts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .select('id, title, status, views, published_at, tags')
+      .order('views', { ascending: false });
+    if (error) console.error('[BlogAnalytics]', error.message);
+    setPosts((data || []) as BlogPost[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchPosts().finally(() => setLoading(false)); }, [fetchPosts]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchPosts(); setRefreshing(false); }, [fetchPosts]);
+
+  const totalViews = useMemo(() => posts.reduce((s, p) => s + (p.views || 0), 0), [posts]);
+  const published  = useMemo(() => posts.filter(p => p.status === 'published'), [posts]);
+  const maxViews   = useMemo(() => Math.max(...posts.map(p => p.views || 0), 1), [posts]);
+
+  if (loading) return <LoadingView label="Loading blog analytics…" />;
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+
+      {/* Summary cards */}
+      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+        <View style={[an.metCard, { flex: 1 }]}>
+          <Text style={an.metLabel}>Total Views</Text>
+          <Text style={[an.metVal, { color: C.primary }]}>{totalViews.toLocaleString()}</Text>
+        </View>
+        <View style={[an.metCard, { flex: 1 }]}>
+          <Text style={an.metLabel}>Live Posts</Text>
+          <Text style={[an.metVal, { color: C.success }]}>{published.length}</Text>
+        </View>
+      </View>
+
+      {posts.length === 0 ? (
+        <EmptyView title="No blog data" sub="Publish blog posts to see analytics." />
+      ) : (
+        <View style={an.sect}>
+          <Text style={an.sectTitle}>Post Performance</Text>
+          {posts.map(p => {
+            const barPct = maxViews > 0 ? (p.views || 0) / maxViews : 0;
+            const st = BLOG_STATUS_CFG[p.status as BlogStatus] || BLOG_STATUS_CFG.draft;
+            return (
+              <View key={p.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '50' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1, marginRight: 12 }} numberOfLines={1}>{p.title}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
+                      <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: C.primary }}>{(p.views || 0).toLocaleString()}</Text>
+                  </View>
+                </View>
+                {/* Progress bar */}
+                <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
+                  <View style={{ height: 6, width: `${barPct * 100}%` as any, backgroundColor: C.primary, borderRadius: 3 }} />
+                </View>
+                {p.published_at ? <Text style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>Published {new Date(p.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text> : null}
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEDIA MANAGEMENT TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface MediaAsset {
+  id: string;
+  file_name: string;
+  file_type?: string;
+  file_size?: number;
+  public_url?: string;
+  bucket?: string;
+  folder?: string;
+  uploaded_by?: string;
+  created_at?: string;
+}
+
+function MediaManagementTab() {
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newUrl, setNewUrl] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('image/jpeg');
+  const [saving, setSaving] = useState(false);
+
+  const fetchAssets = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('media_assets')
+      .select('id, file_name, file_type, file_size, public_url, bucket, folder, uploaded_by, created_at')
+      .order('created_at', { ascending: false });
+    if (error) console.error('[Media]', error.message);
+    setAssets((data || []) as MediaAsset[]);
+  }, []);
+
+  useEffect(() => { setLoading(true); fetchAssets().finally(() => setLoading(false)); }, [fetchAssets]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchAssets(); setRefreshing(false); }, [fetchAssets]);
+
+  const deleteAsset = useCallback((a: MediaAsset) => {
+    Alert.alert('Delete Asset', `Remove "${a.file_name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const { error } = await supabase.from('media_assets').delete().eq('id', a.id);
+        if (error) Alert.alert('Error', error.message);
+        else fetchAssets();
+      }},
+    ]);
+  }, [fetchAssets]);
+
+  const addAsset = useCallback(async () => {
+    if (!newUrl.trim() || !newName.trim()) { Alert.alert('Required', 'File name and URL are required.'); return; }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('media_assets').insert({
+        file_name: newName.trim(),
+        file_type: newType,
+        public_url: newUrl.trim(),
+      });
+      if (error) throw error;
+      setShowAddModal(false); setNewUrl(''); setNewName(''); setNewType('image/jpeg');
+      fetchAssets();
+    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to add asset.'); }
+    finally { setSaving(false); }
+  }, [newUrl, newName, newType, fetchAssets]);
+
+  const filtered = useMemo(() =>
+    search ? assets.filter(a => a.file_name.toLowerCase().includes(search.toLowerCase())) : assets,
+  [assets, search]);
+
+  const fmtSize = (bytes?: number) => {
+    if (!bytes) return '';
+    if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
+    if (bytes > 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${bytes} B`;
+  };
+
+  const typeIcon = (type?: string) => {
+    if (!type) return '📄';
+    if (type.startsWith('image/')) return '🖼️';
+    if (type.startsWith('video/')) return '🎬';
+    if (type.includes('pdf')) return '📕';
+    return '📄';
+  };
+
+  if (loading) return <LoadingView label="Loading media assets…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Search bar */}
+      <View style={md.searchRow}>
+        <View style={md.searchBox}>
+          <Ico.Globe s={14} c={C.textMuted} />
+          <TextInput style={md.searchInput} value={search} onChangeText={setSearch}
+            placeholder="Search assets…" placeholderTextColor={C.textMuted} />
+        </View>
+        <View style={md.countBadge}>
+          <Text style={md.countT}>{assets.length}</Text>
+        </View>
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: a }) => (
+          <View style={md.card}>
+            <View style={md.iconBox}>
+              <Text style={{ fontSize: 22 }}>{typeIcon(a.file_type)}</Text>
+            </View>
+            <View style={{ flex: 1, paddingHorizontal: 12 }}>
+              <Text style={md.fileName} numberOfLines={1}>{a.file_name}</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 3 }}>
+                {a.file_type ? <Text style={md.meta}>{a.file_type.split('/')[1]?.toUpperCase()}</Text> : null}
+                {a.file_size ? <Text style={md.meta}>{fmtSize(a.file_size)}</Text> : null}
+                {a.folder ? <Text style={md.meta}>{a.folder}</Text> : null}
+              </View>
+              {a.public_url ? (
+                <Text style={md.url} numberOfLines={1}>{a.public_url}</Text>
+              ) : null}
+            </View>
+            <TouchableOpacity style={md.delBtn} onPress={() => deleteAsset(a)}>
+              <Ico.Trash s={14} c={C.danger} />
+            </TouchableOpacity>
+          </View>
+        )}
+        ListEmptyComponent={<EmptyView title={search ? 'No results' : 'No media assets'} sub={search ? 'Try a different search term.' : 'Add media assets using the + button.'} />}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+      />
+
+      <TouchableOpacity style={fabSt.fab} onPress={() => setShowAddModal(true)}>
+        <Ico.Plus s={22} c="#fff" />
+      </TouchableOpacity>
+
+      {/* Add asset modal */}
+      <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddModal(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={{ flex: 1, backgroundColor: C.bg }}>
+            <View style={pm.header}>
+              <Text style={pm.headerTitle}>Add Media Asset</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+              <FieldLabel label="File Name *" />
+              <TextF value={newName} onChange={setNewName} placeholder="e.g. gorilla-trekking-hero.jpg" />
+              <FieldLabel label="Public URL *" />
+              <TextF value={newUrl} onChange={setNewUrl} placeholder="https://…" keyboardType="url" />
+              <FieldLabel label="File Type" />
+              <TextF value={newType} onChange={setNewType} placeholder="image/jpeg" />
+              <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={addAsset} disabled={saving}>
+                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>Add Asset</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
+  );
+}
+
+const md = StyleSheet.create({
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  searchInput: { flex: 1, fontSize: 14, color: C.text },
+  countBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  countT: { fontSize: 13, fontWeight: '700', color: C.primary },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  iconBox: { width: 44, height: 44, borderRadius: 10, backgroundColor: C.input, alignItems: 'center', justifyContent: 'center' },
+  fileName: { fontSize: 14, fontWeight: '700', color: C.text },
+  meta: { fontSize: 11, color: C.textMuted },
+  url: { fontSize: 10, color: C.gold, marginTop: 3, fontStyle: 'italic' },
+  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#fde8e0', alignItems: 'center', justifyContent: 'center' },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN MARKETING SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type MarketingTab = 'vehicles' | 'safaris' | 'promotions' | 'analytics' | 'blog' | 'blog-analytics' | 'media';
 
 export function MarketingScreen() {
   const [tab, setTab] = useState<MarketingTab>('vehicles');
   const insets = useSafeAreaInsets();
 
   const TABS: { key: MarketingTab; label: string }[] = [
-    { key: 'vehicles',   label: 'Vehicle Catalog' },
-    { key: 'safaris',    label: 'Safari Catalog' },
-    { key: 'promotions', label: 'Promotions' },
+    { key: 'vehicles',       label: 'Vehicles' },
+    { key: 'safaris',        label: 'Safaris' },
+    { key: 'promotions',     label: 'Promotions' },
+    { key: 'analytics',      label: 'Web Analytics' },
+    { key: 'blog',           label: 'Blog' },
+    { key: 'blog-analytics', label: 'Blog Stats' },
+    { key: 'media',          label: 'Media' },
   ];
 
   return (
@@ -787,9 +1392,13 @@ export function MarketingScreen() {
 
       {/* Tab content */}
       <View style={{ flex: 1 }}>
-        {tab === 'vehicles'   && <VehicleCatalogTab />}
-        {tab === 'safaris'    && <SafariCatalogTab />}
-        {tab === 'promotions' && <PromotionsTab />}
+        {tab === 'vehicles'       && <VehicleCatalogTab />}
+        {tab === 'safaris'        && <SafariCatalogTab />}
+        {tab === 'promotions'     && <PromotionsTab />}
+        {tab === 'analytics'      && <WebsiteAnalyticsTab />}
+        {tab === 'blog'           && <BlogManagementTab />}
+        {tab === 'blog-analytics' && <BlogAnalyticsTab />}
+        {tab === 'media'          && <MediaManagementTab />}
       </View>
     </View>
   );

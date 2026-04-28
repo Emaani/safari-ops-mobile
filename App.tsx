@@ -57,7 +57,7 @@ const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 type TabScreenConfig = {
-  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'More' | 'Safari' | 'Marketing';
+  name: 'Dashboard' | 'Bookings' | 'Fleet' | 'Finance' | 'Safari' | 'Marketing';
   component: React.ComponentType<any>;
   labelKey: string;
   icon: ({ color, size }: { color: string; size: number }) => React.JSX.Element;
@@ -339,11 +339,6 @@ function AppNavigator() {
           component={NotificationsScreen}
           options={{ title: t('common.notifications') }}
         />
-        <Stack.Screen
-          name="Fleet"
-          component={FleetScreen}
-          options={{ headerShown: false }}
-        />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -356,12 +351,12 @@ function MainTabNavigator() {
 
   const tabs = useMemo<TabScreenConfig[]>(() => {
     const items: TabScreenConfig[] = [
-      { name: 'Dashboard', component: DashboardScreen,       labelKey: 'common.dashboard', icon: DashboardIcon  },
-      { name: 'Bookings',  component: BookingsScreen,        labelKey: 'common.bookings',  icon: BookingsIcon   },
-      { name: 'Safari',    component: SafariManagementScreen, labelKey: 'common.safari',   icon: SafariIcon     },
-      { name: 'Finance',   component: FinanceScreen,         labelKey: 'common.finance',   icon: FinanceIcon    },
-      { name: 'Marketing', component: MarketingScreen,       labelKey: 'common.marketing', icon: MarketingIcon  },
-      { name: 'More',      component: MoreScreen,            labelKey: 'common.more',      icon: MoreIcon       },
+      { name: 'Dashboard', component: DashboardScreen,        labelKey: 'common.dashboard', icon: DashboardIcon  },
+      { name: 'Bookings',  component: BookingsScreen,         labelKey: 'common.bookings',  icon: BookingsIcon   },
+      { name: 'Fleet',     component: FleetScreen,            labelKey: 'common.fleet',     icon: FleetIcon      },
+      { name: 'Finance',   component: FinanceScreen,          labelKey: 'common.finance',   icon: FinanceIcon    },
+      { name: 'Safari',    component: SafariManagementScreen, labelKey: 'common.safari',    icon: SafariIcon     },
+      { name: 'Marketing', component: MarketingScreen,        labelKey: 'common.marketing', icon: MarketingIcon  },
     ];
     return isRTL ? [...items].reverse() : items;
   }, [isRTL]);
@@ -503,11 +498,13 @@ function NotificationBell({ navigation, userId }: { navigation: any; userId: str
 
 function DashboardIcon({ color, size }: { color: string; size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect x="3"  y="3"  width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
-      <Rect x="14" y="3"  width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
-      <Rect x="3"  y="14" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
-      <Rect x="14" y="14" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* Grid 2×2 — dashboard overview */}
+      <Rect x="3"  y="3"  width="7" height="7" rx="1.5" />
+      <Rect x="14" y="3"  width="7" height="7" rx="1.5" />
+      <Rect x="3"  y="14" width="7" height="7" rx="1.5" />
+      <Rect x="14" y="14" width="7" height="7" rx="1.5" />
     </Svg>
   );
 }
@@ -515,9 +512,11 @@ function DashboardIcon({ color, size }: { color: string; size: number }) {
 function BookingsIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <Rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <Path d="M16 2v4" /><Path d="M8 2v4" /><Path d="M3 10h18" />
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* Calendar with check mark */}
+      <Rect x="3" y="4" width="18" height="18" rx="2" />
+      <Path d="M16 2v4M8 2v4M3 10h18" />
+      <Path d="M9 16l2 2 4-4" />
     </Svg>
   );
 }
@@ -525,9 +524,13 @@ function BookingsIcon({ color, size }: { color: string; size: number }) {
 function FleetIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M1 3h15v13H1z" /><Path d="M16 8h4l3 3v5h-7V8z" />
-      <Circle cx="5.5" cy="18.5" r="2.5" /><Circle cx="18.5" cy="18.5" r="2.5" />
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* 4×4 vehicle silhouette */}
+      <Path d="M5 17H3a1 1 0 0 1-1-1v-4l2-5h14l2 5v4a1 1 0 0 1-1 1h-2" />
+      <Path d="M5 17h14" />
+      <Circle cx="7.5" cy="17" r="2" />
+      <Circle cx="16.5" cy="17" r="2" />
+      <Path d="M4 12h16" />
     </Svg>
   );
 }
@@ -535,19 +538,9 @@ function FleetIcon({ color, size }: { color: string; size: number }) {
 function FinanceIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M12 2v20" /><Path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </Svg>
-  );
-}
-
-function MoreIcon({ color, size }: { color: string; size: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="1" fill={color} />
-      <Circle cx="12" cy="5"  r="1" fill={color} />
-      <Circle cx="12" cy="19" r="1" fill={color} />
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* Dollar sign + trend */}
+      <Path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </Svg>
   );
 }
@@ -555,7 +548,8 @@ function MoreIcon({ color, size }: { color: string; size: number }) {
 function SafariIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* Compass — safari navigation */}
       <Circle cx="12" cy="12" r="10" />
       <Path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
     </Svg>
@@ -565,8 +559,11 @@ function SafariIcon({ color, size }: { color: string; size: number }) {
 function MarketingIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {/* Megaphone — marketing broadcast */}
+      <Path d="M3 11v2a1 1 0 0 0 1 1h2l3 4v-12L6 10H4a1 1 0 0 0-1 1z" />
+      <Path d="M19 5c1.5 1.5 2 3.5 2 7s-.5 5.5-2 7" />
+      <Path d="M15.5 8.5c.8.8 1.2 2 1.2 3.5s-.4 2.7-1.2 3.5" />
     </Svg>
   );
 }
