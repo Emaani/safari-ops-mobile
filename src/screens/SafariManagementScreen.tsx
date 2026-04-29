@@ -22,6 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
+import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
 import type {
   SafariBooking, SafariGuide, PermitCatalog, SafariPackage, SafariBookingPermit,
@@ -141,14 +142,6 @@ function getPaymentLabel(paid = 0, total = 0, deposit = 0): { label: string; col
 }
 
 // ─── Shared tiny components ───────────────────────────────────────────────────
-function LoadingView({ label }: { label?: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 56 }}>
-      <ActivityIndicator size="large" color={C.primary} />
-      {label ? <Text style={{ marginTop: 12, fontSize: 14, color: C.textMuted }}>{label}</Text> : null}
-    </View>
-  );
-}
 function EmptyView({ title, sub }: { title: string; sub?: string }) {
   return (
     <View style={{ alignItems: 'center', paddingVertical: 60 }}>

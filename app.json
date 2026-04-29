@@ -2,7 +2,7 @@
   "expo": {
     "name": "Jackal Adventures",
     "slug": "safari-ops-mobile",
-    "version": "1.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3.8",
+      "buildNumber": "6",
       "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
         "UIBackgroundModes": [

@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
+import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
 import type { PortalVehicle, Promotion, SafariPackage } from '../types/safari';
 
@@ -93,14 +94,6 @@ const Ico = {
 };
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
-function LoadingView({ label }: { label?: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 56 }}>
-      <ActivityIndicator size="large" color={C.primary} />
-      {label ? <Text style={{ marginTop: 12, fontSize: 14, color: C.textMuted }}>{label}</Text> : null}
-    </View>
-  );
-}
 function EmptyView({ title, sub }: { title: string; sub?: string }) {
   return (
     <View style={{ alignItems: 'center', paddingVertical: 60 }}>
@@ -758,122 +751,458 @@ const fabSt = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// MARKETING COMMAND CENTER TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface CmdKPI {
+  label: string;
+  value: string;
+  sub?: string;
+  color: string;
+  icon: keyof typeof Ico;
+}
+
+interface FunnelStep {
+  label: string;
+  count: number;
+  pct: number;
+  color: string;
+}
+
+interface TopPackageRow {
+  name: string;
+  bookings: number;
+  revenue: number;
+  pct: number;
+}
+
+function MarketingCommandCenterTab() {
+  const [kpis, setKpis]             = useState<CmdKPI[]>([]);
+  const [funnel, setFunnel]         = useState<FunnelStep[]>([]);
+  const [topPkgs, setTopPkgs]       = useState<TopPackageRow[]>([]);
+  const [portalStats, setPortalStats] = useState({ vehicles: 0, packages: 0, promotions: 0 });
+  const [revenueStats, setRevStats]  = useState({ total: 0, collected: 0, outstanding: 0, margin: 0 });
+  const [period, setPeriod]          = useState<'7d' | '30d' | '90d' | 'all'>('30d');
+  const [loading, setLoading]        = useState(true);
+  const [refreshing, setRefreshing]  = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 0;
+      const cutoff = days > 0 ? new Date(Date.now() - days * 86400000).toISOString() : null;
+
+      // ── 1. Dashboard KPIs (live view) ───────────────────────────────────────
+      const { data: kpiRow } = await supabase
+        .from('dashboard_kpis')
+        .select('total_bookings,active_bookings,active_safaris,outstanding_payments,total_revenue,total_expenses')
+        .maybeSingle();
+
+      // ── 2. Safari financial summary ─────────────────────────────────────────
+      const { data: sfin } = await supabase
+        .from('safari_financial_summary')
+        .select('total_bookings,confirmed_bookings,completed_bookings,total_revenue_usd,total_collected,total_outstanding')
+        .eq('currency', 'USD')
+        .maybeSingle();
+
+      // ── 3. Booking period data for funnel & packages ────────────────────────
+      let bq = supabase
+        .from('safari_bookings')
+        .select('id,status,total_price_usd,total_expenses_usd,gross_profit_usd,profit_margin,amount_paid,package_id,created_at,pax_count');
+      if (cutoff) bq = bq.gte('created_at', cutoff);
+      const { data: bookings } = await bq;
+      const bks = (bookings || []) as Record<string, any>[];
+
+      // ── 4. Portal catalog stats ─────────────────────────────────────────────
+      const [{ count: visVeh }, { count: visPkg }, { count: activeProm }] = await Promise.all([
+        supabase.from('vehicles').select('id', { count: 'exact', head: true }).eq('portal_visible', true),
+        supabase.from('safari_packages').select('id', { count: 'exact', head: true }).eq('portal_visible', true),
+        supabase.from('portal_promotions').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      ]);
+
+      // ── 5. Top packages ─────────────────────────────────────────────────────
+      const pkgCounts: Record<string, { count: number; revenue: number }> = {};
+      bks.forEach(b => {
+        const pid = b.package_id;
+        if (!pid) return;
+        if (!pkgCounts[pid]) pkgCounts[pid] = { count: 0, revenue: 0 };
+        pkgCounts[pid].count++;
+        pkgCounts[pid].revenue += Number(b.total_price_usd) || 0;
+      });
+      const pkgIds = Object.keys(pkgCounts);
+      let pkgNames: Record<string, string> = {};
+      if (pkgIds.length > 0) {
+        const { data: pkgData } = await supabase.from('safari_packages').select('id,name').in('id', pkgIds.slice(0, 20));
+        (pkgData || []).forEach((p: any) => { pkgNames[p.id] = p.name; });
+      }
+      const maxPkgBks = Math.max(...Object.values(pkgCounts).map(v => v.count), 1);
+      const topPackages: TopPackageRow[] = Object.entries(pkgCounts)
+        .sort(([, a], [, b]) => b.count - a.count)
+        .slice(0, 5)
+        .map(([pid, { count, revenue }]) => ({
+          name: pkgNames[pid] || 'Unknown Package',
+          bookings: count,
+          revenue,
+          pct: Math.round((count / maxPkgBks) * 100),
+        }));
+
+      // ── Compute derived stats ────────────────────────────────────────────────
+      const totalBks   = bks.length;
+      const totalRev   = bks.reduce((s, b) => s + (Number(b.total_price_usd) || 0), 0);
+      const totalExp   = bks.reduce((s, b) => s + (Number(b.total_expenses_usd) || 0), 0);
+      const totalProfit = bks.reduce((s, b) => s + (Number(b.gross_profit_usd) || 0), 0);
+      const totalPaid  = bks.reduce((s, b) => s + (Number(b.amount_paid) || 0), 0);
+      const outstanding = totalRev - totalPaid;
+      const margin     = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
+
+      const confirmed  = bks.filter(b => ['confirmed', 'active', 'completed'].includes(b.status)).length;
+      const convRate   = totalBks > 0 ? Math.round((confirmed / totalBks) * 100) : 0;
+
+      // Use dashboard KPI values if period is "all"
+      const displayRev = period === 'all' && sfin
+        ? Number(sfin.total_revenue_usd) || totalRev
+        : totalRev;
+      const displayColl = period === 'all' && sfin
+        ? Number(sfin.total_collected) || totalPaid
+        : totalPaid;
+      const displayOut = period === 'all' && sfin
+        ? Number(sfin.total_outstanding) || outstanding
+        : outstanding;
+
+      setKpis([
+        { label: 'Bookings',     value: totalBks.toLocaleString(),           sub: period === 'all' ? 'All time' : `Last ${period}`, color: C.primary, icon: 'Globe' },
+        { label: 'Revenue',      value: `$${Math.round(displayRev).toLocaleString()}`, sub: 'Total USD',  color: C.gold,    icon: 'Globe' },
+        { label: 'Conv. Rate',   value: `${convRate}%`,                       sub: `${confirmed} confirmed`, color: C.success, icon: 'Eye' },
+        { label: 'Outstanding',  value: `$${Math.round(displayOut).toLocaleString()}`, sub: 'Balance due', color: C.danger,  icon: 'Globe' },
+      ]);
+
+      // Funnel
+      const statusOrder = ['draft', 'pending', 'confirmed', 'active', 'completed', 'cancelled'];
+      const statusMap: Record<string, number> = {};
+      bks.forEach(b => { const s = b.status || 'pending'; statusMap[s] = (statusMap[s] || 0) + 1; });
+      const funnelSteps: FunnelStep[] = statusOrder
+        .filter(s => (statusMap[s] || 0) > 0)
+        .map(s => ({
+          label: s.charAt(0).toUpperCase() + s.slice(1),
+          count: statusMap[s] || 0,
+          pct: totalBks > 0 ? Math.round(((statusMap[s] || 0) / totalBks) * 100) : 0,
+          color: STATUS_COLORS[s] || C.textMuted,
+        }));
+
+      setFunnel(funnelSteps);
+      setTopPkgs(topPackages);
+      setPortalStats({ vehicles: visVeh || 0, packages: visPkg || 0, promotions: activeProm || 0 });
+      setRevStats({ total: displayRev, collected: displayColl, outstanding: displayOut, margin });
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error('[CommandCenter]', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [period]);
+
+  useEffect(() => { setLoading(true); fetchAll(); }, [fetchAll]);
+  const onRefresh = useCallback(() => { setRefreshing(true); fetchAll(); }, [fetchAll]);
+
+  if (loading) return <LoadingView label="Loading command center…" />;
+
+  const collectedPct = revenueStats.total > 0 ? Math.round((revenueStats.collected / revenueStats.total) * 100) : 0;
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+
+      {/* Period selector */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {(['7d', '30d', '90d', 'all'] as const).map(p => (
+          <TouchableOpacity key={p} style={[an.periodBtn, period === p && an.periodBtnOn]} onPress={() => setPeriod(p)}>
+            <Text style={[an.periodT, period === p && an.periodTOn]}>
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : 'All Time'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        {lastUpdated && (
+          <Text style={{ fontSize: 10, color: C.textMuted, alignSelf: 'center', marginLeft: 4 }}>
+            Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        )}
+      </View>
+
+      {/* KPI strip */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        {kpis.map(k => (
+          <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
+            <Text style={cc.kpiLabel}>{k.label}</Text>
+            <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
+            {k.sub ? <Text style={cc.kpiSub}>{k.sub}</Text> : null}
+          </View>
+        ))}
+      </View>
+
+      {/* Revenue & collection */}
+      <View style={cc.sect}>
+        <Text style={cc.sectTitle}>Revenue & Collections</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+          {[
+            { label: 'Total Revenue', value: `$${Math.round(revenueStats.total).toLocaleString()}`, color: C.primary },
+            { label: 'Collected',     value: `$${Math.round(revenueStats.collected).toLocaleString()}`, color: C.success },
+            { label: 'Outstanding',   value: `$${Math.round(revenueStats.outstanding).toLocaleString()}`, color: C.danger },
+          ].map(r => (
+            <View key={r.label} style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={[cc.revVal, { color: r.color }]}>{r.value}</Text>
+              <Text style={cc.revLabel}>{r.label}</Text>
+            </View>
+          ))}
+        </View>
+        {/* Collection bar */}
+        <View style={cc.collBarTrack}>
+          <View style={[cc.collBarFill, { width: `${collectedPct}%` as any }]} />
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 }}>
+          <Text style={cc.barCaption}>{collectedPct}% collected</Text>
+          <Text style={cc.barCaption}>Margin: {revenueStats.margin.toFixed(1)}%</Text>
+        </View>
+      </View>
+
+      {/* Booking conversion funnel */}
+      {funnel.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Booking Conversion Funnel</Text>
+          {funnel.map(f => (
+            <View key={f.label} style={cc.funnelRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, width: 90 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: f.color }} />
+                <Text style={cc.funnelLabel}>{f.label}</Text>
+              </View>
+              <View style={{ flex: 1, height: 8, backgroundColor: C.border, borderRadius: 4, overflow: 'hidden' }}>
+                <View style={{ height: 8, width: `${f.pct}%` as any, backgroundColor: f.color, borderRadius: 4 }} />
+              </View>
+              <View style={{ width: 52, alignItems: 'flex-end' }}>
+                <Text style={[cc.funnelCount, { color: f.color }]}>{f.count}</Text>
+                <Text style={cc.kpiSub}>{f.pct}%</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Portal catalog live status */}
+      <View style={cc.sect}>
+        <Text style={cc.sectTitle}>Portal Catalog — Live Status</Text>
+        <Text style={[cc.kpiSub, { marginBottom: 12 }]}>Items currently visible to website visitors</Text>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {[
+            { label: 'Vehicles Live',    value: portalStats.vehicles,   color: C.primary },
+            { label: 'Packages Live',    value: portalStats.packages,   color: C.gold },
+            { label: 'Active Promos',    value: portalStats.promotions, color: C.success },
+          ].map(p => (
+            <View key={p.label} style={cc.catalogCard}>
+              <Text style={[cc.catalogVal, { color: p.color }]}>{p.value}</Text>
+              <Text style={cc.catalogLabel}>{p.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Top safari packages */}
+      {topPkgs.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Top Safari Packages</Text>
+          {topPkgs.map((p, i) => (
+            <View key={i} style={cc.pkgRow}>
+              <View style={cc.pkgRank}>
+                <Text style={cc.pkgRankT}>{i + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={cc.pkgName} numberOfLines={1}>{p.name}</Text>
+                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 4 }}>
+                  <View style={{ height: 4, width: `${p.pct}%` as any, backgroundColor: C.primary + '90', borderRadius: 2 }} />
+                </View>
+              </View>
+              <View style={{ alignItems: 'flex-end', minWidth: 64 }}>
+                <Text style={cc.pkgBkgs}>{p.bookings} bkg{p.bookings !== 1 ? 's' : ''}</Text>
+                <Text style={cc.kpiSub}>${(p.revenue / 1000).toFixed(1)}k</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Empty state */}
+      {kpis.length > 0 && kpis[0].value === '0' && (
+        <View style={an.connectCard}>
+          <Text style={an.connectTitle}>No Data for This Period</Text>
+          <Text style={an.connectSub}>No bookings found. Try "All Time" to see all-time analytics.</Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const cc = StyleSheet.create({
+  kpiCard:    { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
+  kpiLabel:   { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 },
+  kpiVal:     { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginBottom: 2 },
+  kpiSub:     { fontSize: 11, color: C.textMuted },
+  sect:       { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  sectTitle:  { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
+  revVal:     { fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
+  revLabel:   { fontSize: 10, fontWeight: '600', color: C.textMuted, textTransform: 'uppercase', marginTop: 2 },
+  collBarTrack: { height: 8, backgroundColor: C.border, borderRadius: 4, overflow: 'hidden' },
+  collBarFill:  { height: 8, backgroundColor: C.success, borderRadius: 4 },
+  barCaption:   { fontSize: 11, color: C.textMuted },
+  funnelRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.border + '40' },
+  funnelLabel:  { fontSize: 12, fontWeight: '600', color: C.text },
+  funnelCount:  { fontSize: 13, fontWeight: '700' },
+  catalogCard:  { flex: 1, backgroundColor: C.bg, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  catalogVal:   { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+  catalogLabel: { fontSize: 10, fontWeight: '600', color: C.textMuted, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
+  pkgRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border + '40' },
+  pkgRank:      { width: 24, height: 24, borderRadius: 12, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  pkgRankT:     { fontSize: 11, fontWeight: '800', color: C.primary },
+  pkgName:      { fontSize: 13, fontWeight: '600', color: C.text },
+  pkgBkgs:      { fontSize: 13, fontWeight: '700', color: C.primary },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // WEBSITE ANALYTICS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-interface AnalyticsMetric { label: string; value: string; sub?: string; color: string }
-interface TopPage { path: string; views: number; pct: number }
+// ─── Business Analytics types ─────────────────────────────────────────────────
+interface BizMetric { label: string; value: string; sub?: string; color: string }
+interface StatusBreakdown { status: string; count: number; pct: number; color: string }
+interface PackageStat { name: string; bookings: number; revenue: number; pct: number }
+
+const STATUS_COLORS: Record<string, string> = {
+  confirmed: C.success,
+  active:    C.primary,
+  completed: C.gold,
+  pending:   '#e09b2d',
+  draft:     C.textMuted,
+  cancelled: C.danger,
+};
+
+function periodToDays(p: '7d' | '30d' | '90d' | 'all') {
+  if (p === '7d') return 7;
+  if (p === '30d') return 30;
+  if (p === '90d') return 90;
+  return 0;
+}
 
 function WebsiteAnalyticsTab() {
-  const [metrics, setMetrics] = useState<AnalyticsMetric[]>([]);
-  const [topPages, setTopPages] = useState<TopPage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics]   = useState<BizMetric[]>([]);
+  const [statuses, setStatuses] = useState<StatusBreakdown[]>([]);
+  const [packages, setPackages] = useState<PackageStat[]>([]);
+  const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+  const [period, setPeriod]     = useState<'7d' | '30d' | '90d' | 'all'>('30d');
 
-  const buildEmptyMetrics = () => [
-    { label: 'Sessions',    value: '—', sub: 'No data yet', color: C.primary },
-    { label: 'Page Views',  value: '—', sub: '',            color: C.gold },
-    { label: 'Bounce Rate', value: '—', sub: '',            color: C.textMuted },
-    { label: 'Conversions', value: '—', sub: '',            color: C.success },
-  ];
-
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      // Try analytics_summary first (most specific)
-      const { data: summary } = await supabase
-        .from('analytics_summary')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const days = periodToDays(period);
+      const cutoff = days > 0
+        ? new Date(Date.now() - days * 86400000).toISOString()
+        : null;
 
-      if (summary) {
-        // Flexibly pick column names regardless of exact schema
-        const d = summary as Record<string, any>;
-        const sessions   = d.sessions   ?? d.total_sessions   ?? d.visitors   ?? 0;
-        const pageViews  = d.page_views ?? d.total_pageviews  ?? d.pageviews  ?? 0;
-        const bounceRate = d.bounce_rate ?? d.bounceRate ?? 0;
-        const conversions = d.conversions ?? d.total_conversions ?? 0;
-        const convRate   = pageViews > 0 ? ((conversions / pageViews) * 100).toFixed(1) : '0.0';
+      // Fetch safari bookings for the period
+      let q = supabase
+        .from('safari_bookings')
+        .select('id, status, total_price_usd, amount_paid, start_date, created_at, package_id');
+      if (cutoff) q = q.gte('created_at', cutoff);
+      const { data: bookings } = await q;
 
-        setMetrics([
-          { label: 'Sessions',    value: Number(sessions).toLocaleString(),    sub: `Last ${period}`,          color: C.primary },
-          { label: 'Page Views',  value: Number(pageViews).toLocaleString(),   sub: `${convRate}% conv rate`, color: C.gold },
-          { label: 'Bounce Rate', value: `${Number(bounceRate).toFixed(1)}%`,  sub: 'avg engagement',          color: C.textMuted },
-          { label: 'Conversions', value: Number(conversions).toLocaleString(), sub: 'total actions',           color: C.success },
-        ]);
+      const bks = (bookings || []) as Record<string, any>[];
+      const totalBookings = bks.length;
+      const totalRevenue  = bks.reduce((s, b) => s + (Number(b.total_price_usd) || 0), 0);
+      const totalPaid     = bks.reduce((s, b) => s + (Number(b.amount_paid)     || 0), 0);
+      const confirmed     = bks.filter(b => ['confirmed','active','completed'].includes(b.status || '')).length;
+      const confirmRate   = totalBookings > 0 ? Math.round((confirmed / totalBookings) * 100) : 0;
+      const avgValue      = totalBookings > 0 ? totalRevenue / totalBookings : 0;
 
-        // Top pages — stored as JSON array or separate field
-        const raw = d.top_pages ?? d.popular_pages ?? d.pages ?? null;
-        if (typeof raw === 'string') {
-          try { setTopPages(JSON.parse(raw)); } catch { setTopPages([]); }
-        } else if (Array.isArray(raw)) {
-          setTopPages(raw as TopPage[]);
-        } else {
-          setTopPages([]);
-        }
-        return;
+      setMetrics([
+        { label: 'Bookings',     value: totalBookings.toLocaleString(), sub: period === 'all' ? 'All time' : `Last ${period}`, color: C.primary },
+        { label: 'Revenue',      value: `$${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, sub: 'USD total', color: C.gold },
+        { label: 'Avg Value',    value: `$${Math.round(avgValue).toLocaleString()}`, sub: 'per booking', color: C.success },
+        { label: 'Confirm Rate', value: `${confirmRate}%`, sub: `${confirmed} confirmed`, color: C.primary },
+      ]);
+
+      // Status breakdown
+      const statusCounts: Record<string, number> = {};
+      bks.forEach(b => {
+        const s = b.status || 'pending';
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+      });
+      const statusList: StatusBreakdown[] = Object.entries(statusCounts)
+        .sort(([,a],[,b]) => b - a)
+        .map(([status, count]) => ({
+          status,
+          count,
+          pct: totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0,
+          color: STATUS_COLORS[status] || C.textMuted,
+        }));
+      setStatuses(statusList);
+
+      // Top packages — fetch package names
+      const pkgCounts: Record<string, { count: number; revenue: number }> = {};
+      bks.forEach(b => {
+        const pid = b.package_id || '__unknown__';
+        if (!pkgCounts[pid]) pkgCounts[pid] = { count: 0, revenue: 0 };
+        pkgCounts[pid].count++;
+        pkgCounts[pid].revenue += Number(b.total_price_usd) || 0;
+      });
+
+      const pkgIds = Object.keys(pkgCounts).filter(id => id !== '__unknown__');
+      let pkgNames: Record<string, string> = {};
+      if (pkgIds.length > 0) {
+        const { data: pkgData } = await supabase
+          .from('safari_packages')
+          .select('id, name')
+          .in('id', pkgIds.slice(0, 30));
+        (pkgData || []).forEach((p: any) => { pkgNames[p.id] = p.name; });
       }
 
-      // Fallback: aggregate from analytics_events
-      const { data: events } = await supabase
-        .from('analytics_events')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
+      const maxPkgCount = Math.max(...Object.values(pkgCounts).map(v => v.count), 1);
+      const pkgList: PackageStat[] = Object.entries(pkgCounts)
+        .sort(([,a],[,b]) => b.count - a.count)
+        .slice(0, 6)
+        .map(([pid, { count, revenue }]) => ({
+          name: pkgNames[pid] || (pid === '__unknown__' ? 'No Package' : 'Unknown'),
+          bookings: count,
+          revenue,
+          pct: Math.round((count / maxPkgCount) * 100),
+        }));
+      setPackages(pkgList);
 
-      if (events && events.length > 0) {
-        const ev = events as Record<string, any>[];
-        const totalViews = ev.length;
-        // Group by page path for top pages
-        const pathCounts: Record<string, number> = {};
-        ev.forEach(e => {
-          const p = e.page_path || e.path || e.url || '/';
-          pathCounts[p] = (pathCounts[p] || 0) + 1;
-        });
-        const sortedPages = Object.entries(pathCounts)
-          .sort(([,a],[,b]) => b - a)
-          .slice(0, 5)
-          .map(([path, views]) => ({ path, views, pct: Math.round((views / totalViews) * 100) }));
-        setTopPages(sortedPages);
-
-        const uniqueSessions = new Set(ev.map(e => e.session_id || e.visitor_id || e.id)).size;
-        setMetrics([
-          { label: 'Sessions',    value: uniqueSessions.toLocaleString(),  sub: `Last ${period}`, color: C.primary },
-          { label: 'Page Views',  value: totalViews.toLocaleString(),      sub: 'total views',     color: C.gold },
-          { label: 'Bounce Rate', value: '—', sub: '',                                             color: C.textMuted },
-          { label: 'Conversions', value: '—', sub: '',                                             color: C.success },
-        ]);
-        return;
-      }
-
-      setMetrics(buildEmptyMetrics());
-      setTopPages([]);
     } catch (e) {
-      console.error('[Analytics]', e);
-      setMetrics(buildEmptyMetrics());
-    } finally { setLoading(false); setRefreshing(false); }
+      console.error('[BizAnalytics]', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [period]);
 
-  useEffect(() => { setLoading(true); fetch(); }, [fetch]);
-  const onRefresh = useCallback(() => { setRefreshing(true); fetch(); }, [fetch]);
+  useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
+  const onRefresh = useCallback(() => { setRefreshing(true); fetchData(); }, [fetchData]);
 
   if (loading) return <LoadingView label="Loading analytics…" />;
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+
       {/* Period selector */}
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-        {(['7d','30d','90d'] as const).map(p => (
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {(['7d','30d','90d','all'] as const).map(p => (
           <TouchableOpacity key={p} style={[an.periodBtn, period === p && an.periodBtnOn]} onPress={() => setPeriod(p)}>
-            <Text style={[an.periodT, period === p && an.periodTOn]}>{p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}</Text>
+            <Text style={[an.periodT, period === p && an.periodTOn]}>
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : 'All Time'}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Metric cards 2×2 */}
+      {/* KPI cards 2×2 */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         {metrics.map(m => (
           <View key={m.label} style={an.metCard}>
@@ -884,26 +1213,56 @@ function WebsiteAnalyticsTab() {
         ))}
       </View>
 
-      {/* Top pages */}
-      {topPages.length > 0 && (
+      {/* Status breakdown */}
+      {statuses.length > 0 && (
         <View style={an.sect}>
-          <Text style={an.sectTitle}>Top Pages</Text>
-          {topPages.map((p, i) => (
-            <View key={i} style={an.pageRow}>
+          <Text style={an.sectTitle}>Bookings by Status</Text>
+          {statuses.map(s => (
+            <View key={s.status} style={an.pageRow}>
               <View style={{ flex: 1 }}>
-                <Text style={an.pagePath} numberOfLines={1}>{p.path}</Text>
-                <View style={[an.bar, { width: `${Math.min(p.pct, 100)}%` as any }]} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
+                  <Text style={an.pagePath}>{s.status.charAt(0).toUpperCase() + s.status.slice(1)}</Text>
+                </View>
+                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2 }}>
+                  <View style={{ height: 4, width: `${s.pct}%` as any, backgroundColor: s.color, borderRadius: 2 }} />
+                </View>
               </View>
-              <Text style={an.pageViews}>{p.views.toLocaleString()}</Text>
+              <View style={{ alignItems: 'flex-end', minWidth: 52 }}>
+                <Text style={[an.pageViews, { color: s.color }]}>{s.count}</Text>
+                <Text style={an.metSub}>{s.pct}%</Text>
+              </View>
             </View>
           ))}
         </View>
       )}
 
-      {topPages.length === 0 && metrics[0]?.value === '—' && (
+      {/* Top packages */}
+      {packages.length > 0 && (
+        <View style={an.sect}>
+          <Text style={an.sectTitle}>Top Safari Packages</Text>
+          {packages.map((p, i) => (
+            <View key={i} style={an.pageRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={an.pagePath} numberOfLines={1}>{p.name}</Text>
+                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 4 }}>
+                  <View style={{ height: 4, width: `${p.pct}%` as any, backgroundColor: C.primary + '80', borderRadius: 2 }} />
+                </View>
+              </View>
+              <View style={{ alignItems: 'flex-end', minWidth: 60 }}>
+                <Text style={an.pageViews}>{p.bookings} bkg{p.bookings !== 1 ? 's' : ''}</Text>
+                <Text style={an.metSub}>${Math.round(p.revenue / 1000)}k</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Empty state */}
+      {metrics[0]?.value === '0' && (
         <View style={an.connectCard}>
-          <Text style={an.connectTitle}>Analytics Not Connected</Text>
-          <Text style={an.connectSub}>Connect your analytics source in the Jackal Dashboard settings to view website traffic, engagement metrics, and conversion data here.</Text>
+          <Text style={an.connectTitle}>No Data for This Period</Text>
+          <Text style={an.connectSub}>There are no safari bookings recorded in the selected time window. Try "All Time" to see all historical data.</Text>
         </View>
       )}
     </ScrollView>
@@ -922,9 +1281,9 @@ const an = StyleSheet.create({
   sect: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
   sectTitle: { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
   pageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border + '50', gap: 12 },
-  pagePath: { fontSize: 12, color: C.text, fontWeight: '500', marginBottom: 4 },
+  pagePath: { fontSize: 12, color: C.text, fontWeight: '500' },
   bar: { height: 4, backgroundColor: C.primary + '40', borderRadius: 2 },
-  pageViews: { fontSize: 13, fontWeight: '700', color: C.primary, minWidth: 50, textAlign: 'right' },
+  pageViews: { fontSize: 13, fontWeight: '700', color: C.primary, textAlign: 'right' },
   connectCard: { backgroundColor: C.card, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   connectTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 8, textAlign: 'center' },
   connectSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20 },
@@ -1540,20 +1899,21 @@ const md = StyleSheet.create({
 // MAIN MARKETING SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type MarketingTab = 'vehicles' | 'safaris' | 'promotions' | 'analytics' | 'blog' | 'blog-analytics' | 'media';
+type MarketingTab = 'command-center' | 'vehicles' | 'safaris' | 'promotions' | 'analytics' | 'blog' | 'blog-analytics' | 'media';
 
 export function MarketingScreen() {
-  const [tab, setTab] = useState<MarketingTab>('vehicles');
+  const [tab, setTab] = useState<MarketingTab>('command-center');
   const insets = useSafeAreaInsets();
 
   const TABS: { key: MarketingTab; label: string }[] = [
-    { key: 'vehicles',       label: 'Vehicles' },
-    { key: 'safaris',        label: 'Safaris' },
-    { key: 'promotions',     label: 'Promotions' },
-    { key: 'analytics',      label: 'Web Analytics' },
-    { key: 'blog',           label: 'Blog' },
-    { key: 'blog-analytics', label: 'Blog Stats' },
-    { key: 'media',          label: 'Media' },
+    { key: 'command-center',  label: 'Console' },
+    { key: 'vehicles',        label: 'Vehicles' },
+    { key: 'safaris',         label: 'Safaris' },
+    { key: 'promotions',      label: 'Promotions' },
+    { key: 'analytics',       label: 'Analytics' },
+    { key: 'blog',            label: 'Blog' },
+    { key: 'blog-analytics',  label: 'Blog Stats' },
+    { key: 'media',           label: 'Media' },
   ];
 
   return (
@@ -1561,8 +1921,8 @@ export function MarketingScreen() {
       {/* Hero header */}
       <View style={[ms.hero, { paddingTop: insets.top + 10 }]}>
         <View style={ms.glowL} /><View style={ms.glowR} />
-        <Text style={ms.eyebrow}>Portal</Text>
-        <Text style={ms.heroTitle}>Marketing</Text>
+        <Text style={ms.eyebrow}>Marketing Console</Text>
+        <Text style={ms.heroTitle}>{tab === 'command-center' ? 'Command Center' : 'Marketing'}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ms.tabRow}>
           {TABS.map(t => (
             <TouchableOpacity key={t.key} style={[ms.tabPill, tab === t.key && ms.tabPillOn]} onPress={() => setTab(t.key)}>
@@ -1574,6 +1934,7 @@ export function MarketingScreen() {
 
       {/* Tab content */}
       <View style={{ flex: 1 }}>
+        {tab === 'command-center' && <MarketingCommandCenterTab />}
         {tab === 'vehicles'       && <VehicleCatalogTab />}
         {tab === 'safaris'        && <SafariCatalogTab />}
         {tab === 'promotions'     && <PromotionsTab />}

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   SafeAreaView,
   RefreshControl,
-  ActivityIndicator,
   Dimensions,
   TouchableOpacity,
   Alert,
@@ -38,6 +37,7 @@ import {
 
 // Forms
 import { NewBookingModal, AddExpenseModal, CreateSafariModal } from '../components/forms';
+import { LoadingOverlay } from '../components/system/JackalLoader';
 
 // Utils
 import { formatCurrency } from '../lib/utils';
@@ -218,17 +218,6 @@ function HeroStat({
 // ============================================================================
 // LOADING OVERLAY COMPONENT
 // ============================================================================
-
-function LoadingOverlay() {
-  return (
-    <View style={styles.loadingOverlay}>
-      <View style={styles.loadingCard}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
-      </View>
-    </View>
-  );
-}
 
 // ============================================================================
 // ERROR MESSAGE COMPONENT

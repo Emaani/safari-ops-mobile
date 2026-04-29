@@ -6,7 +6,6 @@ import {
   StyleSheet,
   SafeAreaView,
   RefreshControl,
-  ActivityIndicator,
   FlatList,
   TextInput,
   TouchableOpacity,
@@ -28,6 +27,7 @@ import { useFleetData } from '../hooks/useFleetData';
 import { useAuth } from '../contexts/AuthContext';
 import { BookingCard, BookingDetailModal } from '../components/bookings';
 import { NewBookingModal } from '../components/forms';
+import { LoadingOverlay } from '../components/system/JackalLoader';
 import type { Booking, BookingStatus } from '../types/dashboard';
 
 // ============================================================================
@@ -149,17 +149,6 @@ function StatCard({
 // ============================================================================
 // LOADING OVERLAY COMPONENT
 // ============================================================================
-
-function LoadingOverlay() {
-  return (
-    <View style={styles.loadingOverlay}>
-      <View style={styles.loadingCard}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading bookings...</Text>
-      </View>
-    </View>
-  );
-}
 
 // ============================================================================
 // ERROR MESSAGE COMPONENT

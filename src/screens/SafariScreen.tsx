@@ -6,7 +6,6 @@ import {
   StyleSheet,
   SafeAreaView,
   RefreshControl,
-  ActivityIndicator,
   FlatList,
   TouchableOpacity,
   Pressable,
@@ -23,6 +22,7 @@ import { useSafariData } from '../hooks/useSafariData';
 import { useSafariRealtimeSync } from '../hooks/useSafariRealtimeSync';
 import { SafariCard, SafariDetailModal } from '../components/safari';
 import { FadeSlideIn } from '../components/ui';
+import { LoadingOverlay } from '../components/system/JackalLoader';
 import type { Booking } from '../types/dashboard';
 
 // ============================================================================
@@ -145,17 +145,6 @@ function FilterPill({ label, active, onPress }: FilterPillProps) {
 // ============================================================================
 // LOADING OVERLAY
 // ============================================================================
-
-function LoadingOverlay() {
-  return (
-    <View style={styles.loadingOverlay}>
-      <View style={styles.loadingCard}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading safaris...</Text>
-      </View>
-    </View>
-  );
-}
 
 // ============================================================================
 // ERROR MESSAGE

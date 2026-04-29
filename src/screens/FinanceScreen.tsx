@@ -5,7 +5,6 @@ import {
   StyleSheet,
   SafeAreaView,
   RefreshControl,
-  ActivityIndicator,
   FlatList,
   TextInput,
   TouchableOpacity,
@@ -27,6 +26,7 @@ import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
 import { useFinanceRealtimeSync } from '../hooks/useFinanceRealtimeSync';
 import { TransactionDetailModal } from '../components/finance';
 import { AddExpenseModal } from '../components/forms';
+import { LoadingOverlay } from '../components/system/JackalLoader';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { FinancialTransaction, CashRequisition, CRStatus, Currency } from '../types/dashboard';
@@ -340,17 +340,6 @@ function CRCard({ cr, displayCurrency, onPress }: { cr: CashRequisition; display
 // ============================================================================
 // LOADING / ERROR
 // ============================================================================
-
-function LoadingOverlay() {
-  return (
-    <View style={styles.loadingOverlay}>
-      <View style={styles.loadingCard}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading finances...</Text>
-      </View>
-    </View>
-  );
-}
 
 function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (

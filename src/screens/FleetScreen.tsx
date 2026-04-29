@@ -6,7 +6,6 @@ import {
   StyleSheet,
   SafeAreaView,
   RefreshControl,
-  ActivityIndicator,
   FlatList,
   TextInput,
   TouchableOpacity,
@@ -26,6 +25,7 @@ import { useFleetRealtimeSync } from '../hooks/useFleetRealtimeSync';
 import { VehicleCard, VehicleDetailModal, MaintenanceTracker } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
 import { FadeSlideIn } from '../components/ui';
+import { LoadingOverlay } from '../components/system/JackalLoader';
 
 // ============================================================================
 // CONSTANTS
@@ -110,17 +110,6 @@ function StatCard({ title, value, color, bgColor, delay = 0 }: StatCardProps & {
 // ============================================================================
 // LOADING OVERLAY COMPONENT
 // ============================================================================
-
-function LoadingOverlay() {
-  return (
-    <View style={styles.loadingOverlay}>
-      <View style={styles.loadingCard}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading fleet...</Text>
-      </View>
-    </View>
-  );
-}
 
 // ============================================================================
 // ERROR MESSAGE COMPONENT
