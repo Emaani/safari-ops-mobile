@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { CartesianChart, Line, Area } from 'victory-native';
 import { Circle } from '@shopify/react-native-skia';
@@ -44,6 +44,13 @@ const formatCompact = (value: number, currency: string = 'USD'): string => {
   return `${prefix}${value.toFixed(0)}`;
 };
 
+const formatAxisCompact = (value: number): string => {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  return `${Math.round(value)}`;
+};
+
 export function RevenueVsExpensesChart({
   data,
   loading = false,
@@ -51,10 +58,10 @@ export function RevenueVsExpensesChart({
 }: RevenueVsExpensesChartProps) {
   const [showRevenue, setShowRevenue] = useState(true);
   const [showExpenses, setShowExpenses] = useState(true);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const { width: windowWidth } = useWindowDimensions();
 
-  // scrollContent paddingH:20 (×2=40) + card padding:18 (×2=36) = 76
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - 76;
+  const chartWidth = Math.max(windowWidth - 76, 240);
 
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -63,8 +70,17 @@ export function RevenueVsExpensesChart({
       month: item.month,
       revenue: item.revenue,
       expenses: item.expenses,
+      net: item.revenue - item.expenses,
     }));
   }, [data]);
+
+  useEffect(() => {
+    if (chartData.length === 0) {
+      setSelectedIndex(0);
+      return;
+    }
+    setSelectedIndex((prev) => Math.min(prev, chartData.length - 1));
+  }, [chartData]);
 
   const yDomain = useMemo(() => {
     if (chartData.length === 0) return [0, 100] as [number, number];
@@ -84,6 +100,7 @@ export function RevenueVsExpensesChart({
     const exp = chartData.reduce((s, d) => s + d.expenses, 0);
     return { revenue: rev, expenses: exp, net: rev - exp };
   }, [chartData]);
+  const selectedPoint = chartData[selectedIndex] || null;
 
   if (loading) {
     return (
@@ -158,79 +175,141 @@ export function RevenueVsExpensesChart({
       </View>
 
       {/* Chart */}
-      <View style={{ width: chartWidth, height: 200, alignSelf: 'center' }}>
-        <CartesianChart
-          data={chartData}
-          xKey="x"
-          yKeys={['revenue', 'expenses']}
-          domain={{ y: yDomain }}
-          padding={{ left: 48, right: 12, top: 12, bottom: 36 }}
-          axisOptions={{
-            font: null,
-            tickCount: { x: Math.min(chartData.length, 6), y: 4 },
-            lineColor: CARD_COLORS.grid,
-            labelColor: CARD_COLORS.textMuted,
-            formatXLabel: (value) => {
-              const idx = Math.round(value);
-              if (idx >= 0 && idx < chartData.length) {
-                const m = chartData[idx]?.month || '';
-                const mi = MONTH_ABBREV.findIndex((a) =>
-                  m.toLowerCase().startsWith(a.toLowerCase())
-                );
-                return mi >= 0 ? MONTH_ABBREV[mi] : m.slice(0, 3);
-              }
-              return '';
-            },
-            formatYLabel: (value) => formatCompact(value, currency),
-          }}
-        >
-          {({ points }) => (
-            <>
-              {showRevenue && points.revenue && (
-                <>
-                  <Area
-                    points={points.revenue}
-                    color={CARD_COLORS.revenueSoft}
-                    curveType="natural"
-                    y0={yDomain[0]}
-                  />
-                  <Line
-                    points={points.revenue}
-                    color={CARD_COLORS.revenue}
-                    strokeWidth={2.5}
-                    curveType="natural"
-                  />
-                  {points.revenue.map((pt, i) =>
-                    pt.y !== null ? (
-                      <Circle key={`rev-${i}`} cx={pt.x} cy={pt.y} r={4} color={CARD_COLORS.revenue} />
-                    ) : null
-                  )}
-                </>
-              )}
-              {showExpenses && points.expenses && (
-                <>
-                  <Area
-                    points={points.expenses}
-                    color={CARD_COLORS.expensesSoft}
-                    curveType="natural"
-                    y0={yDomain[0]}
-                  />
-                  <Line
-                    points={points.expenses}
-                    color={CARD_COLORS.expenses}
-                    strokeWidth={2.5}
-                    curveType="natural"
-                  />
-                  {points.expenses.map((pt, i) =>
-                    pt.y !== null ? (
-                      <Circle key={`exp-${i}`} cx={pt.x} cy={pt.y} r={4} color={CARD_COLORS.expenses} />
-                    ) : null
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </CartesianChart>
+      <View style={styles.chartFrame}>
+        <View style={{ width: chartWidth, height: 220, alignSelf: 'center' }}>
+          <CartesianChart
+            data={chartData}
+            xKey="x"
+            yKeys={['revenue', 'expenses']}
+            domain={{ y: yDomain }}
+            padding={{ left: 44, right: 12, top: 18, bottom: 30 }}
+            axisOptions={{
+              font: null,
+              tickCount: { x: Math.min(chartData.length, 6), y: 4 },
+              lineColor: CARD_COLORS.grid,
+              labelColor: CARD_COLORS.textMuted,
+              formatXLabel: (value) => {
+                const idx = Math.round(value);
+                if (idx >= 0 && idx < chartData.length) {
+                  const m = chartData[idx]?.month || '';
+                  const mi = MONTH_ABBREV.findIndex((a) =>
+                    m.toLowerCase().startsWith(a.toLowerCase())
+                  );
+                  return mi >= 0 ? MONTH_ABBREV[mi] : m.slice(0, 3);
+                }
+                return '';
+              },
+              formatYLabel: (value) => formatAxisCompact(value),
+            }}
+          >
+            {({ points }) => (
+              <>
+                {showRevenue && points.revenue && (
+                  <>
+                    <Area
+                      points={points.revenue}
+                      color={CARD_COLORS.revenueSoft}
+                      curveType="natural"
+                      y0={yDomain[0]}
+                    />
+                    <Line
+                      points={points.revenue}
+                      color={CARD_COLORS.revenue}
+                      strokeWidth={3}
+                      curveType="natural"
+                    />
+                    {points.revenue.map((pt, i) =>
+                      pt.y !== null ? (
+                        <React.Fragment key={`rev-${i}`}>
+                          <Circle cx={pt.x} cy={pt.y} r={5} color="#fffdf9" />
+                          <Circle cx={pt.x} cy={pt.y} r={i === selectedIndex ? 4.5 : 3.5} color={CARD_COLORS.revenue} />
+                        </React.Fragment>
+                      ) : null
+                    )}
+                  </>
+                )}
+                {showExpenses && points.expenses && (
+                  <>
+                    <Area
+                      points={points.expenses}
+                      color={CARD_COLORS.expensesSoft}
+                      curveType="natural"
+                      y0={yDomain[0]}
+                    />
+                    <Line
+                      points={points.expenses}
+                      color={CARD_COLORS.expenses}
+                      strokeWidth={3}
+                      curveType="natural"
+                    />
+                    {points.expenses.map((pt, i) =>
+                      pt.y !== null ? (
+                        <React.Fragment key={`exp-${i}`}>
+                          <Circle cx={pt.x} cy={pt.y} r={5} color="#fffdf9" />
+                          <Circle cx={pt.x} cy={pt.y} r={i === selectedIndex ? 4.5 : 3.5} color={CARD_COLORS.expenses} />
+                        </React.Fragment>
+                      ) : null
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </CartesianChart>
+        </View>
+      </View>
+
+      {selectedPoint && (
+        <View style={styles.selectedCard}>
+          <View style={styles.selectedHeader}>
+            <Text style={styles.selectedMonth}>{selectedPoint.month}</Text>
+            <View
+              style={[
+                styles.netBadge,
+                { backgroundColor: selectedPoint.net >= 0 ? CARD_COLORS.revenueSoft : CARD_COLORS.expensesSoft },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.netBadgeText,
+                  { color: selectedPoint.net >= 0 ? CARD_COLORS.revenue : CARD_COLORS.expenses },
+                ]}
+              >
+                {selectedPoint.net >= 0 ? '+' : ''}
+                {formatCompact(selectedPoint.net, currency)}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.selectedMetricsRow}>
+            <View style={styles.selectedMetric}>
+              <Text style={styles.selectedMetricLabel}>Revenue</Text>
+              <Text style={[styles.selectedMetricValue, { color: CARD_COLORS.revenue }]}>
+                {formatCompact(selectedPoint.revenue, currency)}
+              </Text>
+            </View>
+            <View style={styles.selectedMetricDivider} />
+            <View style={styles.selectedMetric}>
+              <Text style={styles.selectedMetricLabel}>Expenses</Text>
+              <Text style={[styles.selectedMetricValue, { color: CARD_COLORS.expenses }]}>
+                {formatCompact(selectedPoint.expenses, currency)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      <View style={styles.monthRail}>
+        {chartData.map((point, index) => (
+          <TouchableOpacity
+            key={`${point.month}-${index}`}
+            style={[styles.monthChip, index === selectedIndex && styles.monthChipActive]}
+            onPress={() => setSelectedIndex(index)}
+            activeOpacity={0.82}
+          >
+            <Text style={[styles.monthChipText, index === selectedIndex && styles.monthChipTextActive]}>
+              {point.month}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
@@ -255,6 +334,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
+  },
+  chartFrame: {
+    borderRadius: 18,
+    paddingVertical: 8,
+    backgroundColor: '#f9f5ee',
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
   },
   emptyEmoji: { fontSize: 32 },
   emptyTitle: {
@@ -321,6 +407,84 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: CARD_COLORS.text,
+  },
+  selectedCard: {
+    backgroundColor: '#f9f5ee',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    padding: 14,
+    gap: 12,
+  },
+  selectedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectedMonth: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: CARD_COLORS.text,
+  },
+  netBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  netBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  selectedMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  selectedMetric: {
+    flex: 1,
+    gap: 4,
+  },
+  selectedMetricDivider: {
+    width: 1,
+    backgroundColor: CARD_COLORS.border,
+    marginHorizontal: 12,
+  },
+  selectedMetricLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: CARD_COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  selectedMetricValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  monthRail: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  monthChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: CARD_COLORS.border,
+    backgroundColor: '#f7f1e8',
+  },
+  monthChipActive: {
+    backgroundColor: CARD_COLORS.text,
+    borderColor: CARD_COLORS.text,
+  },
+  monthChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: CARD_COLORS.textMuted,
+  },
+  monthChipTextActive: {
+    color: '#fffaf3',
   },
 });
 

@@ -1097,6 +1097,7 @@ function WebsiteAnalyticsTab() {
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [period, setPeriod]     = useState<'7d' | '30d' | '90d' | 'all'>('30d');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -1104,6 +1105,26 @@ function WebsiteAnalyticsTab() {
       const cutoff = days > 0
         ? new Date(Date.now() - days * 86400000).toISOString()
         : null;
+
+      const [
+        { data: dashboardKpis },
+        { data: safariSummary },
+        { data: blogPosts },
+      ] = await Promise.all([
+        supabase
+          .from('dashboard_kpis')
+          .select('total_bookings, active_bookings, outstanding_payments, total_revenue')
+          .maybeSingle(),
+        supabase
+          .from('safari_financial_summary')
+          .select('total_bookings, confirmed_bookings, completed_bookings, total_revenue_usd, total_collected, total_outstanding')
+          .eq('currency', 'USD')
+          .maybeSingle(),
+        supabase
+          .from('blog_posts')
+          .select('id, status, views, view_count, page_views')
+          .order('created_at', { ascending: false }),
+      ]);
 
       // Fetch safari bookings for the period
       let q = supabase
@@ -1115,16 +1136,35 @@ function WebsiteAnalyticsTab() {
       const bks = (bookings || []) as Record<string, any>[];
       const totalBookings = bks.length;
       const totalRevenue  = bks.reduce((s, b) => s + (Number(b.total_price_usd) || 0), 0);
-      const totalPaid     = bks.reduce((s, b) => s + (Number(b.amount_paid)     || 0), 0);
       const confirmed     = bks.filter(b => ['confirmed','active','completed'].includes(b.status || '')).length;
       const confirmRate   = totalBookings > 0 ? Math.round((confirmed / totalBookings) * 100) : 0;
       const avgValue      = totalBookings > 0 ? totalRevenue / totalBookings : 0;
+      const totalBlogViews = (blogPosts || []).reduce((sum, post: any) => (
+        sum + Number(post.views ?? post.view_count ?? post.page_views ?? 0)
+      ), 0);
+      const publishedPosts = (blogPosts || []).filter((post: any) => (post.status || 'draft') === 'published').length;
+
+      const sharedRevenue = period === 'all'
+        ? Number(safariSummary?.total_revenue_usd ?? dashboardKpis?.total_revenue ?? totalRevenue)
+        : totalRevenue;
+      const sharedBookings = period === 'all'
+        ? Number(safariSummary?.total_bookings ?? dashboardKpis?.total_bookings ?? totalBookings)
+        : totalBookings;
+      const sharedConversions = period === 'all'
+        ? Number(
+            (Number(safariSummary?.confirmed_bookings || 0) + Number(safariSummary?.completed_bookings || 0))
+            || confirmed
+          )
+        : confirmed;
+      const sharedConversionRate = sharedBookings > 0
+        ? Math.round((sharedConversions / sharedBookings) * 100)
+        : 0;
 
       setMetrics([
-        { label: 'Bookings',     value: totalBookings.toLocaleString(), sub: period === 'all' ? 'All time' : `Last ${period}`, color: C.primary },
-        { label: 'Revenue',      value: `$${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, sub: 'USD total', color: C.gold },
-        { label: 'Avg Value',    value: `$${Math.round(avgValue).toLocaleString()}`, sub: 'per booking', color: C.success },
-        { label: 'Confirm Rate', value: `${confirmRate}%`, sub: `${confirmed} confirmed`, color: C.primary },
+        { label: 'Bookings', value: sharedBookings.toLocaleString(), sub: period === 'all' ? 'Shared dashboard total' : `Last ${period}`, color: C.primary },
+        { label: 'Revenue', value: `$${sharedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, sub: 'Shared USD summary', color: C.gold },
+        { label: 'Blog Views', value: totalBlogViews.toLocaleString(), sub: `${publishedPosts} published posts`, color: C.success },
+        { label: 'Conv. Rate', value: `${period === 'all' ? sharedConversionRate : confirmRate}%`, sub: `${period === 'all' ? sharedConversions : confirmed} converted`, color: C.primary },
       ]);
 
       // Status breakdown
@@ -1173,6 +1213,7 @@ function WebsiteAnalyticsTab() {
           pct: Math.round((count / maxPkgCount) * 100),
         }));
       setPackages(pkgList);
+      setLastUpdated(new Date());
 
     } catch (e) {
       console.error('[BizAnalytics]', e);
@@ -1200,6 +1241,11 @@ function WebsiteAnalyticsTab() {
             </Text>
           </TouchableOpacity>
         ))}
+        {lastUpdated ? (
+          <Text style={{ fontSize: 10, color: C.textMuted, alignSelf: 'center', marginLeft: 4 }}>
+            Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        ) : null}
       </View>
 
       {/* KPI cards 2×2 */}
