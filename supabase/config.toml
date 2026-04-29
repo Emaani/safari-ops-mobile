@@ -1,0 +1,4 @@
+project_id = "ohlbioostgjxuwnaxjgk"
+
+[functions.ga4-analytics]
+verify_jwt = true

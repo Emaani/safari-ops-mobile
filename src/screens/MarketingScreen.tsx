@@ -9,7 +9,7 @@
  */
 
 import React, {
-  useState, useCallback, useEffect, useMemo,
+  useState, useCallback, useEffect, useMemo, useRef,
 } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, FlatList,
@@ -23,6 +23,8 @@ import { supabase } from '../lib/supabase';
 import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
 import type { PortalVehicle, Promotion, SafariPackage } from '../types/safari';
+import { useGA4Analytics, type DatePreset } from '../hooks/useGA4Analytics';
+import { useBlogAnalytics } from '../hooks/useBlogAnalytics';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -747,167 +749,148 @@ const fabSt = StyleSheet.create({
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MAIN MARKETING SCREEN
+// MARKETING COMMAND CENTER TAB  — GA4 + Supabase dual-source
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MARKETING COMMAND CENTER TAB
-// ═══════════════════════════════════════════════════════════════════════════════
+const CHANNEL_COLORS: Record<string, string> = {
+  Organic:  C.success,
+  Direct:   C.primary,
+  Social:   '#7c3aed',
+  Paid:     C.gold,
+  Referral: '#0891b2',
+  Email:    '#d97706',
+  Other:    C.textMuted,
+};
 
-interface CmdKPI {
-  label: string;
-  value: string;
-  sub?: string;
-  color: string;
-  icon: keyof typeof Ico;
-}
+const SOCIAL_ICONS: Record<string, string> = {
+  facebook: 'fb', instagram: 'ig', tiktok: 'tt',
+  twitter: 'tw', x: 'tw', linkedin: 'li', youtube: 'yt', pinterest: 'pt',
+};
 
-interface FunnelStep {
-  label: string;
-  count: number;
-  pct: number;
-  color: string;
-}
-
-interface TopPackageRow {
-  name: string;
-  bookings: number;
-  revenue: number;
-  pct: number;
-}
+const STATUS_COLORS: Record<string, string> = {
+  confirmed: C.success,
+  active:    C.primary,
+  completed: C.gold,
+  pending:   '#e09b2d',
+  draft:     C.textMuted,
+  cancelled: C.danger,
+};
 
 function MarketingCommandCenterTab() {
-  const [kpis, setKpis]             = useState<CmdKPI[]>([]);
-  const [funnel, setFunnel]         = useState<FunnelStep[]>([]);
-  const [topPkgs, setTopPkgs]       = useState<TopPackageRow[]>([]);
-  const [portalStats, setPortalStats] = useState({ vehicles: 0, packages: 0, promotions: 0 });
-  const [revenueStats, setRevStats]  = useState({ total: 0, collected: 0, outstanding: 0, margin: 0 });
-  const [period, setPeriod]          = useState<'7d' | '30d' | '90d' | 'all'>('30d');
-  const [loading, setLoading]        = useState(true);
-  const [refreshing, setRefreshing]  = useState(false);
+  const [period, setPeriod] = useState<DatePreset>('30d');
+
+  // ── GA4 (Traffic & Engagement) ────────────────────────────────────────────
+  const { data: ga4, loading: ga4Loading, refreshing: ga4Refreshing,
+          stale, error: ga4Error, unavailable, refresh: ga4Refresh } = useGA4Analytics(period);
+
+  // ── Supabase (Conversion Truth) ───────────────────────────────────────────
+  const [dbStats, setDbStats] = useState({
+    totalBookings: 0, confirmedBookings: 0, totalRevenue: 0,
+    totalCollected: 0, totalOutstanding: 0,
+    leads: 0, portalVehicles: 0, portalPackages: 0, activePromos: 0,
+    topPackages: [] as { name: string; bookings: number; revenue: number; pct: number }[],
+    funnel: [] as { label: string; count: number; pct: number; color: string }[],
+  });
+  const [dbLoading, setDbLoading]   = useState(true);
+  const [dbRefreshing, setDbRef]    = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const fetchAll = useCallback(async () => {
+  const fetchDb = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setDbRef(true); else setDbLoading(true);
     try {
       const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 0;
       const cutoff = days > 0 ? new Date(Date.now() - days * 86400000).toISOString() : null;
 
-      // ── 1. Dashboard KPIs (live view) ───────────────────────────────────────
-      const { data: kpiRow } = await supabase
-        .from('dashboard_kpis')
-        .select('total_bookings,active_bookings,active_safaris,outstanding_payments,total_revenue,total_expenses')
-        .maybeSingle();
+      // Bookings + revenue
+      let q = supabase.from('safari_bookings')
+        .select('id,status,total_price_usd,amount_paid,package_id,created_at');
+      if (cutoff) q = q.gte('created_at', cutoff);
+      const { data: bkData } = await q;
+      const bks = (bkData ?? []) as Record<string, any>[];
 
-      // ── 2. Safari financial summary ─────────────────────────────────────────
-      const { data: sfin } = await supabase
-        .from('safari_financial_summary')
-        .select('total_bookings,confirmed_bookings,completed_bookings,total_revenue_usd,total_collected,total_outstanding')
-        .eq('currency', 'USD')
-        .maybeSingle();
+      const totalBookings    = bks.length;
+      const totalRevenue     = bks.reduce((s, b) => s + (Number(b.total_price_usd) || 0), 0);
+      const totalCollected   = bks.reduce((s, b) => s + (Number(b.amount_paid)     || 0), 0);
+      const confirmedBookings = bks.filter(b => ['confirmed','active','completed'].includes(b.status ?? '')).length;
+      const totalOutstanding  = totalRevenue - totalCollected;
 
-      // ── 3. Booking period data for funnel & packages ────────────────────────
-      let bq = supabase
-        .from('safari_bookings')
-        .select('id,status,total_price_usd,total_expenses_usd,gross_profit_usd,profit_margin,amount_paid,package_id,created_at,pax_count');
-      if (cutoff) bq = bq.gte('created_at', cutoff);
-      const { data: bookings } = await bq;
-      const bks = (bookings || []) as Record<string, any>[];
+      // Leads
+      let leadsCount = 0;
+      try {
+        const { count } = await supabase.from('marketing_leads')
+          .select('id', { count: 'exact', head: true });
+        leadsCount = count ?? 0;
+      } catch { /* table may not exist yet */ }
 
-      // ── 4. Portal catalog stats ─────────────────────────────────────────────
+      // Portal catalog counts
       const [{ count: visVeh }, { count: visPkg }, { count: activeProm }] = await Promise.all([
-        supabase.from('vehicles').select('id', { count: 'exact', head: true }).eq('portal_visible', true),
-        supabase.from('safari_packages').select('id', { count: 'exact', head: true }).eq('portal_visible', true),
-        supabase.from('portal_promotions').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      ]);
-
-      // ── 5. Top packages ─────────────────────────────────────────────────────
-      const pkgCounts: Record<string, { count: number; revenue: number }> = {};
-      bks.forEach(b => {
-        const pid = b.package_id;
-        if (!pid) return;
-        if (!pkgCounts[pid]) pkgCounts[pid] = { count: 0, revenue: 0 };
-        pkgCounts[pid].count++;
-        pkgCounts[pid].revenue += Number(b.total_price_usd) || 0;
-      });
-      const pkgIds = Object.keys(pkgCounts);
-      let pkgNames: Record<string, string> = {};
-      if (pkgIds.length > 0) {
-        const { data: pkgData } = await supabase.from('safari_packages').select('id,name').in('id', pkgIds.slice(0, 20));
-        (pkgData || []).forEach((p: any) => { pkgNames[p.id] = p.name; });
-      }
-      const maxPkgBks = Math.max(...Object.values(pkgCounts).map(v => v.count), 1);
-      const topPackages: TopPackageRow[] = Object.entries(pkgCounts)
-        .sort(([, a], [, b]) => b.count - a.count)
-        .slice(0, 5)
-        .map(([pid, { count, revenue }]) => ({
-          name: pkgNames[pid] || 'Unknown Package',
-          bookings: count,
-          revenue,
-          pct: Math.round((count / maxPkgBks) * 100),
-        }));
-
-      // ── Compute derived stats ────────────────────────────────────────────────
-      const totalBks   = bks.length;
-      const totalRev   = bks.reduce((s, b) => s + (Number(b.total_price_usd) || 0), 0);
-      const totalExp   = bks.reduce((s, b) => s + (Number(b.total_expenses_usd) || 0), 0);
-      const totalProfit = bks.reduce((s, b) => s + (Number(b.gross_profit_usd) || 0), 0);
-      const totalPaid  = bks.reduce((s, b) => s + (Number(b.amount_paid) || 0), 0);
-      const outstanding = totalRev - totalPaid;
-      const margin     = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
-
-      const confirmed  = bks.filter(b => ['confirmed', 'active', 'completed'].includes(b.status)).length;
-      const convRate   = totalBks > 0 ? Math.round((confirmed / totalBks) * 100) : 0;
-
-      // Use dashboard KPI values if period is "all"
-      const displayRev = period === 'all' && sfin
-        ? Number(sfin.total_revenue_usd) || totalRev
-        : totalRev;
-      const displayColl = period === 'all' && sfin
-        ? Number(sfin.total_collected) || totalPaid
-        : totalPaid;
-      const displayOut = period === 'all' && sfin
-        ? Number(sfin.total_outstanding) || outstanding
-        : outstanding;
-
-      setKpis([
-        { label: 'Bookings',     value: totalBks.toLocaleString(),           sub: period === 'all' ? 'All time' : `Last ${period}`, color: C.primary, icon: 'Globe' },
-        { label: 'Revenue',      value: `$${Math.round(displayRev).toLocaleString()}`, sub: 'Total USD',  color: C.gold,    icon: 'Globe' },
-        { label: 'Conv. Rate',   value: `${convRate}%`,                       sub: `${confirmed} confirmed`, color: C.success, icon: 'Eye' },
-        { label: 'Outstanding',  value: `$${Math.round(displayOut).toLocaleString()}`, sub: 'Balance due', color: C.danger,  icon: 'Globe' },
+        supabase.from('vehicles').select('id',         { count: 'exact', head: true }).eq('portal_visible', true),
+        supabase.from('safari_packages').select('id',  { count: 'exact', head: true }).eq('portal_visible', true),
+        supabase.from('portal_promotions').select('id',{ count: 'exact', head: true }).eq('is_active', true),
       ]);
 
       // Funnel
-      const statusOrder = ['draft', 'pending', 'confirmed', 'active', 'completed', 'cancelled'];
       const statusMap: Record<string, number> = {};
       bks.forEach(b => { const s = b.status || 'pending'; statusMap[s] = (statusMap[s] || 0) + 1; });
-      const funnelSteps: FunnelStep[] = statusOrder
+      const statusOrder = ['draft','pending','confirmed','active','completed','cancelled'];
+      const funnelData = statusOrder
         .filter(s => (statusMap[s] || 0) > 0)
         .map(s => ({
           label: s.charAt(0).toUpperCase() + s.slice(1),
           count: statusMap[s] || 0,
-          pct: totalBks > 0 ? Math.round(((statusMap[s] || 0) / totalBks) * 100) : 0,
+          pct:   totalBookings > 0 ? Math.round(((statusMap[s] || 0) / totalBookings) * 100) : 0,
           color: STATUS_COLORS[s] || C.textMuted,
         }));
 
-      setFunnel(funnelSteps);
-      setTopPkgs(topPackages);
-      setPortalStats({ vehicles: visVeh || 0, packages: visPkg || 0, promotions: activeProm || 0 });
-      setRevStats({ total: displayRev, collected: displayColl, outstanding: displayOut, margin });
+      // Top packages
+      const pkgMap: Record<string, { count: number; rev: number }> = {};
+      bks.forEach(b => {
+        const pid = b.package_id; if (!pid) return;
+        if (!pkgMap[pid]) pkgMap[pid] = { count: 0, rev: 0 };
+        pkgMap[pid].count++;
+        pkgMap[pid].rev += Number(b.total_price_usd) || 0;
+      });
+      const pkgIds = Object.keys(pkgMap);
+      const pkgNames: Record<string, string> = {};
+      if (pkgIds.length > 0) {
+        const { data: pkgs } = await supabase.from('safari_packages').select('id,name').in('id', pkgIds.slice(0, 20));
+        (pkgs ?? []).forEach((p: any) => { pkgNames[p.id] = p.name; });
+      }
+      const maxPkgBks = Math.max(...Object.values(pkgMap).map(v => v.count), 1);
+      const topPkgData = Object.entries(pkgMap)
+        .sort(([,a],[,b]) => b.count - a.count).slice(0, 5)
+        .map(([pid, { count, rev }]) => ({
+          name: pkgNames[pid] || 'Unknown', bookings: count, revenue: rev,
+          pct: Math.round((count / maxPkgBks) * 100),
+        }));
+
+      setDbStats({
+        totalBookings, confirmedBookings, totalRevenue, totalCollected, totalOutstanding,
+        leads: leadsCount,
+        portalVehicles: visVeh ?? 0, portalPackages: visPkg ?? 0, activePromos: activeProm ?? 0,
+        topPackages: topPkgData, funnel: funnelData,
+      });
       setLastUpdated(new Date());
-    } catch (e) {
-      console.error('[CommandCenter]', e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } catch (e) { console.error('[CommandCenter DB]', e); }
+    finally { setDbLoading(false); setDbRef(false); }
   }, [period]);
 
-  useEffect(() => { setLoading(true); fetchAll(); }, [fetchAll]);
-  const onRefresh = useCallback(() => { setRefreshing(true); fetchAll(); }, [fetchAll]);
+  useEffect(() => { setDbLoading(true); fetchDb(); }, [fetchDb]);
 
-  if (loading) return <LoadingView label="Loading command center…" />;
+  const loading    = ga4Loading && dbLoading;
+  const refreshing = ga4Refreshing || dbRefreshing;
+  const onRefresh  = useCallback(() => { ga4Refresh(); fetchDb(true); }, [ga4Refresh, fetchDb]);
 
-  const collectedPct = revenueStats.total > 0 ? Math.round((revenueStats.collected / revenueStats.total) * 100) : 0;
+  if (loading) return <LoadingView label="Loading Command Center…" />;
+
+  const s = ga4?.summary;
+  const ch = ga4?.channels;
+  const totalChSessions = ch ? Object.values(ch).reduce((a, b) => a + b, 0) || 1 : 1;
+  const collectedPct = dbStats.totalRevenue > 0
+    ? Math.round((dbStats.totalCollected / dbStats.totalRevenue) * 100) : 0;
+  const margin = dbStats.totalRevenue > 0
+    ? ((dbStats.totalRevenue - dbStats.totalCollected < 0 ? 0 : (dbStats.totalRevenue - (dbStats.totalRevenue - dbStats.totalCollected))) / dbStats.totalRevenue * 100).toFixed(1)
+    : '0.0';
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
@@ -915,39 +898,179 @@ function MarketingCommandCenterTab() {
 
       {/* Period selector */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {(['7d', '30d', '90d', 'all'] as const).map(p => (
-          <TouchableOpacity key={p} style={[an.periodBtn, period === p && an.periodBtnOn]} onPress={() => setPeriod(p)}>
-            <Text style={[an.periodT, period === p && an.periodTOn]}>
-              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : 'All Time'}
+        {(['7d','30d','90d'] as DatePreset[]).map(p => (
+          <TouchableOpacity key={p} style={[cc.periodBtn, period === p && cc.periodBtnOn]} onPress={() => setPeriod(p)}>
+            <Text style={[cc.periodT, period === p && cc.periodTOn]}>
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}
             </Text>
           </TouchableOpacity>
         ))}
-        {lastUpdated && (
+        {lastUpdated ? (
           <Text style={{ fontSize: 10, color: C.textMuted, alignSelf: 'center', marginLeft: 4 }}>
-            Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {stale ? '⚠ cached · ' : ''}Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
-        )}
+        ) : null}
       </View>
 
-      {/* KPI strip */}
+      {/* GA4 unavailable banner */}
+      {unavailable && (
+        <View style={cc.warnBanner}>
+          <Text style={cc.warnText}>⚡ GA4 not configured — showing Supabase analytics only.</Text>
+          <Text style={cc.warnSub}>Add GA4_SERVICE_ACCOUNT_JSON + GA4_PROPERTY_ID in Supabase Edge Function secrets.</Text>
+        </View>
+      )}
+      {ga4Error && !unavailable && (
+        <View style={[cc.warnBanner, { backgroundColor: '#fef3c7' }]}>
+          <Text style={[cc.warnText, { color: '#92400e' }]}>⚠ {ga4Error}</Text>
+        </View>
+      )}
+
+      {/* ── SECTION 1: GA4 Traffic KPIs ─────────────────────────────────────── */}
+      <Text style={cc.sectionHeader}>🔵 Traffic & Engagement  <Text style={cc.sourceTag}>GA4</Text></Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        {kpis.map(k => (
+        {[
+          { label: 'Sessions',   value: s ? s.sessions.toLocaleString()        : '—', color: C.primary  },
+          { label: 'Users',      value: s ? s.activeUsers.toLocaleString()     : '—', color: C.gold     },
+          { label: 'New Users',  value: s ? s.newUsers.toLocaleString()        : '—', color: C.success  },
+          { label: 'Page Views', value: s ? s.screenPageViews.toLocaleString() : '—', color: '#7c3aed'  },
+          { label: 'Key Events', value: s ? s.keyEvents.toLocaleString()       : '—', color: C.danger   },
+          { label: 'Avg Engage', value: s ? `${Math.round(s.userEngagementDuration / Math.max(s.sessions, 1))}s` : '—', color: '#0891b2' },
+        ].map(k => (
           <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
             <Text style={cc.kpiLabel}>{k.label}</Text>
             <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
-            {k.sub ? <Text style={cc.kpiSub}>{k.sub}</Text> : null}
           </View>
         ))}
       </View>
 
-      {/* Revenue & collection */}
+      {/* ── SECTION 2: Traffic Channels ─────────────────────────────────────── */}
+      {ch && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Source / Medium Breakdown  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          {(Object.entries(ch) as [string, number][])
+            .filter(([, v]) => v > 0)
+            .sort(([,a],[,b]) => b - a)
+            .map(([channel, sessions]) => {
+              const pct = Math.round((sessions / totalChSessions) * 100);
+              const color = CHANNEL_COLORS[channel] || C.textMuted;
+              return (
+                <View key={channel} style={cc.funnelRow}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
+                  <Text style={[cc.funnelLabel, { width: 72 }]}>{channel}</Text>
+                  <View style={{ flex: 1, height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
+                    <View style={{ height: 6, width: `${pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
+                  </View>
+                  <Text style={[cc.funnelCount, { color }]}>{sessions.toLocaleString()}</Text>
+                  <Text style={[cc.kpiSub, { minWidth: 32, textAlign: 'right' }]}>{pct}%</Text>
+                </View>
+              );
+            })}
+        </View>
+      )}
+
+      {/* ── SECTION 3: Top Pages ────────────────────────────────────────────── */}
+      {ga4 && ga4.topPages.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Top Pages  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          {ga4.topPages.slice(0, 8).map((p, i) => (
+            <View key={i} style={cc.pkgRow}>
+              <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={cc.pkgName} numberOfLines={1}>{p.path}</Text>
+                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 3 }}>
+                  <View style={{ height: 4, width: `${p.pct}%` as any, backgroundColor: C.primary + '80', borderRadius: 2 }} />
+                </View>
+              </View>
+              <View style={{ alignItems: 'flex-end', minWidth: 56 }}>
+                <Text style={cc.pkgBkgs}>{p.views.toLocaleString()}</Text>
+                <Text style={cc.kpiSub}>views</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* ── SECTION 4: Social Traffic ───────────────────────────────────────── */}
+      {ga4 && Object.keys(ga4.socialTraffic).length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Social Traffic  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+            {Object.entries(ga4.socialTraffic)
+              .sort(([,a],[,b]) => b - a)
+              .map(([platform, sessions]) => (
+                <View key={platform} style={cc.socialCard}>
+                  <Text style={cc.socialName}>{platform.charAt(0).toUpperCase() + platform.slice(1)}</Text>
+                  <Text style={cc.socialVal}>{(sessions as number).toLocaleString()}</Text>
+                  <Text style={cc.kpiSub}>sessions</Text>
+                </View>
+              ))}
+          </View>
+        </View>
+      )}
+
+      {/* ── SECTION 5: Audience ─────────────────────────────────────────────── */}
+      {ga4 && (ga4.audience.countries.length > 0 || ga4.audience.devices.length > 0) && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Audience Insights  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {/* Countries */}
+            <View style={{ flex: 1 }}>
+              <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>By Country</Text>
+              {ga4.audience.countries.slice(0, 5).map((c, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cc.pkgName} numberOfLines={1}>{c.label}</Text>
+                    <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
+                      <View style={{ height: 3, width: `${c.pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
+                    </View>
+                  </View>
+                  <Text style={cc.kpiSub}>{c.pct}%</Text>
+                </View>
+              ))}
+            </View>
+            {/* Devices */}
+            <View style={{ flex: 1 }}>
+              <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>By Device</Text>
+              {ga4.audience.devices.map((d, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cc.pkgName} numberOfLines={1}>{d.label}</Text>
+                    <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
+                      <View style={{ height: 3, width: `${d.pct}%` as any, backgroundColor: C.gold, borderRadius: 2 }} />
+                    </View>
+                  </View>
+                  <Text style={cc.kpiSub}>{d.pct}%</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* ── SECTION 6: Supabase Conversion KPIs ─────────────────────────────── */}
+      <Text style={cc.sectionHeader}>🟣 Conversions & Revenue  <Text style={cc.sourceTag}>Supabase</Text></Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        {[
+          { label: 'Bookings',    value: dbStats.totalBookings.toLocaleString(),     color: C.primary },
+          { label: 'Confirmed',   value: dbStats.confirmedBookings.toLocaleString(), color: C.success },
+          { label: 'Revenue',     value: `$${Math.round(dbStats.totalRevenue).toLocaleString()}`, color: C.gold },
+          { label: 'Leads',       value: dbStats.leads.toLocaleString(),             color: '#7c3aed' },
+        ].map(k => (
+          <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
+            <Text style={cc.kpiLabel}>{k.label}</Text>
+            <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Revenue collection bar */}
       <View style={cc.sect}>
-        <Text style={cc.sectTitle}>Revenue & Collections</Text>
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+        <Text style={cc.sectTitle}>Revenue Collection</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
           {[
-            { label: 'Total Revenue', value: `$${Math.round(revenueStats.total).toLocaleString()}`, color: C.primary },
-            { label: 'Collected',     value: `$${Math.round(revenueStats.collected).toLocaleString()}`, color: C.success },
-            { label: 'Outstanding',   value: `$${Math.round(revenueStats.outstanding).toLocaleString()}`, color: C.danger },
+            { label: 'Total Revenue', value: `$${Math.round(dbStats.totalRevenue).toLocaleString()}`, color: C.primary },
+            { label: 'Collected',     value: `$${Math.round(dbStats.totalCollected).toLocaleString()}`, color: C.success },
+            { label: 'Outstanding',   value: `$${Math.round(dbStats.totalOutstanding).toLocaleString()}`, color: C.danger },
           ].map(r => (
             <View key={r.label} style={{ flex: 1, alignItems: 'center' }}>
               <Text style={[cc.revVal, { color: r.color }]}>{r.value}</Text>
@@ -955,47 +1078,40 @@ function MarketingCommandCenterTab() {
             </View>
           ))}
         </View>
-        {/* Collection bar */}
         <View style={cc.collBarTrack}>
           <View style={[cc.collBarFill, { width: `${collectedPct}%` as any }]} />
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 }}>
-          <Text style={cc.barCaption}>{collectedPct}% collected</Text>
-          <Text style={cc.barCaption}>Margin: {revenueStats.margin.toFixed(1)}%</Text>
+          <Text style={cc.kpiSub}>{collectedPct}% collected</Text>
         </View>
       </View>
 
-      {/* Booking conversion funnel */}
-      {funnel.length > 0 && (
+      {/* Booking funnel */}
+      {dbStats.funnel.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Booking Conversion Funnel</Text>
-          {funnel.map(f => (
+          <Text style={cc.sectTitle}>Booking Conversion Funnel  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+          {dbStats.funnel.map(f => (
             <View key={f.label} style={cc.funnelRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, width: 90 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: f.color }} />
-                <Text style={cc.funnelLabel}>{f.label}</Text>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: f.color, marginRight: 6 }} />
+              <Text style={[cc.funnelLabel, { width: 80 }]}>{f.label}</Text>
+              <View style={{ flex: 1, height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
+                <View style={{ height: 6, width: `${f.pct}%` as any, backgroundColor: f.color, borderRadius: 3 }} />
               </View>
-              <View style={{ flex: 1, height: 8, backgroundColor: C.border, borderRadius: 4, overflow: 'hidden' }}>
-                <View style={{ height: 8, width: `${f.pct}%` as any, backgroundColor: f.color, borderRadius: 4 }} />
-              </View>
-              <View style={{ width: 52, alignItems: 'flex-end' }}>
-                <Text style={[cc.funnelCount, { color: f.color }]}>{f.count}</Text>
-                <Text style={cc.kpiSub}>{f.pct}%</Text>
-              </View>
+              <Text style={[cc.funnelCount, { color: f.color, minWidth: 30, textAlign: 'right' }]}>{f.count}</Text>
+              <Text style={[cc.kpiSub, { minWidth: 32, textAlign: 'right' }]}>{f.pct}%</Text>
             </View>
           ))}
         </View>
       )}
 
-      {/* Portal catalog live status */}
+      {/* Portal catalog */}
       <View style={cc.sect}>
-        <Text style={cc.sectTitle}>Portal Catalog — Live Status</Text>
-        <Text style={[cc.kpiSub, { marginBottom: 12 }]}>Items currently visible to website visitors</Text>
+        <Text style={cc.sectTitle}>Portal Catalog — Live  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {[
-            { label: 'Vehicles Live',    value: portalStats.vehicles,   color: C.primary },
-            { label: 'Packages Live',    value: portalStats.packages,   color: C.gold },
-            { label: 'Active Promos',    value: portalStats.promotions, color: C.success },
+            { label: 'Vehicles Live',  value: dbStats.portalVehicles,  color: C.primary },
+            { label: 'Packages Live',  value: dbStats.portalPackages,  color: C.gold    },
+            { label: 'Active Promos',  value: dbStats.activePromos,    color: C.success  },
           ].map(p => (
             <View key={p.label} style={cc.catalogCard}>
               <Text style={[cc.catalogVal, { color: p.color }]}>{p.value}</Text>
@@ -1005,18 +1121,16 @@ function MarketingCommandCenterTab() {
         </View>
       </View>
 
-      {/* Top safari packages */}
-      {topPkgs.length > 0 && (
+      {/* Top packages */}
+      {dbStats.topPackages.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Top Safari Packages</Text>
-          {topPkgs.map((p, i) => (
+          <Text style={cc.sectTitle}>Top Safari Packages  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+          {dbStats.topPackages.map((p, i) => (
             <View key={i} style={cc.pkgRow}>
-              <View style={cc.pkgRank}>
-                <Text style={cc.pkgRankT}>{i + 1}</Text>
-              </View>
+              <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={cc.pkgName} numberOfLines={1}>{p.name}</Text>
-                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 4 }}>
+                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 3 }}>
                   <View style={{ height: 4, width: `${p.pct}%` as any, backgroundColor: C.primary + '90', borderRadius: 2 }} />
                 </View>
               </View>
@@ -1028,31 +1142,32 @@ function MarketingCommandCenterTab() {
           ))}
         </View>
       )}
-
-      {/* Empty state */}
-      {kpis.length > 0 && kpis[0].value === '0' && (
-        <View style={an.connectCard}>
-          <Text style={an.connectTitle}>No Data for This Period</Text>
-          <Text style={an.connectSub}>No bookings found. Try "All Time" to see all-time analytics.</Text>
-        </View>
-      )}
     </ScrollView>
   );
 }
 
 const cc = StyleSheet.create({
-  kpiCard:    { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
-  kpiLabel:   { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 },
-  kpiVal:     { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginBottom: 2 },
-  kpiSub:     { fontSize: 11, color: C.textMuted },
-  sect:       { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
-  sectTitle:  { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
-  revVal:     { fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
-  revLabel:   { fontSize: 10, fontWeight: '600', color: C.textMuted, textTransform: 'uppercase', marginTop: 2 },
+  periodBtn:    { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  periodBtnOn:  { backgroundColor: C.primary, borderColor: C.primary },
+  periodT:      { fontSize: 12, fontWeight: '600', color: C.textMuted },
+  periodTOn:    { color: '#fff' },
+  sectionHeader: { fontSize: 13, fontWeight: '800', color: C.text, letterSpacing: 0.3, marginBottom: 12, marginTop: 4 },
+  sourceTag:    { fontSize: 11, fontWeight: '700', color: C.gold, backgroundColor: C.goldSoft, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
+  sourceTagInline: { fontSize: 10, fontWeight: '700', color: C.gold },
+  warnBanner:   { backgroundColor: '#fde68a20', borderRadius: 10, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#fbbf24' },
+  warnText:     { fontSize: 12, fontWeight: '700', color: '#92400e', marginBottom: 2 },
+  warnSub:      { fontSize: 11, color: '#78350f' },
+  kpiCard:      { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
+  kpiLabel:     { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 },
+  kpiVal:       { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginBottom: 2 },
+  kpiSub:       { fontSize: 11, color: C.textMuted },
+  sect:         { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  sectTitle:    { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
+  revVal:       { fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
+  revLabel:     { fontSize: 10, fontWeight: '600', color: C.textMuted, textTransform: 'uppercase', marginTop: 2 },
   collBarTrack: { height: 8, backgroundColor: C.border, borderRadius: 4, overflow: 'hidden' },
   collBarFill:  { height: 8, backgroundColor: C.success, borderRadius: 4 },
-  barCaption:   { fontSize: 11, color: C.textMuted },
-  funnelRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.border + '40' },
+  funnelRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.border + '40' },
   funnelLabel:  { fontSize: 12, fontWeight: '600', color: C.text },
   funnelCount:  { fontSize: 13, fontWeight: '700' },
   catalogCard:  { flex: 1, backgroundColor: C.bg, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border },
@@ -1063,252 +1178,157 @@ const cc = StyleSheet.create({
   pkgRankT:     { fontSize: 11, fontWeight: '800', color: C.primary },
   pkgName:      { fontSize: 13, fontWeight: '600', color: C.text },
   pkgBkgs:      { fontSize: 13, fontWeight: '700', color: C.primary },
+  socialCard:   { backgroundColor: C.bg, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border, minWidth: 80 },
+  socialName:   { fontSize: 11, fontWeight: '700', color: C.text, marginBottom: 2 },
+  socialVal:    { fontSize: 18, fontWeight: '800', color: '#7c3aed', letterSpacing: -0.4 },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// WEBSITE ANALYTICS TAB
+// WEBSITE ANALYTICS TAB — GA4 + Supabase
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── Business Analytics types ─────────────────────────────────────────────────
-interface BizMetric { label: string; value: string; sub?: string; color: string }
-interface StatusBreakdown { status: string; count: number; pct: number; color: string }
-interface PackageStat { name: string; bookings: number; revenue: number; pct: number }
-
-const STATUS_COLORS: Record<string, string> = {
-  confirmed: C.success,
-  active:    C.primary,
-  completed: C.gold,
-  pending:   '#e09b2d',
-  draft:     C.textMuted,
-  cancelled: C.danger,
-};
-
-function periodToDays(p: '7d' | '30d' | '90d' | 'all') {
-  if (p === '7d') return 7;
-  if (p === '30d') return 30;
-  if (p === '90d') return 90;
-  return 0;
-}
-
 function WebsiteAnalyticsTab() {
-  const [metrics, setMetrics]   = useState<BizMetric[]>([]);
-  const [statuses, setStatuses] = useState<StatusBreakdown[]>([]);
-  const [packages, setPackages] = useState<PackageStat[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [period, setPeriod]     = useState<'7d' | '30d' | '90d' | 'all'>('30d');
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const days = periodToDays(period);
-      const cutoff = days > 0
-        ? new Date(Date.now() - days * 86400000).toISOString()
-        : null;
-
-      const [
-        { data: dashboardKpis },
-        { data: safariSummary },
-        { data: blogPosts },
-      ] = await Promise.all([
-        supabase
-          .from('dashboard_kpis')
-          .select('total_bookings, active_bookings, outstanding_payments, total_revenue')
-          .maybeSingle(),
-        supabase
-          .from('safari_financial_summary')
-          .select('total_bookings, confirmed_bookings, completed_bookings, total_revenue_usd, total_collected, total_outstanding')
-          .eq('currency', 'USD')
-          .maybeSingle(),
-        supabase
-          .from('blog_posts')
-          .select('id, status, views, view_count, page_views')
-          .order('created_at', { ascending: false }),
-      ]);
-
-      // Fetch safari bookings for the period
-      let q = supabase
-        .from('safari_bookings')
-        .select('id, status, total_price_usd, amount_paid, start_date, created_at, package_id');
-      if (cutoff) q = q.gte('created_at', cutoff);
-      const { data: bookings } = await q;
-
-      const bks = (bookings || []) as Record<string, any>[];
-      const totalBookings = bks.length;
-      const totalRevenue  = bks.reduce((s, b) => s + (Number(b.total_price_usd) || 0), 0);
-      const confirmed     = bks.filter(b => ['confirmed','active','completed'].includes(b.status || '')).length;
-      const confirmRate   = totalBookings > 0 ? Math.round((confirmed / totalBookings) * 100) : 0;
-      const avgValue      = totalBookings > 0 ? totalRevenue / totalBookings : 0;
-      const totalBlogViews = (blogPosts || []).reduce((sum, post: any) => (
-        sum + Number(post.views ?? post.view_count ?? post.page_views ?? 0)
-      ), 0);
-      const publishedPosts = (blogPosts || []).filter((post: any) => (post.status || 'draft') === 'published').length;
-
-      const sharedRevenue = period === 'all'
-        ? Number(safariSummary?.total_revenue_usd ?? dashboardKpis?.total_revenue ?? totalRevenue)
-        : totalRevenue;
-      const sharedBookings = period === 'all'
-        ? Number(safariSummary?.total_bookings ?? dashboardKpis?.total_bookings ?? totalBookings)
-        : totalBookings;
-      const sharedConversions = period === 'all'
-        ? Number(
-            (Number(safariSummary?.confirmed_bookings || 0) + Number(safariSummary?.completed_bookings || 0))
-            || confirmed
-          )
-        : confirmed;
-      const sharedConversionRate = sharedBookings > 0
-        ? Math.round((sharedConversions / sharedBookings) * 100)
-        : 0;
-
-      setMetrics([
-        { label: 'Bookings', value: sharedBookings.toLocaleString(), sub: period === 'all' ? 'Shared dashboard total' : `Last ${period}`, color: C.primary },
-        { label: 'Revenue', value: `$${sharedRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, sub: 'Shared USD summary', color: C.gold },
-        { label: 'Blog Views', value: totalBlogViews.toLocaleString(), sub: `${publishedPosts} published posts`, color: C.success },
-        { label: 'Conv. Rate', value: `${period === 'all' ? sharedConversionRate : confirmRate}%`, sub: `${period === 'all' ? sharedConversions : confirmed} converted`, color: C.primary },
-      ]);
-
-      // Status breakdown
-      const statusCounts: Record<string, number> = {};
-      bks.forEach(b => {
-        const s = b.status || 'pending';
-        statusCounts[s] = (statusCounts[s] || 0) + 1;
-      });
-      const statusList: StatusBreakdown[] = Object.entries(statusCounts)
-        .sort(([,a],[,b]) => b - a)
-        .map(([status, count]) => ({
-          status,
-          count,
-          pct: totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0,
-          color: STATUS_COLORS[status] || C.textMuted,
-        }));
-      setStatuses(statusList);
-
-      // Top packages — fetch package names
-      const pkgCounts: Record<string, { count: number; revenue: number }> = {};
-      bks.forEach(b => {
-        const pid = b.package_id || '__unknown__';
-        if (!pkgCounts[pid]) pkgCounts[pid] = { count: 0, revenue: 0 };
-        pkgCounts[pid].count++;
-        pkgCounts[pid].revenue += Number(b.total_price_usd) || 0;
-      });
-
-      const pkgIds = Object.keys(pkgCounts).filter(id => id !== '__unknown__');
-      let pkgNames: Record<string, string> = {};
-      if (pkgIds.length > 0) {
-        const { data: pkgData } = await supabase
-          .from('safari_packages')
-          .select('id, name')
-          .in('id', pkgIds.slice(0, 30));
-        (pkgData || []).forEach((p: any) => { pkgNames[p.id] = p.name; });
-      }
-
-      const maxPkgCount = Math.max(...Object.values(pkgCounts).map(v => v.count), 1);
-      const pkgList: PackageStat[] = Object.entries(pkgCounts)
-        .sort(([,a],[,b]) => b.count - a.count)
-        .slice(0, 6)
-        .map(([pid, { count, revenue }]) => ({
-          name: pkgNames[pid] || (pid === '__unknown__' ? 'No Package' : 'Unknown'),
-          bookings: count,
-          revenue,
-          pct: Math.round((count / maxPkgCount) * 100),
-        }));
-      setPackages(pkgList);
-      setLastUpdated(new Date());
-
-    } catch (e) {
-      console.error('[BizAnalytics]', e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [period]);
-
-  useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
-  const onRefresh = useCallback(() => { setRefreshing(true); fetchData(); }, [fetchData]);
+  const [period, setPeriod] = useState<DatePreset>('30d');
+  const { data: ga4, loading, refreshing, stale, error, unavailable, refresh } = useGA4Analytics(period);
 
   if (loading) return <LoadingView label="Loading analytics…" />;
 
+  const s  = ga4?.summary;
+  const ch = ga4?.channels;
+  const totalCh = ch ? Object.values(ch).reduce((a, b) => a + b, 0) || 1 : 1;
+
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}>
 
-      {/* Period selector */}
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {(['7d','30d','90d','all'] as const).map(p => (
-          <TouchableOpacity key={p} style={[an.periodBtn, period === p && an.periodBtnOn]} onPress={() => setPeriod(p)}>
-            <Text style={[an.periodT, period === p && an.periodTOn]}>
-              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : 'All Time'}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+        {(['7d','30d','90d'] as DatePreset[]).map(p => (
+          <TouchableOpacity key={p} style={[cc.periodBtn, period === p && cc.periodBtnOn]} onPress={() => setPeriod(p)}>
+            <Text style={[cc.periodT, period === p && cc.periodTOn]}>
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}
             </Text>
           </TouchableOpacity>
         ))}
-        {lastUpdated ? (
-          <Text style={{ fontSize: 10, color: C.textMuted, alignSelf: 'center', marginLeft: 4 }}>
-            Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        ) : null}
+        {stale && <Text style={{ fontSize: 10, color: C.textMuted, alignSelf: 'center' }}>Cached</Text>}
       </View>
 
-      {/* KPI cards 2×2 */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        {metrics.map(m => (
-          <View key={m.label} style={an.metCard}>
-            <Text style={an.metLabel}>{m.label}</Text>
-            <Text style={[an.metVal, { color: m.color }]}>{m.value}</Text>
-            {m.sub ? <Text style={an.metSub}>{m.sub}</Text> : null}
+      {unavailable && (
+        <View style={cc.warnBanner}>
+          <Text style={cc.warnText}>GA4 Not Connected</Text>
+          <Text style={cc.warnSub}>Set GA4_SERVICE_ACCOUNT_JSON and GA4_PROPERTY_ID in Supabase Edge Function secrets to enable live analytics.</Text>
+        </View>
+      )}
+      {error && !unavailable && (
+        <View style={[cc.warnBanner, { backgroundColor: '#fef3c7' }]}>
+          <Text style={[cc.warnText, { color: '#92400e' }]}>{error}</Text>
+        </View>
+      )}
+
+      {s && (
+        <>
+          {/* KPI strip */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+            {[
+              { label: 'Sessions',   value: s.sessions.toLocaleString(),        color: C.primary },
+              { label: 'Users',      value: s.activeUsers.toLocaleString(),     color: C.gold    },
+              { label: 'New Users',  value: s.newUsers.toLocaleString(),        color: C.success },
+              { label: 'Page Views', value: s.screenPageViews.toLocaleString(), color: '#7c3aed' },
+            ].map(k => (
+              <View key={k.label} style={cc.kpiCard}>
+                <Text style={cc.kpiLabel}>{k.label}</Text>
+                <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
 
-      {/* Status breakdown */}
-      {statuses.length > 0 && (
-        <View style={an.sect}>
-          <Text style={an.sectTitle}>Bookings by Status</Text>
-          {statuses.map(s => (
-            <View key={s.status} style={an.pageRow}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
-                  <Text style={an.pagePath}>{s.status.charAt(0).toUpperCase() + s.status.slice(1)}</Text>
+          {/* Channels */}
+          {ch && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Traffic by Channel</Text>
+              {(Object.entries(ch) as [string, number][])
+                .filter(([,v]) => v > 0).sort(([,a],[,b]) => b - a)
+                .map(([ch_, sessions]) => {
+                  const pct   = Math.round((sessions / totalCh) * 100);
+                  const color = CHANNEL_COLORS[ch_] || C.textMuted;
+                  return (
+                    <View key={ch_} style={cc.funnelRow}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
+                      <Text style={[cc.funnelLabel, { width: 68 }]}>{ch_}</Text>
+                      <View style={{ flex: 1, height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
+                        <View style={{ height: 5, width: `${pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
+                      </View>
+                      <Text style={[cc.funnelCount, { color, minWidth: 46, textAlign: 'right' }]}>{sessions.toLocaleString()}</Text>
+                    </View>
+                  );
+                })}
+            </View>
+          )}
+
+          {/* Top pages */}
+          {ga4!.topPages.length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Top Pages</Text>
+              {ga4!.topPages.slice(0, 10).map((p, i) => (
+                <View key={i} style={cc.pkgRow}>
+                  <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cc.pkgName} numberOfLines={1}>{p.path}</Text>
+                    <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2, marginTop: 3 }}>
+                      <View style={{ height: 3, width: `${p.pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
+                    </View>
+                  </View>
+                  <View style={{ alignItems: 'flex-end', minWidth: 52 }}>
+                    <Text style={cc.pkgBkgs}>{p.views.toLocaleString()}</Text>
+                    <Text style={cc.kpiSub}>{p.engagedSessions} eng</Text>
+                  </View>
                 </View>
-                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2 }}>
-                  <View style={{ height: 4, width: `${s.pct}%` as any, backgroundColor: s.color, borderRadius: 2 }} />
+              ))}
+            </View>
+          )}
+
+          {/* Audience */}
+          {(ga4!.audience.countries.length > 0 || ga4!.audience.devices.length > 0) && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Audience Insights</Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>Countries</Text>
+                  {ga4!.audience.countries.slice(0, 5).map((c, i) => (
+                    <View key={i} style={{ marginBottom: 6 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={cc.pkgName} numberOfLines={1}>{c.label}</Text>
+                        <Text style={cc.kpiSub}>{c.pct}%</Text>
+                      </View>
+                      <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
+                        <View style={{ height: 3, width: `${c.pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
+                      </View>
+                    </View>
+                  ))}
                 </View>
-              </View>
-              <View style={{ alignItems: 'flex-end', minWidth: 52 }}>
-                <Text style={[an.pageViews, { color: s.color }]}>{s.count}</Text>
-                <Text style={an.metSub}>{s.pct}%</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>Devices</Text>
+                  {ga4!.audience.devices.map((d, i) => (
+                    <View key={i} style={{ marginBottom: 6 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={cc.pkgName} numberOfLines={1}>{d.label}</Text>
+                        <Text style={cc.kpiSub}>{d.pct}%</Text>
+                      </View>
+                      <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
+                        <View style={{ height: 3, width: `${d.pct}%` as any, backgroundColor: C.gold, borderRadius: 2 }} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
-          ))}
-        </View>
+          )}
+        </>
       )}
 
-      {/* Top packages */}
-      {packages.length > 0 && (
-        <View style={an.sect}>
-          <Text style={an.sectTitle}>Top Safari Packages</Text>
-          {packages.map((p, i) => (
-            <View key={i} style={an.pageRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={an.pagePath} numberOfLines={1}>{p.name}</Text>
-                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 4 }}>
-                  <View style={{ height: 4, width: `${p.pct}%` as any, backgroundColor: C.primary + '80', borderRadius: 2 }} />
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end', minWidth: 60 }}>
-                <Text style={an.pageViews}>{p.bookings} bkg{p.bookings !== 1 ? 's' : ''}</Text>
-                <Text style={an.metSub}>${Math.round(p.revenue / 1000)}k</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Empty state */}
-      {metrics[0]?.value === '0' && (
+      {!s && !unavailable && (
         <View style={an.connectCard}>
-          <Text style={an.connectTitle}>No Data for This Period</Text>
-          <Text style={an.connectSub}>There are no safari bookings recorded in the selected time window. Try "All Time" to see all historical data.</Text>
+          <Text style={an.connectTitle}>No Analytics Data</Text>
+          <Text style={an.connectSub}>Pull down to refresh or check your GA4 configuration.</Text>
         </View>
       )}
     </ScrollView>
@@ -1316,23 +1336,18 @@ function WebsiteAnalyticsTab() {
 }
 
 const an = StyleSheet.create({
-  periodBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
-  periodBtnOn: { backgroundColor: C.primary, borderColor: C.primary },
-  periodT: { fontSize: 12, fontWeight: '600', color: C.textMuted },
-  periodTOn: { color: '#fff' },
-  metCard: { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
-  metLabel: { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
-  metVal: { fontSize: 24, fontWeight: '800', letterSpacing: -0.6, marginBottom: 2 },
-  metSub: { fontSize: 11, color: C.textMuted },
-  sect: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
-  sectTitle: { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
-  pageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border + '50', gap: 12 },
-  pagePath: { fontSize: 12, color: C.text, fontWeight: '500' },
-  bar: { height: 4, backgroundColor: C.primary + '40', borderRadius: 2 },
-  pageViews: { fontSize: 13, fontWeight: '700', color: C.primary, textAlign: 'right' },
-  connectCard: { backgroundColor: C.card, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  connectCard:  { backgroundColor: C.card, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   connectTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 8, textAlign: 'center' },
-  connectSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20 },
+  connectSub:   { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20 },
+  metCard:      { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
+  metLabel:     { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  metVal:       { fontSize: 24, fontWeight: '800', letterSpacing: -0.6, marginBottom: 2 },
+  metSub:       { fontSize: 11, color: C.textMuted },
+  sect:         { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  sectTitle:    { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 },
+  pageRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border + '50', gap: 12 },
+  pagePath:     { fontSize: 12, color: C.text, fontWeight: '500' },
+  pageViews:    { fontSize: 13, fontWeight: '700', color: C.primary, textAlign: 'right' },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1572,48 +1587,24 @@ const bl = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function BlogAnalyticsTab() {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchPosts = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) console.error('[BlogAnalytics]', error.message);
-    const posts = (data || []).map((d: any) => ({
-      id: d.id,
-      title: d.title || d.heading || '',
-      excerpt: d.excerpt || d.summary || '',
-      status: d.status || d.publish_status || 'draft',
-      cover_image_url: '',
-      tags: Array.isArray(d.tags) ? d.tags : [],
-      views: d.views ?? d.view_count ?? d.page_views ?? 0,
-      author_name: d.author_name || '',
-      published_at: d.published_at || d.publish_date || '',
-      created_at: d.created_at || '',
-    })) as BlogPost[];
-    // Sort by views descending for analytics view
-    posts.sort((a, b) => (b.views || 0) - (a.views || 0));
-    setPosts(posts);
-  }, []);
-
-  useEffect(() => { setLoading(true); fetchPosts().finally(() => setLoading(false)); }, [fetchPosts]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchPosts(); setRefreshing(false); }, [fetchPosts]);
-
-  const totalViews = useMemo(() => posts.reduce((s, p) => s + (p.views || 0), 0), [posts]);
-  const published  = useMemo(() => posts.filter(p => p.status === 'published'), [posts]);
-  const maxViews   = useMemo(() => Math.max(...posts.map(p => p.views || 0), 1), [posts]);
+  const { posts, totalViews, totalLeads, totalBookings, loading, refreshing, error, refresh } = useBlogAnalytics();
+  const maxViews = useMemo(() => Math.max(...posts.map(p => p.totalViews), 1), [posts]);
+  const published = useMemo(() => posts.filter(p => p.status === 'published'), [posts]);
 
   if (loading) return <LoadingView label="Loading blog analytics…" />;
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}>
 
-      {/* Summary cards */}
-      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+      {error ? (
+        <View style={{ backgroundColor: '#fde8e0', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+          <Text style={{ fontSize: 12, color: C.danger }}>{error}</Text>
+        </View>
+      ) : null}
+
+      {/* Summary KPI cards */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
         <View style={[an.metCard, { flex: 1 }]}>
           <Text style={an.metLabel}>Total Views</Text>
           <Text style={[an.metVal, { color: C.primary }]}>{totalViews.toLocaleString()}</Text>
@@ -1621,6 +1612,14 @@ function BlogAnalyticsTab() {
         <View style={[an.metCard, { flex: 1 }]}>
           <Text style={an.metLabel}>Live Posts</Text>
           <Text style={[an.metVal, { color: C.success }]}>{published.length}</Text>
+        </View>
+        <View style={[an.metCard, { flex: 1 }]}>
+          <Text style={an.metLabel}>Leads</Text>
+          <Text style={[an.metVal, { color: C.gold }]}>{totalLeads}</Text>
+        </View>
+        <View style={[an.metCard, { flex: 1 }]}>
+          <Text style={an.metLabel}>Bookings</Text>
+          <Text style={[an.metVal, { color: C.success }]}>{totalBookings}</Text>
         </View>
       </View>
 
@@ -1630,19 +1629,28 @@ function BlogAnalyticsTab() {
         <View style={an.sect}>
           <Text style={an.sectTitle}>Post Performance</Text>
           {posts.map(p => {
-            const barPct = maxViews > 0 ? (p.views || 0) / maxViews : 0;
+            const barPct = maxViews > 0 ? p.totalViews / maxViews : 0;
             const st = BLOG_STATUS_CFG[p.status as BlogStatus] || BLOG_STATUS_CFG.draft;
             return (
-              <View key={p.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '50' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View key={p.slug} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '50' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1, marginRight: 12 }} numberOfLines={1}>{p.title}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
                       <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
                     </View>
-                    <Text style={{ fontSize: 13, fontWeight: '800', color: C.primary }}>{(p.views || 0).toLocaleString()}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: C.primary }}>{p.totalViews.toLocaleString()}</Text>
                   </View>
                 </View>
+                {/* Attribution row */}
+                {(p.leads > 0 || p.bookings > 0 || p.conversionRate > 0) ? (
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 6 }}>
+                    {p.leads > 0 ? <Text style={{ fontSize: 10, color: C.gold, fontWeight: '700' }}>{p.leads} lead{p.leads !== 1 ? 's' : ''}</Text> : null}
+                    {p.bookings > 0 ? <Text style={{ fontSize: 10, color: C.success, fontWeight: '700' }}>{p.bookings} booking{p.bookings !== 1 ? 's' : ''}</Text> : null}
+                    {p.conversionRate > 0 ? <Text style={{ fontSize: 10, color: C.textMuted }}>{p.conversionRate}% conv.</Text> : null}
+                    {p.ga4Views > 0 ? <Text style={{ fontSize: 10, color: C.textMuted }}>GA4: {p.ga4Views.toLocaleString()}</Text> : null}
+                  </View>
+                ) : null}
                 {/* Progress bar */}
                 <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
                   <View style={{ height: 6, width: `${barPct * 100}%` as any, backgroundColor: C.primary, borderRadius: 3 }} />

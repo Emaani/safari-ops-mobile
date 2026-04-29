@@ -367,26 +367,26 @@ function MainTabNavigator() {
       screenOptions={{
         headerShown:             false,
         tabBarShowLabel:         false,
-        tabBarActiveTintColor:   theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.textSoft,
+        tabBarActiveTintColor:   ACCENT,
+        tabBarInactiveTintColor: theme.dark ? '#6b6256' : '#9e9285',
         tabBarStyle: {
           position:        'absolute',
           left:            10,
           right:           10,
           bottom:          14,
           borderTopWidth:  0,
-          backgroundColor: theme.colors.surface,
-          height:          58,
+          backgroundColor: theme.dark ? '#1e1a17' : '#fffdf9',
+          height:          62,
           paddingBottom:   0,
           paddingTop:      0,
-          borderRadius:    22,
-          shadowColor:     theme.colors.shadow,
-          shadowOffset:    { width: 0, height: 14 },
-          shadowOpacity:   theme.dark ? 0.35 : 0.12,
-          shadowRadius:    20,
-          elevation:       10,
+          borderRadius:    24,
+          shadowColor:     '#000',
+          shadowOffset:    { width: 0, height: 16 },
+          shadowOpacity:   theme.dark ? 0.4 : 0.13,
+          shadowRadius:    24,
+          elevation:       12,
         },
-        tabBarItemStyle:  { borderRadius: 16, marginHorizontal: 2 },
+        tabBarItemStyle:  { borderRadius: 18, marginHorizontal: 1, marginVertical: 6 },
       }}
     >
       {tabs.map((tab) => (
@@ -496,87 +496,173 @@ function NotificationBell({ navigation, userId }: { navigation: any; userId: str
 }
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
+// Each icon has two variants: outlined (inactive) and filled (active)
+
+const ACCENT = '#1f4d45';   // earth forest green — matches app primary
 
 function DashboardIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* Grid 2×2 — dashboard overview */}
-      <Rect x="3"  y="3"  width="7" height="7" rx="1.5" />
-      <Rect x="14" y="3"  width="7" height="7" rx="1.5" />
-      <Rect x="3"  y="14" width="7" height="7" rx="1.5" />
-      <Rect x="14" y="14" width="7" height="7" rx="1.5" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {active ? (
+        // Filled: solid 2×2 grid tiles
+        <>
+          <Rect x="3"  y="3"  width="7" height="7" rx="2" fill={color} />
+          <Rect x="14" y="3"  width="7" height="7" rx="2" fill={color} />
+          <Rect x="3"  y="14" width="7" height="7" rx="2" fill={color} />
+          <Rect x="14" y="14" width="7" height="7" rx="2" fill={color} opacity="0.45" />
+        </>
+      ) : (
+        // Outlined
+        <>
+          <Rect x="3"  y="3"  width="7" height="7" rx="1.5" stroke={color} strokeWidth="1.8" />
+          <Rect x="14" y="3"  width="7" height="7" rx="1.5" stroke={color} strokeWidth="1.8" />
+          <Rect x="3"  y="14" width="7" height="7" rx="1.5" stroke={color} strokeWidth="1.8" />
+          <Rect x="14" y="14" width="7" height="7" rx="1.5" stroke={color} strokeWidth="1.8" />
+        </>
+      )}
     </Svg>
   );
 }
 
 function BookingsIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* Calendar with check mark */}
-      <Rect x="3" y="4" width="18" height="18" rx="2" />
-      <Path d="M16 2v4M8 2v4M3 10h18" />
-      <Path d="M9 16l2 2 4-4" />
+      {active ? (
+        <>
+          <Rect x="3" y="4" width="18" height="18" rx="2.5" fill={color} />
+          <Path d="M16 2v4M8 2v4M3 10h18" stroke="#fff" strokeWidth="1.6" />
+          <Path d="M8 16l2.5 2.5 5-5" stroke="#fff" strokeWidth="1.8" />
+        </>
+      ) : (
+        <>
+          <Rect x="3" y="4" width="18" height="18" rx="2" />
+          <Path d="M16 2v4M8 2v4M3 10h18" />
+          <Path d="M9 16l2 2 4-4" />
+        </>
+      )}
     </Svg>
   );
 }
 
 function FleetIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* 4×4 vehicle silhouette */}
-      <Path d="M5 17H3a1 1 0 0 1-1-1v-4l2-5h14l2 5v4a1 1 0 0 1-1 1h-2" />
-      <Path d="M5 17h14" />
-      <Circle cx="7.5" cy="17" r="2" />
-      <Circle cx="16.5" cy="17" r="2" />
-      <Path d="M4 12h16" />
+      {active ? (
+        <>
+          <Path d="M5 17H3a1 1 0 0 1-1-1v-4l2-5h14l2 5v4a1 1 0 0 1-1 1h-2"
+            fill={color} stroke="none" />
+          <Path d="M5 17h14" stroke={color} strokeWidth="1.8" />
+          <Circle cx="7.5" cy="17" r="2.5" fill="#fff" stroke={color} strokeWidth="1.6" />
+          <Circle cx="16.5" cy="17" r="2.5" fill="#fff" stroke={color} strokeWidth="1.6" />
+          <Path d="M4 12h16" stroke="#fff" strokeWidth="1.4" />
+        </>
+      ) : (
+        <>
+          <Path d="M5 17H3a1 1 0 0 1-1-1v-4l2-5h14l2 5v4a1 1 0 0 1-1 1h-2" />
+          <Path d="M5 17h14" />
+          <Circle cx="7.5" cy="17" r="2" />
+          <Circle cx="16.5" cy="17" r="2" />
+          <Path d="M4 12h16" />
+        </>
+      )}
     </Svg>
   );
 }
 
 function FinanceIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* Dollar sign + trend */}
-      <Path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      strokeLinecap="round" strokeLinejoin="round">
+      {active ? (
+        <>
+          {/* Filled coin with dollar sign */}
+          <Circle cx="12" cy="12" r="10" fill={color} />
+          <Path d="M12 6v12M15.5 8.5H10a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"
+            stroke="#fff" strokeWidth="1.8" />
+        </>
+      ) : (
+        <Path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
+          stroke={color} strokeWidth="1.8" />
+      )}
     </Svg>
   );
 }
 
 function SafariIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* Compass — safari navigation */}
-      <Circle cx="12" cy="12" r="10" />
-      <Path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
+      strokeLinecap="round" strokeLinejoin="round">
+      {active ? (
+        <>
+          <Circle cx="12" cy="12" r="10" fill={color} />
+          <Path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"
+            fill="#fff" opacity="0.9" />
+        </>
+      ) : (
+        <>
+          <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="1.8" />
+          <Path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"
+            stroke={color} strokeWidth="1.8" />
+        </>
+      )}
     </Svg>
   );
 }
 
 function MarketingIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* Megaphone — marketing broadcast */}
-      <Path d="M3 11v2a1 1 0 0 0 1 1h2l3 4v-12L6 10H4a1 1 0 0 0-1 1z" />
-      <Path d="M19 5c1.5 1.5 2 3.5 2 7s-.5 5.5-2 7" />
-      <Path d="M15.5 8.5c.8.8 1.2 2 1.2 3.5s-.4 2.7-1.2 3.5" />
+      strokeLinecap="round" strokeLinejoin="round">
+      {active ? (
+        <>
+          <Path d="M3 11v2a1 1 0 0 0 1 1h2l3 4v-12L6 10H4a1 1 0 0 0-1 1z"
+            fill={color} />
+          <Path d="M9 6v12" stroke={color} strokeWidth="1.5" />
+          <Path d="M19 5c1.5 1.5 2 3.5 2 7s-.5 5.5-2 7"
+            stroke={color} strokeWidth="2.2" />
+          <Path d="M15.5 8.5c.8.8 1.2 2 1.2 3.5s-.4 2.7-1.2 3.5"
+            stroke={color} strokeWidth="2" />
+        </>
+      ) : (
+        <>
+          <Path d="M3 11v2a1 1 0 0 0 1 1h2l3 4v-12L6 10H4a1 1 0 0 0-1 1z"
+            stroke={color} strokeWidth="1.8" />
+          <Path d="M19 5c1.5 1.5 2 3.5 2 7s-.5 5.5-2 7"
+            stroke={color} strokeWidth="1.8" />
+          <Path d="M15.5 8.5c.8.8 1.2 2 1.2 3.5s-.4 2.7-1.2 3.5"
+            stroke={color} strokeWidth="1.8" />
+        </>
+      )}
     </Svg>
   );
 }
 
 function MoreIcon({ color, size }: { color: string; size: number }) {
+  const active = color === ACCENT;
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {/* Horizontal dots — more options */}
-      <Circle cx="5"  cy="12" r="1.2" fill={color} stroke="none" />
-      <Circle cx="12" cy="12" r="1.2" fill={color} stroke="none" />
-      <Circle cx="19" cy="12" r="1.2" fill={color} stroke="none" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {active ? (
+        // Filled dots + vertical bar accent
+        <>
+          <Circle cx="5"  cy="12" r="2" fill={color} />
+          <Circle cx="12" cy="12" r="2" fill={color} />
+          <Circle cx="19" cy="12" r="2" fill={color} />
+        </>
+      ) : (
+        <>
+          <Circle cx="5"  cy="12" r="1.3" fill={color} />
+          <Circle cx="12" cy="12" r="1.3" fill={color} />
+          <Circle cx="19" cy="12" r="1.3" fill={color} />
+        </>
+      )}
     </Svg>
   );
 }

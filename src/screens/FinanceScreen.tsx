@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Dimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -20,7 +21,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { FadeSlideIn } from '../components/ui';
-import { Svg, Path, Circle, Rect } from 'react-native-svg';
+import { Svg, Path, Circle, Rect, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useFinanceData } from '../hooks/useFinanceData';
 import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
 import { useFinanceRealtimeSync } from '../hooks/useFinanceRealtimeSync';
@@ -131,6 +132,210 @@ function FileIcon({ size = 16, color = COLORS.warning }: { size?: number; color?
       <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <Path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
     </Svg>
+  );
+}
+
+// ============================================================================
+// REVENUE vs EXPENSE LINE CHART
+// ============================================================================
+
+const SCREEN_W = Dimensions.get('window').width;
+
+interface ChartPoint { label: string; revenue: number; expense: number; }
+
+function buildLastNDays(
+  revenueItems: RevenueItem[],
+  expenseItems: ExpenseItem[],
+  currency: Currency,
+  n = 7,
+): ChartPoint[] {
+  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+  const toBase = (amount: number, cur: string) => amount / (rates[cur] || 1);
+  const fromBase = (amount: number) => amount * (rates[currency] || 1);
+
+  const now = new Date();
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (n - 1 - i));
+    const dayStr = d.toISOString().slice(0, 10);
+    const label  = d.toLocaleDateString('en-GB', { weekday: 'short' });
+
+    const rev = revenueItems
+      .filter(r => (r.date || '').slice(0, 10) === dayStr)
+      .reduce((s, r) => s + fromBase(toBase(r.amount, r.currency)), 0);
+
+    const exp = expenseItems
+      .filter(e => (e.date || '').slice(0, 10) === dayStr)
+      .reduce((s, e) => s + fromBase(toBase(e.amount, e.currency)), 0);
+
+    return { label, revenue: rev, expense: exp };
+  });
+}
+
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1];
+    const curr = pts[i];
+    const cpX = (prev.x + curr.x) / 2;
+    d += ` C ${cpX} ${prev.y} ${cpX} ${curr.y} ${curr.x} ${curr.y}`;
+  }
+  return d;
+}
+
+function fmt(v: number): string {
+  if (v >= 1000) return `${(v / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return v.toFixed(0);
+}
+
+function RevenueExpenseChart({ revenueItems, expenseItems, currency }: {
+  revenueItems: RevenueItem[];
+  expenseItems: ExpenseItem[];
+  currency: Currency;
+}) {
+  const data = useMemo(() => buildLastNDays(revenueItems, expenseItems, currency, 7), [revenueItems, expenseItems, currency]);
+
+  const W      = SCREEN_W - 32;          // card width (16px margin each side)
+  const H      = 180;
+  const PAD_L  = 38;                     // left (y-axis labels)
+  const PAD_R  = 12;
+  const PAD_T  = 16;
+  const PAD_B  = 28;                     // bottom (x-axis labels)
+  const plotW  = W - PAD_L - PAD_R;
+  const plotH  = H - PAD_T - PAD_B;
+
+  const allVals  = [...data.map(d => d.revenue), ...data.map(d => d.expense)];
+  const maxVal   = Math.max(...allVals, 1);
+  const yTicks   = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(maxVal * f));
+
+  const n = data.length;
+  const xOf = (i: number) => PAD_L + (plotW / (n - 1)) * i;
+  const yOf = (v: number) => PAD_T + plotH - (v / maxVal) * plotH;
+
+  const revPts = data.map((d, i) => ({ x: xOf(i), y: yOf(d.revenue) }));
+  const expPts = data.map((d, i) => ({ x: xOf(i), y: yOf(d.expense) }));
+
+  const lastRev = data[n - 1]?.revenue ?? 0;
+  const lastExp = data[n - 1]?.expense ?? 0;
+  const totalRev = data.reduce((s, d) => s + d.revenue, 0);
+  const totalExp = data.reduce((s, d) => s + d.expense, 0);
+
+  const revColor = '#3d8f6a';  // forest green — revenue
+  const expColor = '#c96d4d';  // terracotta — expense
+
+  return (
+    <View style={{ backgroundColor: '#171513', borderRadius: 18, padding: 16, marginBottom: 16 }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <Text style={{ fontSize: 15, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.3 }}>Expense Status</Text>
+        <View style={{ flexDirection: 'row', gap: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: expColor }} />
+            <Text style={{ fontSize: 10, color: '#b8ab95', fontWeight: '600' }}>Expenses</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: revColor }} />
+            <Text style={{ fontSize: 10, color: '#b8ab95', fontWeight: '600' }}>Revenue</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* SVG Chart */}
+      <Svg width={W} height={H}>
+        <Defs>
+          <LinearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={revColor} stopOpacity="0.18" />
+            <Stop offset="1" stopColor={revColor} stopOpacity="0" />
+          </LinearGradient>
+          <LinearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={expColor} stopOpacity="0.18" />
+            <Stop offset="1" stopColor={expColor} stopOpacity="0" />
+          </LinearGradient>
+        </Defs>
+
+        {/* Y-axis grid lines + labels */}
+        {yTicks.map((tick, ti) => {
+          const y = yOf(tick);
+          return (
+            <React.Fragment key={ti}>
+              <Line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y}
+                stroke="#ffffff" strokeOpacity="0.06" strokeWidth="1" />
+              <SvgText x={PAD_L - 4} y={y + 4} fontSize="9" fill="#6b6256"
+                textAnchor="end" fontWeight="600">{fmt(tick)}</SvgText>
+            </React.Fragment>
+          );
+        })}
+
+        {/* Vertical dashed guide lines + x labels */}
+        {data.map((d, i) => {
+          const x = xOf(i);
+          return (
+            <React.Fragment key={i}>
+              <Line x1={x} y1={PAD_T} x2={x} y2={H - PAD_B}
+                stroke="#ffffff" strokeOpacity="0.08" strokeWidth="1"
+                strokeDasharray="3,3" />
+              <SvgText x={x} y={H - 6} fontSize="9" fill="#6b6256"
+                textAnchor="middle" fontWeight="600">{d.label}</SvgText>
+            </React.Fragment>
+          );
+        })}
+
+        {/* Revenue area fill */}
+        {revPts.length >= 2 && (
+          <Path
+            d={`${smoothPath(revPts)} L ${revPts[n-1].x} ${PAD_T + plotH} L ${revPts[0].x} ${PAD_T + plotH} Z`}
+            fill="url(#revGrad)"
+          />
+        )}
+
+        {/* Expense area fill */}
+        {expPts.length >= 2 && (
+          <Path
+            d={`${smoothPath(expPts)} L ${expPts[n-1].x} ${PAD_T + plotH} L ${expPts[0].x} ${PAD_T + plotH} Z`}
+            fill="url(#expGrad)"
+          />
+        )}
+
+        {/* Revenue line */}
+        {revPts.length >= 2 && (
+          <Path d={smoothPath(revPts)} fill="none" stroke={revColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+
+        {/* Expense line */}
+        {expPts.length >= 2 && (
+          <Path d={smoothPath(expPts)} fill="none" stroke={expColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+
+        {/* Endpoint dots */}
+        <Circle cx={revPts[n-1].x} cy={revPts[n-1].y} r={4} fill={revColor} />
+        <Circle cx={expPts[n-1].x} cy={expPts[n-1].y} r={4} fill={expColor} />
+      </Svg>
+
+      {/* Value labels at rightmost point */}
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: -12, marginRight: PAD_R + 4 }}>
+        <View style={{ backgroundColor: '#2a1e1b', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 }}>
+          <Text style={{ color: expColor, fontSize: 13, fontWeight: '800' }}>
+            -{fmt(totalExp)}
+          </Text>
+        </View>
+        <View style={{ backgroundColor: '#172420', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 }}>
+          <Text style={{ color: revColor, fontSize: 13, fontWeight: '800' }}>
+            +{fmt(totalRev)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Net summary */}
+      {(totalRev > 0 || totalExp > 0) ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#2e2822' }}>
+          <Text style={{ fontSize: 11, color: '#6b6256', fontWeight: '600' }}>7-day Net</Text>
+          <Text style={{ fontSize: 13, fontWeight: '800', color: totalRev - totalExp >= 0 ? revColor : expColor }}>
+            {totalRev - totalExp >= 0 ? '+' : '-'}{fmt(Math.abs(totalRev - totalExp))}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -538,6 +743,8 @@ export function FinanceScreen() {
           ))}
         </View>
       </View>
+
+      <RevenueExpenseChart revenueItems={revenueItems} expenseItems={expenseItems} currency={currency} />
 
       <View style={styles.kpiGrid}>
         <KPICard delay={0}   title="Revenue (MTD)"  value={formatCurrency(revenueMTD,  currency)} accent={COLORS.income}  bg={COLORS.revenueBg} icon={<TrendUpIcon   size={15} color={COLORS.income}  />} />
