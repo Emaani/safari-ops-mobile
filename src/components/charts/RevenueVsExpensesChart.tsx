@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,10 @@ interface RevenueVsExpensesChartProps {
   data: MonthlyRevenueExpense[];
   loading?: boolean;
   currency?: string;
+  /** 0-based month index to pre-select (from dashboard month filter). -1 = no selection. */
+  activeMonthIndex?: number;
+  /** Year being displayed — shown in subtitle */
+  year?: number;
 }
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
@@ -77,8 +81,15 @@ export function RevenueVsExpensesChart({
   data,
   loading = false,
   currency = 'USD',
+  activeMonthIndex = -1,
+  year,
 }: RevenueVsExpensesChartProps) {
-  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+  const [selectedIndex, setSelectedIndex] = useState<number>(activeMonthIndex);
+
+  // Sync with dashboard month filter whenever it changes
+  useEffect(() => {
+    setSelectedIndex(activeMonthIndex);
+  }, [activeMonthIndex]);
 
   // Chart dimensions
   const W     = SCREEN_W - 48;  // card has 16+16 margin + 8+8 padding
@@ -155,7 +166,7 @@ export function RevenueVsExpensesChart({
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Revenue vs Expenses</Text>
-          <Text style={styles.headerSub}>{n} month{n !== 1 ? 's' : ''} · {currency}</Text>
+          <Text style={styles.headerSub}>{year ?? new Date().getFullYear()} · {currency}</Text>
         </View>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>

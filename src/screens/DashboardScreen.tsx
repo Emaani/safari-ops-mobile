@@ -319,6 +319,9 @@ export function DashboardScreen() {
     displayCurrency: currency,
     dashboardMonthFilter,
     dashboardFilterYear,
+    // Always show all 12 months of the selected year in the line chart
+    revenueExpenseTimeFilter: 'year',
+    selectedRevenueExpenseYear: dashboardFilterYear,
   });
 
   const loading = dataLoading || exchangeRateLoading;
@@ -833,6 +836,8 @@ export function DashboardScreen() {
             data={calculations.monthlyRevenueExpenses}
             loading={loading}
             currency={currency}
+            activeMonthIndex={dashboardMonthFilter === 'all' ? -1 : (dashboardMonthFilter as number)}
+            year={dashboardFilterYear}
           />
         </View>
 
