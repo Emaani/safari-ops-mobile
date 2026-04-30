@@ -70,13 +70,13 @@ export function JackalLoader({
       {/* Spinning gold ring behind logo */}
       <Animated.View style={[
         s.ring,
-        { width: size + 28, height: size + 28, borderRadius: (size + 28) / 2, transform: [{ rotate }] },
+        { width: size + 32, height: size + 32, borderRadius: (size + 32) / 2, transform: [{ rotate }] },
       ]} />
       {/* Pulsing logo */}
-      <Animated.View style={{ transform: [{ scale: pulse }], opacity: fade }}>
+      <Animated.View style={{ transform: [{ scale: pulse }], opacity: fade, alignItems: 'center' }}>
         <Image
           source={LOGO}
-          style={{ width: size, height: size * 0.68, resizeMode: 'contain' }}
+          style={{ width: size, height: size * 0.8, resizeMode: 'contain' }}
         />
       </Animated.View>
       {/* Dot trail */}

@@ -95,16 +95,13 @@ export function useDashboardData({
       )
       .order('start_date', { ascending: false });
 
-    // Apply dashboard filter — always scope to the selected year
+    // Always fetch the full year — month filtering is done client-side in
+    // useDashboardCalculations so the Revenue vs Expenses chart has data
+    // for all 12 months regardless of which month is selected in the filter.
     {
       const year = dashboardFilterYear;
-      const month = dashboardMonthFilter;
-      const firstDay = month !== 'all'
-        ? new Date(year, month, 1).toISOString()
-        : new Date(year, 0, 1).toISOString();
-      const lastDay = month !== 'all'
-        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-        : new Date(year, 11, 31, 23, 59, 59).toISOString();
+      const firstDay = new Date(year, 0, 1).toISOString();
+      const lastDay  = new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] Bookings date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('start_date', firstDay).lte('start_date', lastDay);
     }
@@ -187,13 +184,8 @@ export function useDashboardData({
     // Apply dashboard filter — always scope to the selected year
     {
       const year = dashboardFilterYear;
-      const month = dashboardMonthFilter;
-      const firstDay = month !== 'all'
-        ? new Date(year, month, 1).toISOString()
-        : new Date(year, 0, 1).toISOString();
-      const lastDay = month !== 'all'
-        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-        : new Date(year, 11, 31, 23, 59, 59).toISOString();
+      const firstDay = new Date(year, 0, 1).toISOString();
+      const lastDay  = new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] Transactions date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('transaction_date', firstDay).lte('transaction_date', lastDay);
     }
@@ -239,13 +231,8 @@ export function useDashboardData({
     // Apply dashboard filter — always scope to the selected year
     {
       const year = dashboardFilterYear;
-      const month = dashboardMonthFilter;
-      const firstDay = month !== 'all'
-        ? new Date(year, month, 1).toISOString()
-        : new Date(year, 0, 1).toISOString();
-      const lastDay = month !== 'all'
-        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-        : new Date(year, 11, 31, 23, 59, 59).toISOString();
+      const firstDay = new Date(year, 0, 1).toISOString();
+      const lastDay  = new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] CRs date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('created_at', firstDay).lte('created_at', lastDay);
     }
@@ -339,13 +326,8 @@ export function useDashboardData({
     // Apply dashboard filter — always scope to the selected year
     {
       const year = dashboardFilterYear;
-      const month = dashboardMonthFilter;
-      const firstDay = month !== 'all'
-        ? new Date(year, month, 1).toISOString()
-        : new Date(year, 0, 1).toISOString();
-      const lastDay = month !== 'all'
-        ? new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-        : new Date(year, 11, 31, 23, 59, 59).toISOString();
+      const firstDay = new Date(year, 0, 1).toISOString();
+      const lastDay  = new Date(year, 11, 31, 23, 59, 59).toISOString();
       console.log(`[DashboardData #${fetchId}] Safari bookings date filter: ${firstDay} to ${lastDay}`);
       query = query.gte('start_date', firstDay).lte('start_date', lastDay);
     }
