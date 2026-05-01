@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
 import { devLog, devError } from '../lib/devLog';
@@ -151,6 +152,35 @@ function CalendarIcon({ size = 24, color = COLORS.purple }: { size?: number; col
   );
 }
 
+function AddBookingIcon({ size = 24, color = COLORS.primary }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <Path d="M16 2v4M8 2v4M3 10h18" />
+      <Path d="M12 14v4M10 16h4" />
+    </Svg>
+  );
+}
+
+function AddExpenseIcon({ size = 24, color = COLORS.warning }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      <Path d="M19 9l3 3-3 3" />
+    </Svg>
+  );
+}
+
+function AddSafariIcon({ size = 24, color = COLORS.success }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z" />
+      <Circle cx="12" cy="12" r="1" fill={color} />
+    </Svg>
+  );
+}
+
 function LogoutIcon({ size = 24, color = COLORS.danger }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -167,13 +197,23 @@ function LogoutIcon({ size = 24, color = COLORS.danger }: { size?: number; color
 
 interface SectionHeaderProps {
   title: string;
+  eyebrow?: string;
+  onPress?: () => void;
+  actionLabel?: string;
 }
 
-function SectionHeader({ title }: SectionHeaderProps) {
+function SectionHeader({ title, eyebrow, onPress, actionLabel }: SectionHeaderProps) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionEyebrow}>Dashboard</Text>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={{ flex: 1 }}>
+        {eyebrow ? <Text style={styles.sectionEyebrow}>{eyebrow}</Text> : null}
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {onPress && actionLabel ? (
+        <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.sectionAction}>
+          <Text style={styles.sectionActionText}>{actionLabel} →</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -201,16 +241,25 @@ function FilterChip({ label, selected, onPress }: FilterChipProps) {
 function HeroStat({
   label,
   value,
+  onPress,
 }: {
   label: string;
   value: string;
+  onPress?: () => void;
 }) {
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.heroStat} activeOpacity={0.75} onPress={onPress}>
+        <Text style={styles.heroStatLabel}>{label}</Text>
+        <Text style={styles.heroStatValue} numberOfLines={1}>{value}</Text>
+        <Text style={styles.heroStatArrow}>→</Text>
+      </TouchableOpacity>
+    );
+  }
   return (
     <View style={styles.heroStat}>
       <Text style={styles.heroStatLabel}>{label}</Text>
-      <Text style={styles.heroStatValue} numberOfLines={1}>
-        {value}
-      </Text>
+      <Text style={styles.heroStatValue} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -274,6 +323,7 @@ export function DashboardScreen() {
   // ========================================================================
 
   const { signOut, user } = useAuth();
+  const navigation = useNavigation<any>();
 
   // ========================================================================
   // HOOKS
@@ -634,14 +684,17 @@ export function DashboardScreen() {
             <HeroStat
               label="Costs"
               value={formatCurrency(kpiData.totalExpenses, currency)}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             />
             <HeroStat
               label="Due"
               value={formatCurrency(kpiData.outstandingPaymentsTotal, currency)}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             />
             <HeroStat
               label="Fleet"
               value={`${kpiData.fleetUtilization}%`}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             />
           </View>
         </View>
@@ -649,15 +702,21 @@ export function DashboardScreen() {
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowNewBooking(true)}>
-            <Text style={styles.quickActionEmoji}>🗓</Text>
-            <Text style={styles.quickActionLabel}>Create New Booking</Text>
+            <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primarySoft }]}>
+              <AddBookingIcon size={22} color={COLORS.primary} />
+            </View>
+            <Text style={styles.quickActionLabel}>New Booking</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowAddExpense(true)}>
-            <Text style={styles.quickActionEmoji}>💰</Text>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#f5e8ce' }]}>
+              <AddExpenseIcon size={22} color={COLORS.warning} />
+            </View>
             <Text style={styles.quickActionLabel}>Cash Requisition</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowCreateSafari(true)}>
-            <Text style={styles.quickActionEmoji}>🌿</Text>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#dce8e3' }]}>
+              <AddSafariIcon size={22} color={COLORS.success} />
+            </View>
             <Text style={styles.quickActionLabel}>Create Safari</Text>
           </TouchableOpacity>
         </View>
@@ -720,49 +779,11 @@ export function DashboardScreen() {
           </View>
         </View>
 
-        {/* Compact metric tiles — 2×2 */}
-        <View style={styles.compactKpiGrid}>
-          <View style={[styles.compactKpiTile, { backgroundColor: '#dce8e3' }]}>
-            <Text style={[styles.compactKpiLabel, { color: '#1f4d45' }]}>Revenue</Text>
-            <Text style={[styles.compactKpiValue, { color: '#1f4d45' }]}>
-              {formatCurrency(kpiData.totalRevenue, currency)}
-            </Text>
-            <Text style={[styles.compactKpiSub, { color: '#1f4d45' }]}>
-              MTD: {formatCurrency(kpiData.revenueMTD, currency)}
-            </Text>
-          </View>
-          <View style={[styles.compactKpiTile, { backgroundColor: '#fde8e0' }]}>
-            <Text style={[styles.compactKpiLabel, { color: '#c96d4d' }]}>Expenses</Text>
-            <Text style={[styles.compactKpiValue, { color: '#c96d4d' }]}>
-              {formatCurrency(kpiData.totalExpenses, currency)}
-            </Text>
-            <Text style={[styles.compactKpiSub, { color: '#c96d4d' }]}>
-              {currency === 'USD'
-                ? formatCurrency(kpiData.totalExpensesUGX, 'UGX')
-                : formatCurrency(kpiData.totalExpensesUSD, 'USD')}
-            </Text>
-          </View>
-          <View style={[styles.compactKpiTile, { backgroundColor: '#e8edf5' }]}>
-            <Text style={[styles.compactKpiLabel, { color: '#4a7fc1' }]}>Bookings</Text>
-            <Text style={[styles.compactKpiValue, { color: '#4a7fc1' }]}>
-              {kpiData.activeBookings}
-            </Text>
-            <Text style={[styles.compactKpiSub, { color: '#4a7fc1' }]}>
-              Pending: {kpiData.pendingBookings}
-            </Text>
-          </View>
-          <View style={[styles.compactKpiTile, { backgroundColor: '#f5e8ce' }]}>
-            <Text style={[styles.compactKpiLabel, { color: '#b8883f' }]}>Vehicles</Text>
-            <Text style={[styles.compactKpiValue, { color: '#b8883f' }]}>
-              {kpiData.vehiclesAvailable}
-            </Text>
-            <Text style={[styles.compactKpiSub, { color: '#b8883f' }]}>
-              Available now
-            </Text>
-          </View>
-        </View>
-
         {/* KPI Cards - 2x2 Grid */}
+        <SectionHeader
+          eyebrow="At a glance"
+          title="Key Metrics"
+        />
         <View style={styles.kpiGrid}>
           <View style={styles.kpiRow}>
             <KPICard
@@ -772,6 +793,7 @@ export function DashboardScreen() {
               icon={<DollarSignIcon size={20} color={COLORS.success} />}
               iconColor={COLORS.success}
               style={styles.kpiCard}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             />
             <KPICard
               title="Total Expenses"
@@ -780,6 +802,7 @@ export function DashboardScreen() {
               icon={<CreditCardIcon size={20} color={COLORS.danger} />}
               iconColor={COLORS.danger}
               style={styles.kpiCard}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             />
           </View>
           <View style={styles.kpiRow}>
@@ -790,6 +813,7 @@ export function DashboardScreen() {
               icon={<TruckIcon size={20} color={COLORS.primary} />}
               iconColor={COLORS.primary}
               style={styles.kpiCard}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             />
             <KPICard
               title="Active Bookings"
@@ -798,12 +822,19 @@ export function DashboardScreen() {
               icon={<CalendarIcon size={20} color={COLORS.purple} />}
               iconColor={COLORS.purple}
               style={styles.kpiCard}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Bookings' })}
             />
           </View>
         </View>
 
         {/* Outstanding Payments Card */}
         <View style={styles.section}>
+          <SectionHeader
+            eyebrow="Finance"
+            title="Outstanding Payments"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
+            actionLabel="View all"
+          />
           <OutstandingPaymentsCard
             amount={kpiData.outstandingPaymentsTotal}
             count={kpiData.outstandingPaymentsCount}
@@ -814,6 +845,12 @@ export function DashboardScreen() {
 
         {/* Recent Bookings Widget */}
         <View style={styles.section}>
+          <SectionHeader
+            eyebrow="Bookings"
+            title="Recent Bookings"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Bookings' })}
+            actionLabel="View all"
+          />
           <RecentBookingsWidget
             bookings={recentBookingsData}
             loading={loading}
@@ -822,7 +859,12 @@ export function DashboardScreen() {
 
         {/* Fleet Status Chart */}
         <View style={styles.section}>
-          <SectionHeader title="Fleet Status" />
+          <SectionHeader
+            eyebrow="Fleet"
+            title="Fleet Status"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
+            actionLabel="Manage"
+          />
           <FleetStatusChart
             data={fleetStatusData}
             loading={loading}
@@ -831,7 +873,12 @@ export function DashboardScreen() {
 
         {/* Revenue vs Expenses Chart */}
         <View style={styles.section}>
-          <SectionHeader title="Revenue vs Expenses" />
+          <SectionHeader
+            eyebrow="Finance"
+            title="Revenue vs Expenses"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
+            actionLabel="Details"
+          />
           <RevenueVsExpensesChart
             data={calculations.monthlyRevenueExpenses}
             loading={loading}
@@ -843,7 +890,12 @@ export function DashboardScreen() {
 
         {/* Expense Categories Chart */}
         <View style={styles.section}>
-          <SectionHeader title="Expense Categories" />
+          <SectionHeader
+            eyebrow="Finance"
+            title="Expense Categories"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
+            actionLabel="Details"
+          />
           <ExpenseCategoriesChart
             data={expenseCategoriesData}
             loading={loading}
@@ -853,7 +905,12 @@ export function DashboardScreen() {
 
         {/* Top Revenue Vehicles Chart */}
         <View style={styles.section}>
-          <SectionHeader title="Top Revenue Vehicles" />
+          <SectionHeader
+            eyebrow="Fleet"
+            title="Top Revenue Vehicles"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
+            actionLabel="View all"
+          />
           <TopVehiclesChart
             data={topVehiclesData}
             loading={loading}
@@ -863,7 +920,12 @@ export function DashboardScreen() {
 
         {/* Capacity Comparison Charts */}
         <View style={styles.section}>
-          <SectionHeader title="Capacity Comparison" />
+          <SectionHeader
+            eyebrow="Fleet"
+            title="Capacity Comparison"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
+            actionLabel="Details"
+          />
           <CapacityComparisonChart
             revenueData={capacityRevenueData}
             tripData={capacityTripData}
@@ -1044,9 +1106,13 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 1,
   },
-  quickActionEmoji: {
-    fontSize: 22,
-    marginBottom: 6,
+  quickActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   quickActionLabel: {
     fontSize: 11,
@@ -1054,42 +1120,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
     letterSpacing: 0.1,
-  },
-  // Compact KPI tiles (2x2)
-  compactKpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 18,
-  },
-  compactKpiTile: {
-    width: '48%',
-    borderRadius: 18,
-    padding: 14,
-    shadowColor: '#201a13',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  compactKpiLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-    opacity: 0.7,
-  },
-  compactKpiValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    marginBottom: 3,
-  },
-  compactKpiSub: {
-    fontSize: 11,
-    fontWeight: '600',
-    opacity: 0.65,
   },
   scrollView: {
     flex: 1,
@@ -1215,6 +1245,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fffaf3',
   },
+  heroStatArrow: {
+    fontSize: 11,
+    color: '#b8ab95',
+    marginTop: 4,
+  },
   controlsCard: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
@@ -1317,6 +1352,9 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
   sectionEyebrow: {
@@ -1328,10 +1366,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.text,
-    letterSpacing: -0.7,
+    letterSpacing: -0.6,
+  },
+  sectionAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 999,
+    marginBottom: 2,
+  },
+  sectionActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    letterSpacing: 0.1,
   },
   bottomSpacer: {
     height: 16,

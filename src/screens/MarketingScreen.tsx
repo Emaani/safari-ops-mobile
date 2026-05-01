@@ -790,6 +790,7 @@ function MarketingCommandCenterTab() {
     leads: 0, portalVehicles: 0, portalPackages: 0, activePromos: 0,
     topPackages: [] as { name: string; bookings: number; revenue: number; pct: number }[],
     funnel: [] as { label: string; count: number; pct: number; color: string }[],
+    utmChannels: [] as { source: string; count: number; pct: number }[],
   });
   const [dbLoading, setDbLoading]   = useState(true);
   const [dbRefreshing, setDbRef]    = useState(false);
@@ -864,11 +865,30 @@ function MarketingCommandCenterTab() {
           pct: Math.round((count / maxPkgBks) * 100),
         }));
 
+      // UTM channel attribution from marketing_leads
+      let utmChannels: { source: string; count: number; pct: number }[] = [];
+      try {
+        const { data: utmRows } = await supabase
+          .from('marketing_leads')
+          .select('utm_source, utm_medium');
+        const sourceMap: Record<string, number> = {};
+        for (const r of (utmRows ?? []) as Record<string, any>[]) {
+          const src = (r.utm_source || r.utm_medium || 'Direct').replace(/_/g, ' ');
+          const key = src.charAt(0).toUpperCase() + src.slice(1);
+          sourceMap[key] = (sourceMap[key] || 0) + 1;
+        }
+        const utmTotal = Math.max(Object.values(sourceMap).reduce((s, n) => s + n, 0), 1);
+        utmChannels = Object.entries(sourceMap)
+          .sort(([, a], [, b]) => b - a)
+          .map(([source, count]) => ({ source, count, pct: Math.round((count / utmTotal) * 100) }));
+      } catch { /* marketing_leads may not exist yet */ }
+
       setDbStats({
         totalBookings, confirmedBookings, totalRevenue, totalCollected, totalOutstanding,
         leads: leadsCount,
         portalVehicles: visVeh ?? 0, portalPackages: visPkg ?? 0, activePromos: activeProm ?? 0,
         topPackages: topPkgData, funnel: funnelData,
+        utmChannels,
       });
       setLastUpdated(new Date());
     } catch (e) { console.error('[CommandCenter DB]', e); }
@@ -925,17 +945,29 @@ function MarketingCommandCenterTab() {
         </View>
       )}
 
-      {/* ── SECTION 1: GA4 Traffic KPIs ─────────────────────────────────────── */}
-      <Text style={cc.sectionHeader}>🔵 Traffic & Engagement  <Text style={cc.sourceTag}>GA4</Text></Text>
+      {/* ── SECTION 1: Traffic & Engagement KPIs ─────────────────────────────── */}
+      <Text style={cc.sectionHeader}>
+        {'🔵 Traffic & Engagement  '}
+        <Text style={cc.sourceTag}>{s ? 'GA4' : 'Supabase'}</Text>
+      </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        {[
-          { label: 'Sessions',   value: s ? s.sessions.toLocaleString()        : '—', color: C.primary  },
-          { label: 'Users',      value: s ? s.activeUsers.toLocaleString()     : '—', color: C.gold     },
-          { label: 'New Users',  value: s ? s.newUsers.toLocaleString()        : '—', color: C.success  },
-          { label: 'Page Views', value: s ? s.screenPageViews.toLocaleString() : '—', color: '#7c3aed'  },
-          { label: 'Key Events', value: s ? s.keyEvents.toLocaleString()       : '—', color: C.danger   },
-          { label: 'Avg Engage', value: s ? `${Math.round(s.userEngagementDuration / Math.max(s.sessions, 1))}s` : '—', color: '#0891b2' },
-        ].map(k => (
+        {(s ? [
+          // GA4 live data
+          { label: 'Sessions',   value: s.sessions.toLocaleString(),        color: C.primary  },
+          { label: 'Users',      value: s.activeUsers.toLocaleString(),     color: C.gold     },
+          { label: 'New Users',  value: s.newUsers.toLocaleString(),        color: C.success  },
+          { label: 'Page Views', value: s.screenPageViews.toLocaleString(), color: '#7c3aed'  },
+          { label: 'Key Events', value: s.keyEvents.toLocaleString(),       color: C.danger   },
+          { label: 'Avg Engage', value: `${Math.round(s.userEngagementDuration / Math.max(s.sessions, 1))}s`, color: '#0891b2' },
+        ] : [
+          // Supabase fallback — always populated from Jackal Dashboard data
+          { label: 'Leads',          value: dbStats.leads.toLocaleString(),             color: C.primary  },
+          { label: 'Enquiries',      value: dbStats.totalBookings.toLocaleString(),     color: C.gold     },
+          { label: 'Confirmed',      value: dbStats.confirmedBookings.toLocaleString(), color: C.success  },
+          { label: 'Vehicles Live',  value: dbStats.portalVehicles.toLocaleString(),    color: '#7c3aed'  },
+          { label: 'Packages Live',  value: dbStats.portalPackages.toLocaleString(),    color: C.danger   },
+          { label: 'Active Promos',  value: dbStats.activePromos.toLocaleString(),      color: '#0891b2'  },
+        ]).map(k => (
           <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
             <Text style={cc.kpiLabel}>{k.label}</Text>
             <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
@@ -965,6 +997,27 @@ function MarketingCommandCenterTab() {
                 </View>
               );
             })}
+        </View>
+      )}
+
+      {/* UTM attribution from marketing_leads — always shown alongside or when GA4 unavailable */}
+      {dbStats.utmChannels.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Lead Attribution  <Text style={cc.sourceTagInline}>Supabase · UTM</Text></Text>
+          {dbStats.utmChannels.map(({ source, count, pct }) => {
+            const color = CHANNEL_COLORS[source] || C.gold;
+            return (
+              <View key={source} style={cc.funnelRow}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
+                <Text style={[cc.funnelLabel, { width: 80 }]}>{source}</Text>
+                <View style={{ flex: 1, height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
+                  <View style={{ height: 6, width: `${pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
+                </View>
+                <Text style={[cc.funnelCount, { color }]}>{count.toLocaleString()}</Text>
+                <Text style={[cc.kpiSub, { minWidth: 32, textAlign: 'right' }]}>{pct}%</Text>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -1587,42 +1640,68 @@ const bl = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function BlogAnalyticsTab() {
-  const { posts, totalViews, totalLeads, totalBookings, loading, refreshing, error, refresh } = useBlogAnalytics();
-  const maxViews = useMemo(() => Math.max(...posts.map(p => p.totalViews), 1), [posts]);
+  const {
+    posts, totalViews, totalLeads, totalBookings,
+    ga4Available, loading, refreshing, error, refresh,
+  } = useBlogAnalytics();
+
+  const maxViews  = useMemo(() => Math.max(...posts.map(p => p.totalViews), 1), [posts]);
   const published = useMemo(() => posts.filter(p => p.status === 'published'), [posts]);
 
   if (loading) return <LoadingView label="Loading blog analytics…" />;
+
+  const viewsSource = ga4Available ? 'GA4' : 'DB';
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}>
 
+      {/* Error */}
       {error ? (
         <View style={{ backgroundColor: '#fde8e0', borderRadius: 10, padding: 12, marginBottom: 14 }}>
           <Text style={{ fontSize: 12, color: C.danger }}>{error}</Text>
         </View>
       ) : null}
 
-      {/* Summary KPI cards */}
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-        <View style={[an.metCard, { flex: 1 }]}>
-          <Text style={an.metLabel}>Total Views</Text>
+      {/* Data source banner */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14,
+        backgroundColor: ga4Available ? C.primarySoft : C.goldSoft,
+        borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
+        <View style={{ width: 8, height: 8, borderRadius: 4,
+          backgroundColor: ga4Available ? C.success : C.gold }} />
+        <Text style={{ fontSize: 12, fontWeight: '600',
+          color: ga4Available ? C.primary : C.gold, flex: 1 }}>
+          {ga4Available
+            ? 'Live GA4 data · Views reflect website traffic'
+            : 'GA4 offline · Views from blog_posts counter'}
+        </Text>
+      </View>
+
+      {/* Summary KPI cards — 2×2 grid */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <View style={[an.metCard, { width: '47%' }]}>
+          <Text style={an.metLabel}>Total Views <Text style={{ color: C.textMuted, fontWeight: '400' }}>({viewsSource})</Text></Text>
           <Text style={[an.metVal, { color: C.primary }]}>{totalViews.toLocaleString()}</Text>
+          <Text style={an.metSub}>{posts.length} post{posts.length !== 1 ? 's' : ''} total</Text>
         </View>
-        <View style={[an.metCard, { flex: 1 }]}>
+        <View style={[an.metCard, { width: '47%' }]}>
           <Text style={an.metLabel}>Live Posts</Text>
           <Text style={[an.metVal, { color: C.success }]}>{published.length}</Text>
+          <Text style={an.metSub}>{posts.length - published.length} draft / archived</Text>
         </View>
-        <View style={[an.metCard, { flex: 1 }]}>
-          <Text style={an.metLabel}>Leads</Text>
+        <View style={[an.metCard, { width: '47%' }]}>
+          <Text style={an.metLabel}>Leads Attributed</Text>
           <Text style={[an.metVal, { color: C.gold }]}>{totalLeads}</Text>
+          <Text style={an.metSub}>via UTM / referrer</Text>
         </View>
-        <View style={[an.metCard, { flex: 1 }]}>
-          <Text style={an.metLabel}>Bookings</Text>
+        <View style={[an.metCard, { width: '47%' }]}>
+          <Text style={an.metLabel}>Bookings Attributed</Text>
           <Text style={[an.metVal, { color: C.success }]}>{totalBookings}</Text>
+          <Text style={an.metSub}>safari_bookings linked</Text>
         </View>
       </View>
 
+      {/* Per-post performance */}
       {posts.length === 0 ? (
         <EmptyView title="No blog data" sub="Publish blog posts to see analytics." />
       ) : (
@@ -1633,29 +1712,62 @@ function BlogAnalyticsTab() {
             const st = BLOG_STATUS_CFG[p.status as BlogStatus] || BLOG_STATUS_CFG.draft;
             return (
               <View key={p.slug} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '50' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1, marginRight: 12 }} numberOfLines={1}>{p.title}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
-                      <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
+
+                {/* Title row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1, marginRight: 12 }} numberOfLines={1}>
+                    {p.title}
+                  </Text>
+                  <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
+                    <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
+                  </View>
+                </View>
+
+                {/* Metrics row — always shown */}
+                <View style={{ flexDirection: 'row', gap: 14, marginBottom: 8 }}>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.primary }}>{p.totalViews.toLocaleString()}</Text>
+                    <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Views</Text>
+                  </View>
+                  {ga4Available && p.ga4Views > 0 ? (
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: '#0891b2' }}>{p.ga4EngagedSessions.toLocaleString()}</Text>
+                      <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Engaged</Text>
                     </View>
-                    <Text style={{ fontSize: 13, fontWeight: '800', color: C.primary }}>{p.totalViews.toLocaleString()}</Text>
+                  ) : null}
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.gold }}>{p.leads}</Text>
+                    <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Leads</Text>
                   </View>
-                </View>
-                {/* Attribution row */}
-                {(p.leads > 0 || p.bookings > 0 || p.conversionRate > 0) ? (
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 6 }}>
-                    {p.leads > 0 ? <Text style={{ fontSize: 10, color: C.gold, fontWeight: '700' }}>{p.leads} lead{p.leads !== 1 ? 's' : ''}</Text> : null}
-                    {p.bookings > 0 ? <Text style={{ fontSize: 10, color: C.success, fontWeight: '700' }}>{p.bookings} booking{p.bookings !== 1 ? 's' : ''}</Text> : null}
-                    {p.conversionRate > 0 ? <Text style={{ fontSize: 10, color: C.textMuted }}>{p.conversionRate}% conv.</Text> : null}
-                    {p.ga4Views > 0 ? <Text style={{ fontSize: 10, color: C.textMuted }}>GA4: {p.ga4Views.toLocaleString()}</Text> : null}
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.success }}>{p.bookings}</Text>
+                    <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Bookings</Text>
                   </View>
-                ) : null}
-                {/* Progress bar */}
-                <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
-                  <View style={{ height: 6, width: `${barPct * 100}%` as any, backgroundColor: C.primary, borderRadius: 3 }} />
+                  {p.conversionRate > 0 ? (
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: C.danger }}>{p.conversionRate}%</Text>
+                      <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Conv.</Text>
+                    </View>
+                  ) : null}
                 </View>
-                {p.published_at ? <Text style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>Published {new Date(p.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text> : null}
+
+                {/* Views progress bar */}
+                <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginBottom: 5 }}>
+                  <View style={{ height: 5, width: `${Math.round(barPct * 100)}%` as any,
+                    backgroundColor: p.status === 'published' ? C.primary : C.textMuted + '80', borderRadius: 3 }} />
+                </View>
+
+                {/* Date + source hint */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  {p.published_at
+                    ? <Text style={{ fontSize: 10, color: C.textMuted }}>
+                        Published {new Date(p.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </Text>
+                    : <Text style={{ fontSize: 10, color: C.textMuted }}>Not published</Text>}
+                  {!ga4Available && p.dbViews > 0
+                    ? <Text style={{ fontSize: 10, color: C.textMuted }}>{p.dbViews.toLocaleString()} DB views</Text>
+                    : null}
+                </View>
               </View>
             );
           })}
