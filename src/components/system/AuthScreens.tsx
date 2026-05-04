@@ -1,21 +1,53 @@
-import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
+function LoadingDots({ color }: { color: string }) {
+  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+
+  useEffect(() => {
+    const animations = dots.map((dot, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.delay((dots.length - i - 1) * 160),
+        ])
+      )
+    );
+    animations.forEach(a => a.start());
+    return () => animations.forEach(a => a.stop());
+  }, []);
+
+  return (
+    <View style={styles.dotsRow}>
+      {dots.map((dot, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            styles.dot,
+            { backgroundColor: color, opacity: dot, transform: [{ scale: dot.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 export function AppLoadingScreen() {
-  const { theme, t } = useAppPreferences();
+  const { theme } = useAppPreferences();
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <View style={styles.centered}>
-        <View style={[styles.logoCard, { backgroundColor: theme.colors.surface }]}>
-          <ActivityIndicator size="large" color={theme.colors.accent} />
-        </View>
-        <Text style={[styles.title, { color: theme.colors.text }]}>{t('app.name')}</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-          {t('common.loading')}
-        </Text>
+        <Image
+          source={require('../../../assets/jackal-loader-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <LoadingDots color={theme.colors.accent} />
       </View>
     </SafeAreaView>
   );
@@ -84,13 +116,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoCard: {
-    width: 84,
-    height: 84,
-    borderRadius: 28,
+  logo: {
+    width: 140,
+    height: 140,
+    marginBottom: 32,
+  },
+  dotsRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    gap: 10,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   biometricCard: {
     width: '100%',
