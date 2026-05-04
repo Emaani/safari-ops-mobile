@@ -67,9 +67,8 @@ type TabScreenConfig = {
 
 export default function App() {
   useEffect(() => {
-    initializeSDK()
-      .then(() => console.log('SDK initialized'))
-      .catch((e) => console.error('SDK init failed:', e));
+    // Non-blocking — SDK init failure must never prevent the app from rendering
+    initializeSDK().catch((e) => console.error('SDK init failed:', e));
   }, []);
 
   // Refresh all realtime subscribers when app returns to foreground

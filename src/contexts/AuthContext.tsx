@@ -43,9 +43,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     devLog('[AuthContext] Initializing auth state');
 
+    // Safety timeout — if session recovery hangs (e.g. bad network, missing
+    // credentials), force loading=false after 10 s so the app never white-screens.
+    const timeout = setTimeout(() => {
+      setLoading(false);
+      setAuthOrigin('signed_out');
+    }, 10_000);
+
     // Check for existing session
     getCurrentSession()
       .then((currentSession) => {
+        clearTimeout(timeout);
         if (currentSession) {
           devLog('[AuthContext] Restored session:', currentSession.user.email);
           setUser(currentSession.user);
@@ -57,7 +65,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       })
       .catch((error) => {
+        clearTimeout(timeout);
         console.error('[AuthContext] Error restoring session:', error);
+        setAuthOrigin('signed_out');
       })
       .finally(() => {
         setLoading(false);

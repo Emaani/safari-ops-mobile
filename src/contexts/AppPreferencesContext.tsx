@@ -748,36 +748,38 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    // Safety timeout — if AsyncStorage hangs in production, mark ready after 5 s
+    // with defaults so the app never white-screens waiting for preferences.
+    const timeout = setTimeout(() => {
+      if (mounted && !ready) setReady(true);
+    }, 5_000);
+
     (async () => {
-      const [storedTheme, storedLanguage, storedBiometrics, storedNotifPrefs] = await Promise.all([
-        readStoredPreference<ThemeMode>(STORAGE_KEYS.theme),
-        readStoredPreference<AppLanguage>(STORAGE_KEYS.language),
-        readStoredPreference<boolean>(STORAGE_KEYS.biometrics),
-        readStoredPreference<NotificationPrefs>(STORAGE_KEYS.notificationPrefs),
-      ]);
+      try {
+        const [storedTheme, storedLanguage, storedBiometrics, storedNotifPrefs] = await Promise.all([
+          readStoredPreference<ThemeMode>(STORAGE_KEYS.theme),
+          readStoredPreference<AppLanguage>(STORAGE_KEYS.language),
+          readStoredPreference<boolean>(STORAGE_KEYS.biometrics),
+          readStoredPreference<NotificationPrefs>(STORAGE_KEYS.notificationPrefs),
+        ]);
 
-      if (!mounted) {
-        return;
-      }
+        if (!mounted) return;
 
-      if (storedTheme) {
-        setThemeModeState(storedTheme);
+        if (storedTheme)  setThemeModeState(storedTheme);
+        if (storedLanguage) setLanguageState(storedLanguage);
+        if (typeof storedBiometrics === 'boolean') setBiometricEnabledState(storedBiometrics);
+        if (storedNotifPrefs) setNotificationPrefsState({ ...DEFAULT_NOTIFICATION_PREFS, ...storedNotifPrefs });
+      } catch (e) {
+        console.error('[AppPreferences] Failed to load stored preferences:', e);
+      } finally {
+        clearTimeout(timeout);
+        if (mounted) setReady(true);
       }
-      if (storedLanguage) {
-        setLanguageState(storedLanguage);
-      }
-      if (typeof storedBiometrics === 'boolean') {
-        setBiometricEnabledState(storedBiometrics);
-      }
-      if (storedNotifPrefs) {
-        setNotificationPrefsState({ ...DEFAULT_NOTIFICATION_PREFS, ...storedNotifPrefs });
-      }
-
-      setReady(true);
     })();
 
     return () => {
       mounted = false;
+      clearTimeout(timeout);
     };
   }, []);
 
