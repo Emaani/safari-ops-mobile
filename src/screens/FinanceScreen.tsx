@@ -967,6 +967,7 @@ export function FinanceScreen() {
         onClose={() => { setModalVisible(false); setModalItem(null); }}
         displayCurrency={currency}
         onRefetch={refetch}
+        currentUserId={user?.id}
       />
 
       <AddExpenseModal

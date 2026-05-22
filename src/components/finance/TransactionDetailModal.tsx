@@ -135,6 +135,8 @@ interface TransactionDetailModalProps {
   onClose: () => void;
   displayCurrency?: 'USD' | 'UGX' | 'KES';
   onRefetch?: () => void;
+  /** ID of the currently signed-in user — used to enforce approval rules */
+  currentUserId?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ export function TransactionDetailModal({
   onClose,
   displayCurrency = 'USD',
   onRefetch,
+  currentUserId,
 }: TransactionDetailModalProps) {
   const [actioning, setActioning] = useState(false);
 
@@ -288,7 +291,17 @@ export function TransactionDetailModal({
   );
   const createdDate  = cr.created_at  ? new Date(cr.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   const dateNeeded   = cr.date_needed ? new Date(cr.date_needed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-  const isPending    = cr.status === 'Pending';
+  const isPending     = cr.status === 'Pending';
+  const requesterId   = (cr as any).requester_id as string | undefined;
+  const approverId    = (cr as any).approver_id  as string | undefined;
+
+  // A user may approve only when:
+  //  1. The CR is still Pending
+  //  2. They are the designated approver for this CR
+  //  3. They are NOT the person who submitted it (even admins cannot self-approve)
+  const isSubmitter   = !!currentUserId && currentUserId === requesterId;
+  const isApprover    = !!currentUserId && currentUserId === approverId;
+  const canApprove    = isPending && isApprover && !isSubmitter;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -352,12 +365,12 @@ export function TransactionDetailModal({
             </View>
           )}
 
-          {/* Approve / Decline — shown for Pending requisitions */}
-          {isPending && (
+          {/* Approve / Decline — only for the designated approver, never the submitter */}
+          {isPending && canApprove && (
             <View style={styles.approvalCard}>
               <Text style={styles.approvalTitle}>Approval Action</Text>
               <Text style={styles.approvalSub}>
-                This requisition is awaiting approval. As an authorised approver you can approve or decline it.
+                This requisition is awaiting your approval. You are the designated approver.
               </Text>
               <View style={styles.approvalBtns}>
                 <TouchableOpacity
@@ -368,10 +381,7 @@ export function TransactionDetailModal({
                 >
                   {actioning
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <>
-                        <CheckIcon color="#fff" />
-                        <Text style={styles.approveBtnText}>Approve</Text>
-                      </>
+                    : <><CheckIcon color="#fff" /><Text style={styles.approveBtnText}>Approve</Text></>
                   }
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -382,13 +392,19 @@ export function TransactionDetailModal({
                 >
                   {actioning
                     ? <ActivityIndicator color={C.danger} size="small" />
-                    : <>
-                        <XIcon color={C.danger} />
-                        <Text style={styles.declineBtnText}>Decline</Text>
-                      </>
+                    : <><XIcon color={C.danger} /><Text style={styles.declineBtnText}>Decline</Text></>
                   }
                 </TouchableOpacity>
               </View>
+            </View>
+          )}
+
+          {/* Blocked — submitter cannot approve their own requisition */}
+          {isPending && isSubmitter && (
+            <View style={styles.selfSubmitNotice}>
+              <Text style={styles.selfSubmitText}>
+                You submitted this requisition and cannot approve it. The assigned approver will review it.
+              </Text>
             </View>
           )}
 
@@ -421,12 +437,14 @@ const styles = StyleSheet.create({
   descText:        { fontSize: 14, color: C.text, lineHeight: 22 },
 
   // Approval
-  approvalCard:    { backgroundColor: C.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.warning + '50' },
-  approvalTitle:   { fontSize: 15, fontWeight: '800', color: C.text, marginBottom: 6 },
-  approvalSub:     { fontSize: 13, color: C.muted, lineHeight: 19, marginBottom: 16 },
-  approvalBtns:    { flexDirection: 'row', gap: 10 },
-  approveBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.success, borderRadius: 14, paddingVertical: 14 },
-  approveBtnText:  { fontSize: 15, fontWeight: '800', color: '#fff' },
-  declineBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.danger + '12', borderRadius: 14, paddingVertical: 14, borderWidth: 1, borderColor: C.danger + '40' },
-  declineBtnText:  { fontSize: 15, fontWeight: '800', color: C.danger },
+  approvalCard:      { backgroundColor: C.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.warning + '50' },
+  approvalTitle:     { fontSize: 15, fontWeight: '800', color: C.text, marginBottom: 6 },
+  approvalSub:       { fontSize: 13, color: C.muted, lineHeight: 19, marginBottom: 16 },
+  approvalBtns:      { flexDirection: 'row', gap: 10 },
+  approveBtn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.success, borderRadius: 14, paddingVertical: 14 },
+  approveBtnText:    { fontSize: 15, fontWeight: '800', color: '#fff' },
+  declineBtn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.danger + '12', borderRadius: 14, paddingVertical: 14, borderWidth: 1, borderColor: C.danger + '40' },
+  declineBtnText:    { fontSize: 15, fontWeight: '800', color: C.danger },
+  selfSubmitNotice:  { backgroundColor: C.warning + '15', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.warning + '40' },
+  selfSubmitText:    { fontSize: 13, color: C.warning, lineHeight: 19, fontWeight: '600', textAlign: 'center' },
 });
