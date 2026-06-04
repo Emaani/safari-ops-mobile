@@ -86,6 +86,7 @@ export function useCRNotifications(
     masterEnabled: boolean;
     crNew:         boolean;
     crApproved:    boolean;
+    crUpdated:     boolean;
   },
   userId?: string,
 ) {
@@ -168,7 +169,10 @@ export function useCRNotifications(
     const template = STATUS_TEMPLATES[newStatus];
     if (!template) return;
 
-    if (notifPrefs && newStatus === 'Approved' && !notifPrefs.crApproved) return;
+    if (notifPrefs) {
+      if (newStatus === 'Approved' && !notifPrefs.crApproved) return;
+      if (newStatus !== 'Approved' && !notifPrefs.crUpdated) return;
+    }
 
     devLog(`[CRNotif] UPDATE ${prevStatus} → ${newStatus} for`, crRef(newRow));
     await fireNotification(template, newRow);

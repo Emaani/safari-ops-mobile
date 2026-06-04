@@ -69,6 +69,7 @@ export function useBookingNotifications(
   notifPrefs?: {
     masterEnabled:    boolean;
     bookingNew:       boolean;
+    bookingConfirmed: boolean;
     bookingStarted:   boolean;
     bookingCompleted: boolean;
     bookingCancelled: boolean;
@@ -147,7 +148,8 @@ export function useBookingNotifications(
     // Check per-event-type user preference
     if (notifPrefs && !notifPrefs.masterEnabled) return;
     if (notifPrefs) {
-      if (newStatus === 'In-Progress'  && !notifPrefs.bookingStarted)   return;
+      if (newStatus === 'Confirmed'    && !notifPrefs.bookingConfirmed)  return;
+      if (newStatus === 'In-Progress'  && !notifPrefs.bookingStarted)    return;
       if (newStatus === 'Completed'    && !notifPrefs.bookingCompleted)  return;
       if (newStatus === 'Cancelled'    && !notifPrefs.bookingCancelled)  return;
     }

@@ -25,6 +25,7 @@ import {
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookingNotifications } from './src/hooks/useBookingNotifications';
 import { useCRNotifications } from './src/hooks/useCRNotifications';
+import { useVehicleNotifications } from './src/hooks/useVehicleNotifications';
 import { useNetworkStatus } from './src/hooks/useNetworkStatus';
 import DashboardScreen from './src/screens/DashboardScreen';
 import BookingsScreen from './src/screens/BookingsScreen';
@@ -266,6 +267,9 @@ function AppNavigator() {
 
   // Realtime cash requisition notifications → in-app banner + OS push
   useCRNotifications(isAuthenticated && !!user, showNotification, notificationPrefs, user?.id);
+
+  // Realtime vehicle status notifications (maintenance / available / booked)
+  useVehicleNotifications(isAuthenticated && !!user, showNotification, notificationPrefs, user?.id);
 
   const navigationTheme = useMemo(() => {
     const base = theme.dark ? NavigationDarkTheme : NavigationDefaultTheme;

@@ -45,6 +45,8 @@ export type InAppNotifType =
   | 'cr_approved'
   | 'cr_rejected'
   | 'cr_completed'
+  | 'vehicle_maintenance'
+  | 'vehicle_available'
   | 'payment'
   | 'info';
 
@@ -74,33 +76,37 @@ export function useInAppNotification() {
 // ─── Accent colours per type ──────────────────────────────────────────────────
 
 const ACCENT: Record<InAppNotifType, string> = {
-  booking_new:       '#3b82f6',   // blue
-  booking_started:   '#f59e0b',   // amber
-  booking_completed: '#10b981',   // green
-  booking_confirmed: '#8b5cf6',   // purple
-  booking_cancelled: '#ef4444',   // red
-  cr_raised:         '#d97706',   // orange
-  cr_assigned:       '#4a7fc1',   // blue
-  cr_approved:       '#059669',   // emerald
-  cr_rejected:       '#dc2626',   // red
-  cr_completed:      '#10b981',   // green
-  payment:           '#059669',   // emerald
-  info:              '#6b7280',   // grey
+  booking_new:          '#3b82f6',   // blue
+  booking_started:      '#f59e0b',   // amber
+  booking_completed:    '#10b981',   // green
+  booking_confirmed:    '#8b5cf6',   // purple
+  booking_cancelled:    '#ef4444',   // red
+  cr_raised:            '#d97706',   // orange
+  cr_assigned:          '#4a7fc1',   // blue
+  cr_approved:          '#059669',   // emerald
+  cr_rejected:          '#dc2626',   // red
+  cr_completed:         '#10b981',   // green
+  vehicle_maintenance:  '#f97316',   // orange
+  vehicle_available:    '#22c55e',   // green
+  payment:              '#059669',   // emerald
+  info:                 '#6b7280',   // grey
 };
 
 const EMOJI: Record<InAppNotifType, string> = {
-  booking_new:       '📋',
-  booking_started:   '🚗',
-  booking_completed: '✅',
-  booking_confirmed: '🎉',
-  booking_cancelled: '❌',
-  cr_raised:         '📝',
-  cr_assigned:       '📌',
-  cr_approved:       '✅',
-  cr_rejected:       '❌',
-  cr_completed:      '💵',
-  payment:           '💰',
-  info:              '💬',
+  booking_new:          '📋',
+  booking_started:      '🚗',
+  booking_completed:    '✅',
+  booking_confirmed:    '🎉',
+  booking_cancelled:    '❌',
+  cr_raised:            '📝',
+  cr_assigned:          '📌',
+  cr_approved:          '✅',
+  cr_rejected:          '❌',
+  cr_completed:         '💵',
+  vehicle_maintenance:  '🔧',
+  vehicle_available:    '✅',
+  payment:              '💰',
+  info:                 '💬',
 };
 
 const BANNER_DURATION = 5000; // ms before auto-dismiss

@@ -27,7 +27,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { devLog } from '../lib/devLog';
-import { createNotification, resolveUserByEmail } from '../services/notificationService';
+import { createNotification, resolveUserByEmail, sendCRNotificationToUser } from '../services/notificationService';
 import type { Message, SendMessagePayload } from '../types/message';
 
 // ─── Column name detection ────────────────────────────────────────────────────
@@ -227,21 +227,20 @@ export function useMessages(
         if (err) throw err;
 
         if (resolvedRecipientId && resolvedRecipientId !== userId) {
-          await createNotification({
-            userId: resolvedRecipientId,
-            type: 'admin_message',
-            title: `Message from ${senderName || 'Staff'}`,
-            message: body.trim(),
-            priority: 'medium',
-            data: {
+          // Send OS push notification + persist DB record for the recipient
+          await sendCRNotificationToUser(
+            resolvedRecipientId,
+            `💬 Message from ${senderName || 'Staff'}`,
+            body.trim(),
+            {
               screen: 'Messages',
-              type: 'admin_message',
               initialTab: 'messages',
               sender_id: userId,
               recipient_email: resolvedRecipientEmail,
             },
-          }).catch((notificationError) => {
-            console.error('[Messages] notification create error:', notificationError);
+            'admin_message',
+          ).catch((notificationError) => {
+            console.error('[Messages] notification error:', notificationError);
           });
         }
       } catch (e: any) {

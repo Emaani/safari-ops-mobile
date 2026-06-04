@@ -29,24 +29,30 @@ const STORAGE_KEYS = {
 export interface NotificationPrefs {
   masterEnabled:    boolean;
   bookingNew:       boolean;
+  bookingConfirmed: boolean;
   bookingStarted:   boolean;
   bookingCompleted: boolean;
   bookingCancelled: boolean;
   crNew:            boolean;
   crApproved:       boolean;
+  crUpdated:        boolean;  // assigned / completed / resolved / rejected / declined
   messages:         boolean;
+  vehicleAlerts:    boolean;  // maintenance & availability changes
   systemAlerts:     boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   masterEnabled:    true,
   bookingNew:       true,
+  bookingConfirmed: true,
   bookingStarted:   true,
   bookingCompleted: true,
   bookingCancelled: true,
   crNew:            true,
   crApproved:       true,
+  crUpdated:        true,
   messages:         true,
+  vehicleAlerts:    true,
   systemAlerts:     true,
 };
 
