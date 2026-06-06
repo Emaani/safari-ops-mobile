@@ -25,7 +25,7 @@ import { useBookingsData } from '../hooks/useBookingsData';
 import { useBookingsRealtimeSync } from '../hooks/useBookingsRealtimeSync';
 import { useFleetData } from '../hooks/useFleetData';
 import { useAuth } from '../contexts/AuthContext';
-import { BookingCard, BookingDetailModal } from '../components/bookings';
+import { BookingCard, BookingDetailModal, EditBookingModal } from '../components/bookings';
 import { NewBookingModal } from '../components/forms';
 import { LoadingOverlay } from '../components/system/JackalLoader';
 import type { Booking, BookingStatus } from '../types/dashboard';
@@ -189,9 +189,11 @@ export function BookingsScreen() {
   const [sortOption,      setSortOption]      = useState<SortOption>('date-desc');
   const [showSortMenu,    setShowSortMenu]    = useState(false);
   const [refreshing,      setRefreshing]      = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [modalVisible,    setModalVisible]    = useState(false);
-  const [showNewBooking,  setShowNewBooking]  = useState(false);
+  const [selectedBooking, setSelectedBooking]   = useState<Booking | null>(null);
+  const [modalVisible,    setModalVisible]      = useState(false);
+  const [editBooking,     setEditBooking]       = useState<Booking | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [showNewBooking,  setShowNewBooking]    = useState(false);
 
   // ========================================================================
   // HOOKS
@@ -506,6 +508,19 @@ export function BookingsScreen() {
         booking={selectedBooking}
         visible={modalVisible}
         onClose={handleCloseModal}
+        onEdit={(booking) => {
+          setEditBooking(booking);
+          setEditModalVisible(true);
+        }}
+      />
+
+      {/* Edit Booking Modal — Pending / Confirmed / In-Progress only */}
+      <EditBookingModal
+        booking={editBooking}
+        visible={editModalVisible}
+        onClose={() => { setEditModalVisible(false); setEditBooking(null); }}
+        onSuccess={() => { setEditModalVisible(false); setEditBooking(null); refetch(); }}
+        vehicles={vehicles}
       />
 
       {/* New Booking Modal */}

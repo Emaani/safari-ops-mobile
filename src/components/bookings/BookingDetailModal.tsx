@@ -11,6 +11,7 @@ import {
 import { Svg, Path, Rect, Line } from 'react-native-svg';
 import type { Booking } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
+import { getBookingStatusConfig } from '../../constants/bookingStatus';
 
 // ============================================================================
 // CONSTANTS
@@ -29,13 +30,7 @@ const COLORS = {
   border: '#e5e7eb',
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  Confirmed: { bg: '#dbeafe', text: '#1e40af' },
-  'In-Progress': { bg: '#dcfce7', text: '#166534' },
-  Completed: { bg: '#f3e8ff', text: '#6b21a8' },
-  Pending: { bg: '#fef3c7', text: '#92400e' },
-  Cancelled: { bg: '#fee2e2', text: '#991b1b' },
-};
+// Status colors sourced from unified constants — see src/constants/bookingStatus.ts
 
 // ============================================================================
 // ICON COMPONENTS
@@ -69,12 +64,15 @@ interface BookingDetailModalProps {
   booking: (Booking & { vehicle?: { name: string } }) | null;
   visible: boolean;
   onClose: () => void;
+  /** Called when the user taps Edit — parent opens EditBookingModal */
+  onEdit?: (booking: Booking) => void;
 }
 
-export function BookingDetailModal({ booking, visible, onClose }: BookingDetailModalProps) {
+export function BookingDetailModal({ booking, visible, onClose, onEdit }: BookingDetailModalProps) {
   if (!booking) return null;
 
-  const statusColors = STATUS_COLORS[booking.status] || STATUS_COLORS.Pending;
+  const statusCfg    = getBookingStatusConfig(booking.status);
+  const statusColors = statusCfg;
   const clientName = booking.client?.company_name || 'Unknown Client';
   const assignedUser = booking.profiles?.full_name || 'Unassigned';
   const startDate = new Date(booking.start_date).toLocaleDateString();
@@ -214,6 +212,24 @@ export function BookingDetailModal({ booking, visible, onClose }: BookingDetailM
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Notes</Text>
               <Text style={styles.notesText}>{extBooking.notes}</Text>
+            </View>
+          )}
+
+          {/* Edit / Lock action */}
+          {statusCfg.editable ? (
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => { onClose(); onEdit?.(booking); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.editBtnText}>Edit Booking</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.lockNotice}>
+              <Text style={styles.lockIcon}>🔒</Text>
+              <Text style={styles.lockText}>
+                This booking is <Text style={{ fontWeight: '700' }}>{booking.status}</Text> and cannot be edited to preserve operational records.
+              </Text>
             </View>
           )}
 
@@ -370,5 +386,36 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 32,
+  },
+  editBtn: {
+    backgroundColor: '#1f4d45',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  lockNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#f5f0e8',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e1d7c8',
+  },
+  lockIcon: { fontSize: 16 },
+  lockText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#7f7565',
+    lineHeight: 18,
   },
 });

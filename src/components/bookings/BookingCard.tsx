@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Svg, Path, Rect } from 'react-native-svg';
 import type { Booking } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
+import { getBookingStatusConfig } from '../../constants/bookingStatus';
 
 // ============================================================================
 // CONSTANTS
@@ -21,13 +22,7 @@ const COLORS = {
   border: '#e5e7eb',
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  Confirmed: { bg: '#dbeafe', text: '#1e40af' },
-  'In-Progress': { bg: '#dcfce7', text: '#166534' },
-  Completed: { bg: '#f3e8ff', text: '#6b21a8' },
-  Pending: { bg: '#fef3c7', text: '#92400e' },
-  Cancelled: { bg: '#fee2e2', text: '#991b1b' },
-};
+// Status colors from unified constants — see src/constants/bookingStatus.ts
 
 // ============================================================================
 // ICON COMPONENTS
@@ -54,7 +49,7 @@ interface BookingCardProps {
 }
 
 export function BookingCard({ booking, onPress }: BookingCardProps) {
-  const statusColors = STATUS_COLORS[booking.status] || STATUS_COLORS.Pending;
+  const statusColors = getBookingStatusConfig(booking.status);
   const clientName = booking.client?.company_name || 'Unknown Client';
   const startDate = new Date(booking.start_date).toLocaleDateString();
   const endDate = new Date(booking.end_date).toLocaleDateString();
@@ -80,8 +75,9 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
           </Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+          <View style={[styles.statusDot, { backgroundColor: statusColors.dot }]} />
           <Text style={[styles.statusText, { color: statusColors.text }]}>
-            {booking.status}
+            {statusColors.label}
           </Text>
         </View>
       </View>
@@ -172,9 +168,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   statusText: {
     fontSize: 11,
