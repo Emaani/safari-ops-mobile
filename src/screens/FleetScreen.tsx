@@ -24,8 +24,9 @@ import { useFleetData } from '../hooks/useFleetData';
 import { useFleetRealtimeSync } from '../hooks/useFleetRealtimeSync';
 import { VehicleCard, VehicleDetailModal, MaintenanceTracker } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
-import { FadeSlideIn } from '../components/ui';
+import { FadeSlideIn, EmptyState, ListSkeleton } from '../components/ui';
 import { LoadingOverlay } from '../components/system/JackalLoader';
+import { tapLight, selectionTick } from '../lib/haptics';
 
 // ============================================================================
 // CONSTANTS
@@ -309,21 +310,23 @@ export function FleetScreen() {
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <TruckIcon size={48} color={COLORS.textMuted} />
-      <Text style={styles.emptyTitle}>No vehicles found</Text>
-      <Text style={styles.emptyMessage}>
-        {searchQuery || statusFilter !== 'all'
-          ? 'Try adjusting your search or filters'
-          : 'No vehicles in your fleet yet'}
-      </Text>
-    </View>
+    <EmptyState
+      type="fleet"
+      title={searchQuery || statusFilter !== 'all' ? 'No vehicles match' : 'Fleet is empty'}
+      subtitle={
+        searchQuery || statusFilter !== 'all'
+          ? 'Try adjusting your search or filters.'
+          : 'Add your first vehicle to start managing your safari fleet.'
+      }
+      secondaryLabel={searchQuery || statusFilter !== 'all' ? 'Clear Filters' : undefined}
+      onSecondary={searchQuery || statusFilter !== 'all' ? () => { setSearchQuery(''); setStatusFilter('all'); } : undefined}
+    />
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Loading Overlay */}
-      {loading && !refreshing && <LoadingOverlay />}
+      {/* Skeleton loader on first load */}
+      {loading && !refreshing && <ListSkeleton rows={4} type="vehicle" />}
 
       {/* Dark hero header */}
       <FadeSlideIn delay={0} distance={-10}>
@@ -443,7 +446,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 20, lineHeight: 26,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   filterPillText: {
-    fontSize: 13,
+    fontSize: 13, lineHeight: 19,
     fontWeight: '500',
     color: COLORS.textMuted,
   },
@@ -534,13 +537,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   errorTitle: {
-    fontSize: 18,
+    fontSize: 18, lineHeight: 24,
     fontWeight: '600',
     color: COLORS.text,
     marginBottom: 8,
   },
   errorMessage: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     color: COLORS.textMuted,
     textAlign: 'center',
     marginBottom: 16,
@@ -552,7 +555,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryButtonText: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     fontWeight: '600',
     color: '#ffffff',
   },
@@ -561,14 +564,14 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 18, lineHeight: 24,
     fontWeight: '600',
     color: COLORS.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyMessage: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     color: COLORS.textMuted,
     textAlign: 'center',
   },

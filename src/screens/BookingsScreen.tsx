@@ -27,6 +27,8 @@ import { useFleetData } from '../hooks/useFleetData';
 import { useAuth } from '../contexts/AuthContext';
 import { BookingCard, BookingDetailModal, EditBookingModal } from '../components/bookings';
 import { NewBookingModal } from '../components/forms';
+import { EmptyState, ListSkeleton } from '../components/ui';
+import { tapLight, selectionTick, notifySuccess } from '../lib/haptics';
 import { LoadingOverlay } from '../components/system/JackalLoader';
 import type { Booking, BookingStatus } from '../types/dashboard';
 
@@ -419,31 +421,44 @@ export function BookingsScreen() {
 
   const renderBooking = ({ item, index }: { item: Booking; index: number }) => (
     <FadeSlideIn delay={Math.min(index * 40, 320)} distance={16}>
-      <BookingCard booking={item} onPress={handleBookingPress} />
+      <BookingCard
+        booking={item}
+        onPress={(b) => { tapLight(); handleBookingPress(b); }}
+        onEdit={(b) => { setEditBooking(b); setEditModalVisible(true); }}
+        onCall={(b) => {
+          const phone = (b as any).contact || (b as any).phone_number;
+          if (phone) {
+            tapLight();
+            import('react-native').then(({ Linking }) =>
+              Linking.openURL(`tel:${phone}`).catch(() => {})
+            );
+          }
+        }}
+      />
     </FadeSlideIn>
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <CalendarIcon size={48} color={COLORS.textMuted} />
-      <Text style={styles.emptyTitle}>No bookings found</Text>
-      <Text style={styles.emptyMessage}>
-        {searchQuery || statusFilter !== 'all'
-          ? 'Try adjusting your search or filters'
-          : 'No bookings yet'}
-      </Text>
-    </View>
+    <EmptyState
+      type="bookings"
+      title={searchQuery || statusFilter !== 'all' ? 'No results found' : 'No bookings yet'}
+      subtitle={
+        searchQuery || statusFilter !== 'all'
+          ? 'Try adjusting your search or filters to find what you\'re looking for.'
+          : 'Create your first booking to start managing safari trips for your clients.'
+      }
+      actionLabel={searchQuery || statusFilter !== 'all' ? undefined : 'Create Booking'}
+      onAction={searchQuery || statusFilter !== 'all' ? undefined : () => setShowNewBooking(true)}
+      secondaryLabel={searchQuery || statusFilter !== 'all' ? 'Clear Filters' : undefined}
+      onSecondary={searchQuery || statusFilter !== 'all' ? () => {
+        setSearchQuery('');
+        setStatusFilter('all');
+      } : undefined}
+    />
   );
 
-  // Added skeleton loader for smoother loading experience
   function SkeletonLoader() {
-    return (
-      <View style={styles.skeletonContainer}>
-        {[...Array(5)].map((_, index) => (
-          <View key={index} style={styles.skeletonCard} />
-        ))}
-      </View>
-    );
+    return <ListSkeleton rows={5} type="booking" />;
   }
 
   return (
@@ -472,7 +487,7 @@ export function BookingsScreen() {
               <TouchableOpacity
                 key={f.value}
                 style={[styles.heroTab, statusFilter === f.value && styles.heroTabActive]}
-                onPress={() => setStatusFilter(f.value)}
+                onPress={() => { selectionTick(); setStatusFilter(f.value); }}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
@@ -577,13 +592,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   heroTitle: {
-    fontSize: 28,
+    fontSize: 28, lineHeight: 34,
     fontWeight: '800',
     letterSpacing: -1,
     color: '#fffaf3',
   },
   heroSub: {
-    fontSize: 13,
+    fontSize: 13, lineHeight: 19,
     color: '#b8ab95',
     marginTop: 2,
   },
@@ -612,7 +627,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fffdf9',
   },
   heroTabText: {
-    fontSize: 13,
+    fontSize: 13, lineHeight: 19,
     fontWeight: '700',
     color: '#b8ab95',
   },
@@ -655,7 +670,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 20, lineHeight: 26,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -701,7 +716,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   filterPillText: {
-    fontSize: 13,
+    fontSize: 13, lineHeight: 19,
     fontWeight: '500',
     color: COLORS.textMuted,
   },
@@ -732,7 +747,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sortButtonText: {
-    fontSize: 13,
+    fontSize: 13, lineHeight: 19,
     fontWeight: '500',
     color: COLORS.primary,
   },
@@ -758,7 +773,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff6ff',
   },
   sortMenuItemText: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     color: COLORS.text,
   },
   sortMenuItemTextActive: {
@@ -796,13 +811,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   errorTitle: {
-    fontSize: 18,
+    fontSize: 18, lineHeight: 24,
     fontWeight: '600',
     color: COLORS.text,
     marginBottom: 8,
   },
   errorMessage: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     color: COLORS.textMuted,
     textAlign: 'center',
     marginBottom: 16,
@@ -814,7 +829,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryButtonText: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     fontWeight: '600',
     color: '#ffffff',
   },
@@ -823,14 +838,14 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 18, lineHeight: 24,
     fontWeight: '600',
     color: COLORS.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyMessage: {
-    fontSize: 14,
+    fontSize: 14, lineHeight: 20,
     color: COLORS.textMuted,
     textAlign: 'center',
   },

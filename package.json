@@ -26,6 +26,7 @@
     "expo-blur": "^56.0.3",
     "expo-dev-client": "~6.0.21",
     "expo-device": "^8.0.10",
+    "expo-haptics": "^56.0.3",
     "expo-local-authentication": "~17.0.8",
     "expo-notifications": "^0.32.17",
     "expo-status-bar": "~3.0.9",

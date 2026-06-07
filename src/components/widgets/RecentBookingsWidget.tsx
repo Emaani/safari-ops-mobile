@@ -117,7 +117,7 @@ function EmptyState() {
 function LoadingState() {
   return (
     <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#3b82f6" />
+      <ActivityIndicator size="large" color="#1f4d45" />
       <Text style={styles.loadingText}>Loading bookings...</Text>
     </View>
   );

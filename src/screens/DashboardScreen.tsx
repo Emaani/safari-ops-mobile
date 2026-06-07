@@ -39,6 +39,7 @@ import {
 // Forms
 import { NewBookingModal, AddExpenseModal, CreateSafariModal } from '../components/forms';
 import { LoadingOverlay } from '../components/system/JackalLoader';
+import { KpiRowSkeleton } from '../components/ui';
 
 // Utils
 import { formatCurrency } from '../lib/utils';
@@ -604,8 +605,8 @@ export function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Loading Overlay */}
-      {loading && !refreshing && <LoadingOverlay />}
+      {/* Full-screen loader only on very first mount before header renders */}
+      {loading && !refreshing && false && <LoadingOverlay />}
 
       {/* Hero Header */}
       <View style={styles.header}>
@@ -780,11 +781,15 @@ export function DashboardScreen() {
         </View>
 
         {/* KPI Cards - 2x2 Grid */}
-        <SectionHeader
-          eyebrow="At a glance"
-          title="Key Metrics"
-        />
-        <View style={styles.kpiGrid}>
+        <SectionHeader eyebrow="At a glance" title="Key Metrics" />
+        {loading && !refreshing ? (
+          <>
+            <KpiRowSkeleton />
+            <View style={{ height: 12 }} />
+            <KpiRowSkeleton />
+          </>
+        ) : null}
+        <View style={[styles.kpiGrid, loading && !refreshing && { display: 'none' }]}>
           <View style={styles.kpiRow}>
             <KPICard
               title="Total Revenue"

@@ -76,13 +76,13 @@ export function useInAppNotification() {
 // ─── Accent colours per type ──────────────────────────────────────────────────
 
 const ACCENT: Record<InAppNotifType, string> = {
-  booking_new:          '#3b82f6',   // blue
+  booking_new:          '#1f4d45',   // primary
   booking_started:      '#f59e0b',   // amber
   booking_completed:    '#10b981',   // green
   booking_confirmed:    '#8b5cf6',   // purple
   booking_cancelled:    '#ef4444',   // red
   cr_raised:            '#d97706',   // orange
-  cr_assigned:          '#4a7fc1',   // blue
+  cr_assigned:          '#1f4d45',   // primary
   cr_approved:          '#059669',   // emerald
   cr_rejected:          '#dc2626',   // red
   cr_completed:         '#10b981',   // green

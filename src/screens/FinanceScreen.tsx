@@ -20,7 +20,8 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { FadeSlideIn } from '../components/ui';
+import { FadeSlideIn, EmptyState } from '../components/ui';
+import { tapLight, selectionTick } from '../lib/haptics';
 import { Svg, Path, Circle, Rect, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useFinanceData } from '../hooks/useFinanceData';
 import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
@@ -73,7 +74,7 @@ const CR_STATUS_FILTERS: { label: string; value: 'all' | CRStatus }[] = [
 function crStatusColor(status: string): string {
   switch (status) {
     case 'Pending':             return COLORS.warning;
-    case 'Approved':            return '#1d4ed8';
+    case 'Approved':            return '#3d8f6a';
     case 'Completed':
     case 'Resolved':            return COLORS.success;
     case 'Declined':
@@ -400,7 +401,7 @@ function RevenueRow({ item, displayCurrency, onPress }: { item: RevenueItem; dis
         <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle || date}</Text>
         <View style={styles.rowMeta}>
           <View style={[styles.sourceBadge, { backgroundColor: '#dbeafe' }]}>
-            <Text style={[styles.sourceBadgeText, { color: '#1d4ed8' }]}>{SOURCE_LABELS[item.source] || item.source}</Text>
+            <Text style={[styles.sourceBadgeText, { color: '#3d8f6a' }]}>{SOURCE_LABELS[item.source] || item.source}</Text>
           </View>
           <View style={[styles.sourceBadge, { backgroundColor: statusColor + '22' }]}>
             <Text style={[styles.sourceBadgeText, { color: statusColor }]}>{item.status}</Text>
@@ -851,25 +852,26 @@ export function FinanceScreen() {
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyTitle}>
-        {activeTab === 'revenue'     ? 'No revenue records found'
-         : activeTab === 'expenses'  ? 'No expense records found'
-         : 'No cash requisitions found'}
-      </Text>
-      <Text style={styles.emptyMessage}>
-        {(activeTab === 'requisitions' ? crSearchQuery : searchQuery)
-          ? 'Try adjusting your search'
+    <EmptyState
+      type="finance"
+      title={
+        activeTab === 'revenue'      ? 'No revenue records'
+        : activeTab === 'expenses'   ? 'No expense records'
+        : 'No cash requisitions'
+      }
+      subtitle={
+        (activeTab === 'requisitions' ? crSearchQuery : searchQuery)
+          ? 'Try adjusting your search or filters.'
           : activeTab === 'requisitions'
-            ? 'Tap "New Cash Requisition" above to raise one'
-            : 'Records will appear here once available'}
-      </Text>
-    </View>
+            ? 'Raise a cash requisition to request funds for operational expenses.'
+            : 'Financial records will appear here as bookings and expenses are recorded.'
+      }
+    />
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {loading && !refreshing && <LoadingOverlay />}
+      {/* LoadingOverlay removed — inline skeleton loading preferred */}
 
       {/* Hero header */}
       <FadeSlideIn delay={0} distance={-10}>

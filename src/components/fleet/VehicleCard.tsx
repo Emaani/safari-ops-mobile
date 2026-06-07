@@ -8,7 +8,7 @@ import type { Vehicle } from '../../types/dashboard';
 // ============================================================================
 
 const COLORS = {
-  primary: '#3b82f6',
+  primary: '#1f4d45',
   success: '#10b981',
   warning: '#f59e0b',
   danger: '#ef4444',
