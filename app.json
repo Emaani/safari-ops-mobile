@@ -19,7 +19,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "21",
+      "buildNumber": "22",
       "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
         "UIBackgroundModes": [
