@@ -167,10 +167,13 @@ const VALID_CR_STATUSES = ['Completed', 'Approved', 'Resolved'];
 // ============================================================================
 
 /**
- * Check if a booking is revenue-eligible per web Dashboard logic
- * Revenue = Completed/In-Progress OR Confirmed with payment received
+ * Check if a booking is revenue-eligible per web Dashboard logic.
+ * Mirrors HomeDashboard.tsx lines 716-719 exactly:
+ *   - Completed, In-Progress, OR Confirmed with payment received
+ *   - External/vendor vehicle bookings are EXCLUDED (not company revenue)
  */
 function isRevenueEligible(booking: Booking): boolean {
+  if (booking.is_vendor_vehicle) return false;
   return (
     booking.status === 'Completed' ||
     booking.status === 'In-Progress' ||
@@ -490,18 +493,21 @@ export function useDashboardCalculations(
         0
       );
 
+    // Mirror HomeDashboard.tsx line 748 exactly:
+    //   totalRevenueDisplay = totalBookingRevenue + totalTransactionRevenue
+    // Safari profit is intentionally excluded from the headline revenue KPI
+    // (the dashboard displays it as a separate KPI card).
     const totalRevenueDisplay = convertFromBaseCurrency(
-      totalBookingRevenue + Math.max(0, totalSafariProfit) + totalTransactionRevenue,
+      totalBookingRevenue + totalTransactionRevenue,
       displayCurrency,
       conversionRates
     );
 
-    console.log(`[DashboardCalculations] Total revenue calculation:`);
+    console.log(`[DashboardCalculations] Total revenue calculation (dashboard-parity):`);
     console.log(`  Fleet Booking Revenue (base): ${totalBookingRevenue}`);
-    console.log(`  Safari Profit (base, raw): ${totalSafariProfit}`);
-    console.log(`  Safari Profit (base, clamped): ${Math.max(0, totalSafariProfit)}`);
+    console.log(`  Safari Profit (base, shown separately): ${totalSafariProfit}`);
     console.log(`  Transaction Revenue (base): ${totalTransactionRevenue}`);
-    console.log(`  Total (base): ${totalBookingRevenue + Math.max(0, totalSafariProfit) + totalTransactionRevenue}`);
+    console.log(`  Total (base): ${totalBookingRevenue + totalTransactionRevenue}`);
     console.log(`  Display Currency: ${displayCurrency}`);
     console.log(`  Conversion Rate: ${conversionRates[displayCurrency]}`);
     console.log(`  Total Revenue Display: ${totalRevenueDisplay}`);

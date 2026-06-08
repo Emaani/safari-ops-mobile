@@ -58,6 +58,7 @@ export interface Booking {
   transaction_id?: string;
   bank_name?: string;
   booking_type?: 'booking' | 'reservation' | string;
+  is_vendor_vehicle?: boolean;
   contract_status?: string;
   created_at?: string; // Booking creation date (for Recent Bookings sorting)
   client?: {
