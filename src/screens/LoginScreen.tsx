@@ -5,7 +5,7 @@
  * without expo-blur (which is unsupported in the iOS simulator).
  * The effect is visually identical to BlurView on real devices.
  *
- * Background: assets/safari/jackal-vehicle.jpg (fleet lineup photo)
+ * Background: assets/safari/jackal-brand-fleet.jpg (Jackal Adventures fleet — branded spare-tyre covers)
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -61,7 +61,7 @@ const gp = StyleSheet.create({
   },
   wash:    {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(20,14,6,0.55)',
+    backgroundColor: 'rgba(12,8,2,0.72)',
   },
   topEdge: {
     position: 'absolute', top: 0, left: 0, right: 0,
@@ -227,7 +227,7 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
 
       {/* ── Full-bleed background — Jackal Adventures fleet lineup ─────────── */}
       <Animated.Image
-        source={require('../../assets/safari/jackal-vehicle.jpg')}
+        source={require('../../assets/safari/jackal-brand-fleet.jpg')}
         style={[s.bgImage, { transform: [{ scale: bgScale }] }]}
         resizeMode="cover"
       />
@@ -369,9 +369,10 @@ const s = StyleSheet.create({
   root:     { flex: 1, backgroundColor: '#1a1208' },
 
   bgImage:  { position: 'absolute', top: 0, left: 0, width: SW, height: SH },
-  ovTop:    { position: 'absolute', top: 0, left: 0, right: 0, height: SH * 0.42, backgroundColor: 'rgba(10,18,6,0.18)' },
-  ovBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SH * 0.68, backgroundColor: 'rgba(6,12,4,0.58)' },
-  ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(55,32,6,0.10)' },
+  // Light overlays — let the fleet photo show prominently
+  ovTop:    { position: 'absolute', top: 0, left: 0, right: 0, height: SH * 0.35, backgroundColor: 'rgba(0,0,0,0.05)' },
+  ovBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SH * 0.55, backgroundColor: 'rgba(0,0,0,0.38)' },
+  ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(30,18,4,0.06)' },
 
   safe:   { flex: 1, backgroundColor: 'transparent' },
   kav:    { flex: 1 },

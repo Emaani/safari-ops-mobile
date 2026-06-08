@@ -1,6 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { createNotification, scheduleLocalNotification } from '../services/notificationService';
+import { createNotification, scheduleLocalNotification, sendCRNotificationToUser } from '../services/notificationService';
+import { supabase as _db } from '../lib/supabase';
+
+async function getAllPushUserIds(): Promise<string[]> {
+  const { data } = await _db.from('push_tokens').select('user_id').eq('is_active', true);
+  return [...new Set((data ?? []).map((r: any) => r.user_id as string).filter(Boolean))];
+}
 import { devLog } from '../lib/devLog';
 import type { InAppNotif, InAppNotifType } from '../components/system/InAppNotificationBanner';
 
@@ -109,13 +115,27 @@ export function useCRNotifications(
     const by       = row.requested_by     || '';
     const body     = template.body(ref, category, by);
 
-    // OS push (shows in background / lock screen)
+    const baseData = { cr_id: row.id, screen: 'Finance' };
+
+    // 1. Local notification for THIS device — suppress_in_app_banner because onInAppNotif (step 3) handles it
     await scheduleLocalNotification(template.title, body, {
-      cr_id:  row.id,
-      screen: 'Finance',
+      ...baseData, notif_type: template.type, suppress_in_app_banner: true,
     }).catch(console.error);
 
-    // In-app banner (shows when foregrounded)
+    // 2. Broadcast via Expo Push API → ALL staff devices, including when app is closed
+    const pushData = { ...baseData, notif_type: template.type };
+    getAllPushUserIds().then(userIds => {
+      userIds.forEach(uid => {
+        if (uid !== userId) {
+          sendCRNotificationToUser(uid, template.title, body, pushData,
+            template.type === 'cr_approved' ? 'cr_approved' :
+            template.type === 'cr_rejected' ? 'cr_rejected' : 'cr_created'
+          ).catch(() => {});
+        }
+      });
+    }).catch(() => {});
+
+    // 3. In-app banner for THIS device when foregrounded
     onInAppNotif({
       type:   template.type,
       title:  template.title,

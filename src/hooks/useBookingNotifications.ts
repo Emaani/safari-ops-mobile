@@ -1,6 +1,17 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { createNotification, scheduleLocalNotification } from '../services/notificationService';
+import { createNotification, scheduleLocalNotification, sendCRNotificationToUser } from '../services/notificationService';
+import { supabase as _supabase } from '../lib/supabase';
+
+/** Fetches all active user IDs with registered push tokens so we can broadcast. */
+async function getAllPushUserIds(): Promise<string[]> {
+  const { data } = await _supabase
+    .from('push_tokens')
+    .select('user_id')
+    .eq('is_active', true);
+  const ids = [...new Set((data ?? []).map((r: any) => r.user_id as string).filter(Boolean))];
+  return ids;
+}
 import { devLog } from '../lib/devLog';
 import type { InAppNotif, InAppNotifType } from '../components/system/InAppNotificationBanner';
 
@@ -87,14 +98,24 @@ export function useBookingNotifications(
     bookingId: string,
   ) => {
     const body = template.body(ref, client);
+    const baseData = { booking_id: bookingId, screen: 'Bookings' };
 
-    // OS / push notification (shows even when app is in background)
+    // 1. Local notification for THIS device — suppress_in_app_banner because onInAppNotif (step 3) already handles it
     await scheduleLocalNotification(template.title, body, {
-      booking_id: bookingId,
-      screen: 'Bookings',
+      ...baseData, notif_type: template.type, suppress_in_app_banner: true,
     }).catch(console.error);
 
-    // In-app banner (only visible when foregrounded)
+    // 2. Broadcast via Expo Push API → reaches ALL staff devices even when app is closed
+    const pushData = { ...baseData, notif_type: template.type };
+    getAllPushUserIds().then(userIds => {
+      userIds.forEach(uid => {
+        if (uid !== userId) {
+          sendCRNotificationToUser(uid, template.title, body, pushData, 'booking_created').catch(() => {});
+        }
+      });
+    }).catch(() => {});
+
+    // 3. In-app banner for THIS device when foregrounded
     onInAppNotif({
       type:   template.type,
       title:  template.title,

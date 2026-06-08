@@ -21,6 +21,7 @@ import { AppLoadingScreen, BiometricGateScreen } from './src/components/system/A
 import {
   InAppNotificationProvider,
   useInAppNotification,
+  type InAppNotifType,
 } from './src/components/system/InAppNotificationBanner';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookingNotifications } from './src/hooks/useBookingNotifications';
@@ -234,13 +235,15 @@ function AppNavigator() {
 
     // When a push arrives WHILE the app is foregrounded → show in-app banner
     notifListenerRef.current = addNotificationReceivedListener((notification) => {
-      const { title, body } = notification.request.content;
+      const { title, body, data: notifData } = notification.request.content;
+      // Booking/CR hooks already fired their own typed banner for local notifications; skip duplicates
+      if ((notifData as any)?.suppress_in_app_banner) return;
       if (title) {
         showNotification({
-          type:   'info',
+          type:   ((notifData as any)?.notif_type as InAppNotifType) || 'info',
           title:  title as string,
           body:   (body as string) || '',
-          screen: 'Notifications',
+          screen: (notifData as any)?.screen || 'Notifications',
         });
       }
     });
