@@ -291,6 +291,26 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
     setSaving(true);
     try {
+      // ── Server-side availability gate (mirrors dashboard checkVehicleAvailability) ──
+      // Run whenever a vehicle is being newly assigned or changed.
+      if (vehicleId && vehicleId !== (booking.assigned_vehicle_id ?? '')) {
+        const { data: avail, error: availErr } = await supabase
+          .rpc('check_vehicle_availability', {
+            p_vehicle_id: vehicleId,
+            p_booking_id: booking.id,
+          });
+        if (!availErr && avail?.[0]?.is_available === false) {
+          const conflictRef = avail[0].conflict_booking_reference || 'another booking';
+          Alert.alert(
+            'Vehicle Unavailable',
+            `This vehicle is already assigned to ${conflictRef}. Please select a different vehicle.`,
+            [{ text: 'OK' }],
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
       const totalAmount  = parseFloat(totalCost);
       const paidAmount   = parseFloat(amountPaid || '0');
       const balanceDue   = totalAmount - paidAmount;
@@ -320,16 +340,23 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
       if (error) throw error;
 
-      // If vehicle changed, update vehicle status
-      if (vehicleId && vehicleId !== booking.assigned_vehicle_id) {
-        await supabase.from('vehicles').update({ status: 'booked' }).eq('id', vehicleId);
-        // Free the previously assigned vehicle if there was one
-        if (booking.assigned_vehicle_id) {
+      // Mirror dashboard logic exactly:
+      // - Completed / Cancelled → release vehicle to 'available'
+      // - All other active statuses → mark vehicle 'booked'
+      // This runs regardless of whether the vehicle changed, ensuring
+      // status-completions/cancellations never leave a vehicle stuck as 'booked'.
+      const targetVehicleStatus: 'booked' | 'available' =
+        (status === 'Completed' || status === 'Cancelled') ? 'available' : 'booked';
+
+      if (vehicleId) {
+        // Update assigned vehicle status based on booking status
+        await supabase.from('vehicles').update({ status: targetVehicleStatus }).eq('id', vehicleId);
+        // Release the previously-assigned vehicle if it was swapped out
+        if (booking.assigned_vehicle_id && vehicleId !== booking.assigned_vehicle_id) {
           await supabase.from('vehicles').update({ status: 'available' }).eq('id', booking.assigned_vehicle_id);
         }
-      }
-      // If vehicle was removed, mark old one available
-      if (!vehicleId && booking.assigned_vehicle_id) {
+      } else if (booking.assigned_vehicle_id) {
+        // Vehicle was unassigned — release it
         await supabase.from('vehicles').update({ status: 'available' }).eq('id', booking.assigned_vehicle_id);
       }
 
@@ -471,13 +498,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                   <Text style={[fld.inputText, !selectedVehicle && { color: C.muted }]}>
                     {selectedVehicle
                       ? `${selectedVehicle.make} ${selectedVehicle.model} · ${selectedVehicle.license_plate}`
-                      : (() => {
-                          const datesSet = !!(startDate && endDate);
-                          const avail = datesSet
-                            ? vehicles.filter(v => v.status !== 'maintenance' && v.status !== 'out_of_service' && !conflictingVehicleIds.has(v.id)).length
-                            : vehicles.filter(v => v.status === 'available').length;
-                          return `Tap to browse — ${avail} of ${vehicles.length} available`;
-                        })()}
+                      : `Tap to browse — ${vehicles.filter(v => v.status === 'available').length} of ${vehicles.length} available`}
                   </Text>
                   {vehicleId && (
                     <TouchableOpacity onPress={() => setVehicleId('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -560,12 +581,9 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
             const filtered = vehicles.filter(v =>
               !q || `${v.make} ${v.model} ${v.license_plate} ${v.capacity}`.toLowerCase().includes(q)
             );
-            const datesSet = !!(startDate && endDate);
-            const avail = filtered.filter(v =>
-              v.status !== 'maintenance' && v.status !== 'out_of_service' &&
-              (datesSet ? !conflictingVehicleIds.has(v.id) : v.status === 'available')
-            );
-            const unavail = filtered.filter(v => !avail.find(a => a.id === v.id));
+            // Primary sort/count: status === 'available' (matches RPC logic)
+            const avail   = filtered.filter(v => v.status === 'available');
+            const unavail = filtered.filter(v => v.status !== 'available');
             const ordered = [...avail, ...unavail];
 
             return (
@@ -574,7 +592,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                   <Text style={s.vpCountText}>
                     {loadingConflicts
                       ? 'Checking availability…'
-                      : `${avail.length} available${datesSet ? ' for your dates' : ''} · ${unavail.length} unavailable`}
+                      : `${avail.length} available · ${unavail.length} unavailable`}
                   </Text>
                   {vehicleId && (
                     <TouchableOpacity onPress={() => { setVehicleId(''); setVehicleSheetOpen(false); setVehicleQuery(''); }}>
@@ -595,11 +613,11 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                   }
                   renderItem={({ item: v }) => {
                     const isSelected  = v.id === vehicleId;
-                    const datesSet2   = !!(startDate && endDate);
-                    const hasConflict = datesSet2 && conflictingVehicleIds.has(v.id);
-                    const isAvail     = v.status !== 'maintenance' && v.status !== 'out_of_service' &&
-                                        (datesSet2 ? !hasConflict : v.status === 'available');
-                    const statusClr   = hasConflict ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
+                    const hasConflict = conflictingVehicleIds.has(v.id);
+                    // Primary gate: status === 'available' (matches check_vehicle_availability RPC)
+                    const isAvail     = v.status === 'available';
+                    // Date-conflict badge for extra context on booked vehicles
+                    const statusClr   = (hasConflict && !isAvail) ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
                     const statusLabel = hasConflict
                       ? 'Conflict'
                       : v.status.charAt(0).toUpperCase() + v.status.slice(1);

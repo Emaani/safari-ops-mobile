@@ -36,7 +36,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
     let query = supabase
       .from('bookings')
       .select(
-        'id, booking_reference, start_date, end_date, status, amount_paid, total_amount, currency, assigned_vehicle_id, assigned_to, client_id, client_name, contact, email, notes'
+        'id, booking_reference, start_date, end_date, status, amount_paid, total_amount, currency, assigned_vehicle_id, assigned_to, client_id, client_name, contact, email, notes, package_type, daily_rate, number_of_days, balance_due'
       )
       .order('start_date', { ascending: false });
 

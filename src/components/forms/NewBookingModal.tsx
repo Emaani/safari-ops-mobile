@@ -235,12 +235,10 @@ function VehiclePickerSheet({
     return !q || `${v.make} ${v.model} ${v.license_plate} ${v.capacity}`.toLowerCase().includes(q);
   });
 
-  // When dates are provided (conflictingIds is a Set, even empty), use date-conflict logic.
-  // When no dates (conflictingIds is undefined), fall back to status === 'available'.
-  const isVehicleAvailable = (v: Vehicle) =>
-    conflictingIds !== undefined
-      ? v.status !== 'maintenance' && v.status !== 'out_of_service' && !conflictingIds.has(v.id)
-      : v.status === 'available';
+  // Primary availability matches check_vehicle_availability RPC:
+  //   status === 'available'  → selectable
+  //   anything else           → disabled (may also carry a date-conflict badge)
+  const isVehicleAvailable = (v: Vehicle) => v.status === 'available';
 
   const available = filtered.filter(v => isVehicleAvailable(v));
   const other     = filtered.filter(v => !isVehicleAvailable(v));
@@ -278,7 +276,7 @@ function VehiclePickerSheet({
         {/* Count pill */}
         <View style={vpSt.countRow}>
           <Text style={vpSt.countText}>
-            {available.length} available{conflictingIds !== undefined ? ' for your dates' : ''} · {other.length} unavailable
+            {available.length} available · {other.length} unavailable
           </Text>
           {selectedId && (
             <TouchableOpacity onPress={handleClear}>
@@ -304,7 +302,8 @@ function VehiclePickerSheet({
             const isSelected  = v.id === selectedId;
             const hasConflict = conflictingIds?.has(v.id) ?? false;
             const available   = isVehicleAvailable(v);
-            const statusClr   = hasConflict ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
+            // Date-conflict badge overrides the status label for booked vehicles
+            const statusClr   = (hasConflict && !available) ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
 
             return (
               <TouchableOpacity
@@ -856,6 +855,22 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         if (clientError) throw clientError;
         clientId = resolvedClientId as string;
       }
+      // ── Server-side availability gate (mirrors dashboard checkVehicleAvailability) ──
+      if (vehicleId && vehicleSource === 'fleet') {
+        const { data: avail, error: availErr } = await supabase
+          .rpc('check_vehicle_availability', { p_vehicle_id: vehicleId });
+        if (!availErr && avail?.[0]?.is_available === false) {
+          const conflictRef = avail[0].conflict_booking_reference || 'another booking';
+          Alert.alert(
+            'Vehicle Unavailable',
+            `This vehicle is already assigned to ${conflictRef}. Please select a different vehicle.`,
+            [{ text: 'OK' }],
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const totalAmount  = parseFloat(totalCost);
       const paidAmount   = parseFloat(amountPaid || '0');
       const balanceDue   = totalAmount - paidAmount;
@@ -1182,17 +1197,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                         </>
                       ) : (
                         <Text style={[fld.iconInputText, { color: C.muted }]}>
-                          {(() => {
-                            if (conflictingVehicleIds !== undefined) {
-                              const avail = vehicles.filter(v =>
-                                v.status !== 'maintenance' && v.status !== 'out_of_service' &&
-                                !conflictingVehicleIds.has(v.id)
-                              ).length;
-                              return `Tap to browse — ${avail} of ${vehicles.length} available`;
-                            }
-                            const avail = vehicles.filter(v => v.status === 'available').length;
-                            return `Tap to browse — ${avail} of ${vehicles.length} available`;
-                          })()}
+                          {`Tap to browse — ${vehicles.filter(v => v.status === 'available').length} of ${vehicles.length} available`}
                         </Text>
                       )}
                     </View>
