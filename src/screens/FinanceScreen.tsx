@@ -562,10 +562,105 @@ function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => v
 }
 
 // ============================================================================
+// PETTY CASH TAB
+// ============================================================================
+
+function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress }: {
+  expenseItems: ExpenseItem[];
+  currency: Currency;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onPress: (item: ExpenseItem) => void;
+}) {
+  // Filter by subtitle containing 'Petty Cash' or by source being a petty-cash transaction
+  const pettyCashItems = expenseItems.filter(e =>
+    e.subtitle?.toLowerCase().includes('petty') ||
+    e.title?.toLowerCase().includes('petty')
+  );
+
+  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+  const toDisplay = (e: ExpenseItem) => (e.amount / (rates[e.currency] || 1)) * (rates[currency] || 1);
+
+  const total = pettyCashItems.reduce((s, e) => s + toDisplay(e), 0);
+
+  const thisMonth = pettyCashItems.filter(e => {
+    const d = new Date(e.date || '');
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const monthTotal = thisMonth.reduce((s, e) => s + toDisplay(e), 0);
+
+  return (
+    <FlatList
+      data={pettyCashItems}
+      keyExtractor={(item: ExpenseItem) => item.id}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />}
+      ListHeaderComponent={
+        <View>
+          <View style={pc.summaryRow}>
+            <View style={[pc.summaryCard, { backgroundColor: '#f5e8ce' }]}>
+              <Text style={pc.summaryLabel}>All Time</Text>
+              <Text style={[pc.summaryValue, { color: COLORS.warning }]}>{formatCurrency(total, currency)}</Text>
+              <Text style={pc.summaryCount}>{pettyCashItems.length} entries</Text>
+            </View>
+            <View style={[pc.summaryCard, { backgroundColor: '#fdf0ec' }]}>
+              <Text style={pc.summaryLabel}>This Month</Text>
+              <Text style={[pc.summaryValue, { color: COLORS.danger }]}>{formatCurrency(monthTotal, currency)}</Text>
+              <Text style={pc.summaryCount}>{thisMonth.length} entries</Text>
+            </View>
+          </View>
+          <Text style={pc.listHeader}>Petty Cash Transactions</Text>
+        </View>
+      }
+      ListEmptyComponent={
+        <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+          <Text style={{ fontSize: 15, color: COLORS.textMuted, fontWeight: '600' }}>No petty cash entries</Text>
+          <Text style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 6 }}>
+            Record expenses with category "Petty Cash" to see them here
+          </Text>
+        </View>
+      }
+      contentContainerStyle={styles.listContent}
+      renderItem={({ item }: { item: ExpenseItem }) => {
+        const displayAmt = toDisplay(item);
+        const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '—';
+        return (
+          <TouchableOpacity style={pc.row} onPress={() => onPress(item)} activeOpacity={0.75}>
+            <View style={pc.rowIcon}>
+              <Text style={{ fontSize: 18 }}>💵</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={pc.rowTitle} numberOfLines={1}>{item.title || 'Petty Cash'}</Text>
+              <Text style={pc.rowDate}>{date} · {item.subtitle}</Text>
+            </View>
+            <Text style={[pc.rowAmount, { color: COLORS.danger }]}>-{formatCurrency(displayAmt, currency)}</Text>
+          </TouchableOpacity>
+        );
+      }}
+    />
+  );
+}
+
+const pc = StyleSheet.create({
+  summaryRow:    { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+  summaryCard:   { flex: 1, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)' },
+  summaryLabel:  { fontSize: 11, fontWeight: '700', color: '#7f7565', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  summaryValue:  { fontSize: 20, fontWeight: '800', letterSpacing: -0.5, marginBottom: 2 },
+  summaryCount:  { fontSize: 12, color: '#7f7565' },
+  listHeader:    { fontSize: 13, fontWeight: '700', color: '#7f7565', textTransform: 'uppercase', letterSpacing: 0.6, paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4 },
+  row:           { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fffdf9', marginHorizontal: 16, marginBottom: 8, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#e1d7c8' },
+  rowIcon:       { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f5e8ce', alignItems: 'center', justifyContent: 'center' },
+  rowTitle:      { fontSize: 14, fontWeight: '600', color: '#181512', lineHeight: 20 },
+  rowDate:       { fontSize: 12, color: '#7f7565', marginTop: 2 },
+  rowAmount:     { fontSize: 15, fontWeight: '800' },
+});
+
+// ============================================================================
 // MAIN FINANCE SCREEN
 // ============================================================================
 
-type ActiveTab = 'revenue' | 'expenses' | 'requisitions';
+type ActiveTab = 'revenue' | 'expenses' | 'requisitions' | 'petty_cash';
 
 export function FinanceScreen() {
   const { user } = useAuth();
@@ -895,13 +990,14 @@ export function FinanceScreen() {
             ) : null}
           </View>
 
-          {/* 3-tab selector */}
+          {/* 4-tab selector */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.heroTabsScroll}>
             <View style={styles.heroTabs}>
               {([
                 { key: 'revenue',      label: `Revenue (${revenueItems.length})` },
                 { key: 'expenses',     label: `Expenses (${expenseItems.length})` },
                 { key: 'requisitions', label: `Cash Reqs (${cashRequisitions.length})` },
+                { key: 'petty_cash',   label: `Petty Cash (${expenseItems.filter(e => e.subtitle?.toLowerCase().includes('petty') || e.title?.toLowerCase().includes('petty')).length})` },
               ] as { key: ActiveTab; label: string }[]).map(t => (
                 <TouchableOpacity
                   key={t.key}
@@ -959,6 +1055,16 @@ export function FinanceScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />}
+        />
+      )}
+
+      {activeTab === 'petty_cash' && (
+        <PettyCashTab
+          expenseItems={expenseItems}
+          currency={currency}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          onPress={(item: ExpenseItem) => { setModalItem(item as any); setModalType('transaction'); setModalVisible(true); }}
         />
       )}
 

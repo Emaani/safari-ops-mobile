@@ -118,7 +118,9 @@ function AppShell() {
   const { isOnline } = useNetworkStatus();
 
   return (
-    <>
+    // Root View picks up theme.colors.background — this cascades to every screen
+    // that uses transparent or inherits background, making dark/light mode global
+    <View style={[shellStyles.root, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={theme.statusBarStyle} />
       {/* Offline banner — shown below status bar, above all content */}
       {!isOnline && (
@@ -127,11 +129,14 @@ function AppShell() {
         </View>
       )}
       <AppNavigator />
-    </>
+    </View>
   );
 }
 
 const shellStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   offlineBanner: {
     backgroundColor: '#b8883f',
     paddingVertical: 6,

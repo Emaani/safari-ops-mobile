@@ -67,7 +67,7 @@ export function useBlogAnalytics(): BlogAnalyticsSummary {
       // ── 1. Fetch all blog posts ────────────────────────────────────────────
       const { data: blogRows, error: blogErr } = await supabase
         .from('blog_posts')
-        .select('id, title, slug, status, views, published_at, created_at')
+        .select('id, title, slug, status, published_at, created_at')
         .order('published_at', { ascending: false });
       if (blogErr) throw blogErr;
       const blogs = (blogRows ?? []) as Record<string, any>[];
@@ -145,7 +145,7 @@ export function useBlogAnalytics(): BlogAnalyticsSummary {
       const merged: BlogPostAnalytics[] = blogs.map(b => {
         const slug     = b.slug ?? b.id;
         const ga4      = ga4PageMap[slug] ?? { views: 0, users: 0, engaged: 0 };
-        const dbViews  = Number(b.views) || 0;
+        const dbViews  = 0; // views column removed from blog_posts — use GA4 only
         const leads    = leadsMap[slug]    ?? 0;
         const bookings = bookingsMap[slug] ?? 0;
 
