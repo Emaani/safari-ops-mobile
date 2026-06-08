@@ -11,7 +11,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView,
   TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
-  Pressable,
+  Pressable, FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -23,7 +23,15 @@ import {
   getBookingStatusConfig,
 } from '../../constants/bookingStatus';
 import type { Booking, BookingStatus, Vehicle } from '../../types/dashboard';
-import { formatCurrency } from '../../lib/utils';
+
+// ─── Vehicle status colours ───────────────────────────────────────────────────
+const VEHICLE_STATUS_COLOR: Record<string, string> = {
+  available:      '#3d8f6a',
+  booked:         '#c96d4d',
+  rented:         '#8366d7',
+  maintenance:    '#b8883f',
+  out_of_service: '#6b7280',
+};
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -51,11 +59,11 @@ function CalendarIcon({ color = C.primary }: { color?: string }) {
 function TruckIcon({ color = C.primary }: { color?: string }) {
   return <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round"><Path d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8z" /><Circle cx="5.5" cy="18.5" r="2.5" /><Circle cx="18.5" cy="18.5" r="2.5" /></Svg>;
 }
-function LockIcon({ color = C.muted }: { color?: string }) {
-  return <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round"><Rect x="3" y="11" width="18" height="11" rx="2" /><Path d="M7 11V7a5 5 0 0 1 10 0v4" /></Svg>;
-}
 function CheckIcon({ color = C.success }: { color?: string }) {
   return <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round"><Path d="M20 6L9 17l-5-5" /></Svg>;
+}
+function SearchIcon() {
+  return <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth={2} strokeLinecap="round"><Circle cx="11" cy="11" r="8" /><Path d="M21 21l-4.35-4.35" /></Svg>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -200,7 +208,10 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
   const [email,        setEmail]        = useState('');
 
   // Vehicle picker
-  const [vehicleSheetOpen, setVehicleSheetOpen] = useState(false);
+  const [vehicleSheetOpen,       setVehicleSheetOpen]       = useState(false);
+  const [vehicleQuery,           setVehicleQuery]           = useState('');
+  const [conflictingVehicleIds,  setConflictingVehicleIds]  = useState<Set<string>>(new Set());
+  const [loadingConflicts,       setLoadingConflicts]       = useState(false);
 
   // Pre-fill from booking whenever it changes
   useEffect(() => {
@@ -230,6 +241,31 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
     }
     prevRateRef.current = dailyRate;
   }, [dailyRate, startDate, endDate]);
+
+  // Fetch vehicles that are already assigned to overlapping bookings
+  const fetchConflicts = useCallback(async () => {
+    if (!startDate || !endDate || !booking) { setConflictingVehicleIds(new Set()); return; }
+    setLoadingConflicts(true);
+    try {
+      const { data } = await supabase
+        .from('bookings')
+        .select('assigned_vehicle_id')
+        .not('assigned_vehicle_id', 'is', null)
+        .not('status', 'in', '("Cancelled","Completed")')
+        .neq('id', booking.id)
+        .lte('start_date', endDate)
+        .gte('end_date', startDate);
+      setConflictingVehicleIds(new Set((data ?? []).map((r: any) => r.assigned_vehicle_id as string)));
+    } catch {
+      setConflictingVehicleIds(new Set());
+    } finally {
+      setLoadingConflicts(false);
+    }
+  }, [startDate, endDate, booking]);
+
+  useEffect(() => {
+    if (vehicleSheetOpen) fetchConflicts();
+  }, [vehicleSheetOpen, fetchConflicts]);
 
   const handleStartDateChange = useCallback((iso: string) => {
     setStartDate(iso);
@@ -435,7 +471,13 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                   <Text style={[fld.inputText, !selectedVehicle && { color: C.muted }]}>
                     {selectedVehicle
                       ? `${selectedVehicle.make} ${selectedVehicle.model} · ${selectedVehicle.license_plate}`
-                      : `Tap to browse ${vehicles.length} vehicles…`}
+                      : (() => {
+                          const datesSet = !!(startDate && endDate);
+                          const avail = datesSet
+                            ? vehicles.filter(v => v.status !== 'maintenance' && v.status !== 'out_of_service' && !conflictingVehicleIds.has(v.id)).length
+                            : vehicles.filter(v => v.status === 'available').length;
+                          return `Tap to browse — ${avail} of ${vehicles.length} available`;
+                        })()}
                   </Text>
                   {vehicleId && (
                     <TouchableOpacity onPress={() => setVehicleId('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -479,48 +521,122 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Vehicle picker sheet */}
-      <Modal visible={vehicleSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setVehicleSheetOpen(false)}>
+      {/* Vehicle picker sheet — full search + sort + conflict-aware */}
+      <Modal
+        visible={vehicleSheetOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setVehicleSheetOpen(false); setVehicleQuery(''); }}
+      >
         <View style={[s.container, { paddingTop: insets.top || 16 }]}>
+          {/* Dark header */}
           <View style={s.header}>
             <View>
               <Text style={s.headerEyebrow}>Fleet</Text>
               <Text style={s.headerTitle}>Select Vehicle</Text>
             </View>
-            <TouchableOpacity onPress={() => setVehicleSheetOpen(false)} style={s.closeBtn}><CloseIcon color="#b8ab95" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setVehicleSheetOpen(false); setVehicleQuery(''); }} style={s.closeBtn}>
+              <CloseIcon color="#b8ab95" />
+            </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }} showsVerticalScrollIndicator={false}>
-            {vehicles.map(v => {
-              const isSelected = v.id === vehicleId;
-              const available  = v.status === 'available';
-              const statusClr  = available ? '#16a34a' : v.status === 'maintenance' ? '#d97706' : '#6b7280';
-              return (
-                <TouchableOpacity
-                  key={v.id}
-                  style={[s.vehicleCard, isSelected && s.vehicleCardSelected, !available && !isSelected && { opacity: 0.5 }]}
-                  onPress={() => { setVehicleId(v.id); setVehicleSheetOpen(false); }}
-                  activeOpacity={0.75}
-                  disabled={!available && !isSelected}
-                >
-                  <View style={[s.vehicleIcon, isSelected && { backgroundColor: C.primary + '20' }]}>
-                    <TruckIcon color={isSelected ? C.primary : C.muted} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.vehicleName, isSelected && { color: C.primary }]}>{v.make} {v.model}</Text>
-                    <Text style={s.vehiclePlate}>{v.license_plate} · {v.capacity}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <View style={[s.statusPill, { backgroundColor: statusClr + '20' }]}>
-                      <Text style={[s.statusPillText, { color: statusClr }]}>
-                        {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
-                      </Text>
+
+          {/* Search bar */}
+          <View style={s.vpSearchWrap}>
+            <SearchIcon />
+            <TextInput
+              style={s.vpSearchInput}
+              value={vehicleQuery}
+              onChangeText={setVehicleQuery}
+              placeholder="Search make, model, or plate…"
+              placeholderTextColor={C.muted}
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+          </View>
+
+          {/* Availability count row */}
+          {(() => {
+            const q = vehicleQuery.toLowerCase();
+            const filtered = vehicles.filter(v =>
+              !q || `${v.make} ${v.model} ${v.license_plate} ${v.capacity}`.toLowerCase().includes(q)
+            );
+            const datesSet = !!(startDate && endDate);
+            const avail = filtered.filter(v =>
+              v.status !== 'maintenance' && v.status !== 'out_of_service' &&
+              (datesSet ? !conflictingVehicleIds.has(v.id) : v.status === 'available')
+            );
+            const unavail = filtered.filter(v => !avail.find(a => a.id === v.id));
+            const ordered = [...avail, ...unavail];
+
+            return (
+              <>
+                <View style={s.vpCountRow}>
+                  <Text style={s.vpCountText}>
+                    {loadingConflicts
+                      ? 'Checking availability…'
+                      : `${avail.length} available${datesSet ? ' for your dates' : ''} · ${unavail.length} unavailable`}
+                  </Text>
+                  {vehicleId && (
+                    <TouchableOpacity onPress={() => { setVehicleId(''); setVehicleSheetOpen(false); setVehicleQuery(''); }}>
+                      <Text style={{ fontSize: 12, color: C.danger, fontWeight: '700' }}>Clear</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <FlatList
+                  data={ordered}
+                  keyExtractor={v => v.id}
+                  contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+                  showsVerticalScrollIndicator={false}
+                  ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+                  ListEmptyComponent={
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <Text style={{ fontSize: 14, color: C.muted, fontStyle: 'italic' }}>No vehicles match your search</Text>
                     </View>
-                    {isSelected && <CheckIcon color={C.primary} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                  }
+                  renderItem={({ item: v }) => {
+                    const isSelected  = v.id === vehicleId;
+                    const datesSet2   = !!(startDate && endDate);
+                    const hasConflict = datesSet2 && conflictingVehicleIds.has(v.id);
+                    const isAvail     = v.status !== 'maintenance' && v.status !== 'out_of_service' &&
+                                        (datesSet2 ? !hasConflict : v.status === 'available');
+                    const statusClr   = hasConflict ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
+                    const statusLabel = hasConflict
+                      ? 'Conflict'
+                      : v.status.charAt(0).toUpperCase() + v.status.slice(1);
+
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          s.vehicleCard,
+                          isSelected && s.vehicleCardSelected,
+                          !isAvail && !isSelected && { opacity: 0.45 },
+                        ]}
+                        onPress={() => { setVehicleId(v.id); setVehicleSheetOpen(false); setVehicleQuery(''); }}
+                        activeOpacity={0.75}
+                        disabled={!isAvail && !isSelected}
+                      >
+                        <View style={[s.vehicleIcon, { backgroundColor: isSelected ? C.primary + '20' : C.input }]}>
+                          <TruckIcon color={isSelected ? C.primary : C.muted} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[s.vehicleName, isSelected && { color: C.primary }]}>
+                            {v.make} {v.model}
+                          </Text>
+                          <Text style={s.vehiclePlate}>{v.license_plate} · {v.capacity}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                          <View style={[s.statusPill, { backgroundColor: statusClr + '20' }]}>
+                            <Text style={[s.statusPillText, { color: statusClr }]}>{statusLabel}</Text>
+                          </View>
+                          {isSelected && <CheckIcon color={C.primary} />}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </>
+            );
+          })()}
         </View>
       </Modal>
     </>
@@ -555,6 +671,11 @@ const s = StyleSheet.create({
   vehiclePlate:       { fontSize: 12, color: C.muted, marginTop: 2 },
   statusPill:         { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   statusPillText:     { fontSize: 11, fontWeight: '800' },
+  // Vehicle picker search + count
+  vpSearchWrap:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 14, marginHorizontal: 16, marginTop: 14, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: C.border },
+  vpSearchInput: { flex: 1, fontSize: 15, color: C.text, fontWeight: '500' },
+  vpCountRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8 },
+  vpCountText:   { fontSize: 12, color: C.muted, fontWeight: '600' },
 });
 
 export default EditBookingModal;

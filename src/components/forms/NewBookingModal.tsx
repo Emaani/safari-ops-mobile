@@ -218,13 +218,14 @@ const pickerSt = StyleSheet.create({
 
 // ─── Vehicle Picker Sheet ─────────────────────────────────────────────────────
 function VehiclePickerSheet({
-  visible, vehicles, selectedId, onSelect, onClose,
+  visible, vehicles, selectedId, onSelect, onClose, conflictingIds,
 }: {
   visible: boolean;
   vehicles: Vehicle[];
   selectedId: string;
   onSelect: (id: string) => void;
   onClose: () => void;
+  conflictingIds?: Set<string>;
 }) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
@@ -234,8 +235,15 @@ function VehiclePickerSheet({
     return !q || `${v.make} ${v.model} ${v.license_plate} ${v.capacity}`.toLowerCase().includes(q);
   });
 
-  const available = filtered.filter(v => v.status === 'available');
-  const other     = filtered.filter(v => v.status !== 'available');
+  // When dates are provided (conflictingIds is a Set, even empty), use date-conflict logic.
+  // When no dates (conflictingIds is undefined), fall back to status === 'available'.
+  const isVehicleAvailable = (v: Vehicle) =>
+    conflictingIds !== undefined
+      ? v.status !== 'maintenance' && v.status !== 'out_of_service' && !conflictingIds.has(v.id)
+      : v.status === 'available';
+
+  const available = filtered.filter(v => isVehicleAvailable(v));
+  const other     = filtered.filter(v => !isVehicleAvailable(v));
   const ordered   = [...available, ...other];
 
   const handleSelect = (id: string) => { setQuery(''); onSelect(id); onClose(); };
@@ -270,7 +278,7 @@ function VehiclePickerSheet({
         {/* Count pill */}
         <View style={vpSt.countRow}>
           <Text style={vpSt.countText}>
-            {available.length} available · {other.length} unavailable
+            {available.length} available{conflictingIds !== undefined ? ' for your dates' : ''} · {other.length} unavailable
           </Text>
           {selectedId && (
             <TouchableOpacity onPress={handleClear}>
@@ -292,10 +300,11 @@ function VehiclePickerSheet({
             </View>
           }
           renderItem={({ item: v }) => {
-            const rate       = getDailyRate(v.capacity);
-            const isSelected = v.id === selectedId;
-            const statusClr  = VEHICLE_STATUS_COLOR[v.status] ?? C.muted;
-            const available  = v.status === 'available';
+            const rate        = getDailyRate(v.capacity);
+            const isSelected  = v.id === selectedId;
+            const hasConflict = conflictingIds?.has(v.id) ?? false;
+            const available   = isVehicleAvailable(v);
+            const statusClr   = hasConflict ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
 
             return (
               <TouchableOpacity
@@ -329,7 +338,7 @@ function VehiclePickerSheet({
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
                   <View style={[vpSt.statusPill, { backgroundColor: statusClr + '20' }]}>
                     <Text style={[vpSt.statusText, { color: statusClr }]}>
-                      {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                      {hasConflict ? 'Conflict' : v.status.charAt(0).toUpperCase() + v.status.slice(1)}
                     </Text>
                   </View>
                   {isSelected && <CheckIcon color={C.primary} />}
@@ -727,6 +736,29 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   // Picker visibility
   const [vehicleSheetOpen, setVehicleSheetOpen] = useState(false);
   const [driverSheetOpen,  setDriverSheetOpen]  = useState(false);
+
+  // Date-conflict availability for the vehicle picker
+  const [conflictingVehicleIds, setConflictingVehicleIds] = useState<Set<string> | undefined>(undefined);
+
+  const fetchVehicleConflicts = useCallback(async () => {
+    if (!startDate || !endDate) { setConflictingVehicleIds(undefined); return; }
+    try {
+      const { data } = await supabase
+        .from('bookings')
+        .select('assigned_vehicle_id')
+        .not('assigned_vehicle_id', 'is', null)
+        .not('status', 'in', '("Cancelled","Completed")')
+        .lte('start_date', endDate)
+        .gte('end_date', startDate);
+      setConflictingVehicleIds(new Set((data ?? []).map((r: any) => r.assigned_vehicle_id as string)));
+    } catch {
+      setConflictingVehicleIds(undefined);
+    }
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    if (vehicleSheetOpen) fetchVehicleConflicts();
+  }, [vehicleSheetOpen, fetchVehicleConflicts]);
 
   const [guides, setGuides] = useState<Guide[]>([]);
 
@@ -1150,7 +1182,17 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                         </>
                       ) : (
                         <Text style={[fld.iconInputText, { color: C.muted }]}>
-                          Tap to browse {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''}…
+                          {(() => {
+                            if (conflictingVehicleIds !== undefined) {
+                              const avail = vehicles.filter(v =>
+                                v.status !== 'maintenance' && v.status !== 'out_of_service' &&
+                                !conflictingVehicleIds.has(v.id)
+                              ).length;
+                              return `Tap to browse — ${avail} of ${vehicles.length} available`;
+                            }
+                            const avail = vehicles.filter(v => v.status === 'available').length;
+                            return `Tap to browse — ${avail} of ${vehicles.length} available`;
+                          })()}
                         </Text>
                       )}
                     </View>
@@ -1214,6 +1256,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         selectedId={vehicleId}
         onSelect={setVehicleId}
         onClose={() => setVehicleSheetOpen(false)}
+        conflictingIds={conflictingVehicleIds}
       />
 
       {/* Scrollable driver/guide picker sheet */}
