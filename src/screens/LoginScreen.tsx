@@ -16,7 +16,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -117,9 +116,9 @@ function GlassInput({
   );
 }
 const gi = StyleSheet.create({
-  group:     { marginBottom: 16 },
-  label:     { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 1.1, textTransform: 'uppercase', marginBottom: 8 },
-  wrap:      { flexDirection: 'row', alignItems: 'center', minHeight: 52, borderRadius: 14, overflow: 'hidden', borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.22)', paddingHorizontal: 16 },
+  group:     { marginBottom: 14 },
+  label:     { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 1.1, textTransform: 'uppercase', marginBottom: 7 },
+  wrap:      { flexDirection: 'row', alignItems: 'center', minHeight: 50, borderRadius: 14, overflow: 'hidden', borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.22)', paddingHorizontal: 16 },
   wrapFocus: { borderColor: GOLD_L, borderWidth: 1.6 },
   wrapErr:   { borderColor: 'rgba(255,100,80,0.7)' },
   washInner: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.06)' } as any,
@@ -239,114 +238,114 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
 
       <SafeAreaView style={s.safe}>
         <KeyboardAvoidingView style={s.kav} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView
-            contentContainerStyle={s.scroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+          {/* Outer column: body (flex 1) + footer pinned at bottom */}
+          <View style={s.outer}>
 
-            {/* ── Logo ─────────────────────────────────────────────────────── */}
-            <Animated.View style={[s.logoWrap, { opacity: logoOp, transform: [{ translateY: logoY }, { scale: logoScale }] }]}>
-              {/* Outer glow halo */}
-              <View style={s.halo} />
-              {/* Plain white circular shell — no BlurView */}
-              <View style={s.logoShell}>
-                <Image
-                  source={require('../../assets/branding/jackal-logo.png')}
-                  style={s.logo}
-                  resizeMode="contain"
-                />
-              </View>
-            </Animated.View>
+            {/* ── Body: logo + card, vertically centred ───────────────────── */}
+            <View style={s.body}>
 
-            {/* ── Glass form card ───────────────────────────────────────────── */}
-            <Animated.View style={[s.cardWrap, { opacity: cardOp, transform: [{ translateY: cardY }] }]}>
-              <GlassPanel style={s.card}>
-                <View style={s.cardInner}>
-
-                  <Text style={s.cardTitle}>
-                    {mode === 'unlock' ? 'Unlock Account' : 'Welcome Back'}
-                  </Text>
-                  <Text style={s.cardSub}>
-                    {mode === 'unlock'
-                      ? 'Re-enter your credentials to continue'
-                      : 'Sign in to Jackal Adventures Africa'}
-                  </Text>
-
-                  {/* Gold rule */}
-                  <View style={s.rule}>
-                    <View style={s.ruleLine} />
-                    <View style={s.ruleDot}  />
-                    <View style={s.ruleLine} />
-                  </View>
-
-                  {/* Error banner */}
-                  {errors.general ? (
-                    <View style={s.errBanner}>
-                      <View style={s.errBannerWash} />
-                      <Text style={s.errIcon}>⚠</Text>
-                      <Text style={s.errText}>{errors.general}</Text>
-                    </View>
-                  ) : null}
-
-                  {/* Email */}
-                  <GlassInput
-                    label="Email Address"
-                    value={email}
-                    onChange={(t) => { setEmail(t); setErrors(p => ({ ...p, email: undefined, general: undefined })); }}
-                    placeholder="you@jackaladventures.com"
-                    keyboardType="email-address"
-                    onFocus={() => setEmailFocused(true)}
-                    onBlur={() => setEmailFocused(false)}
-                    focused={emailFocused}
-                    error={errors.email}
-                    returnKeyType="next"
+              {/* Logo */}
+              <Animated.View style={[s.logoWrap, { opacity: logoOp, transform: [{ translateY: logoY }, { scale: logoScale }] }]}>
+                <View style={s.halo} />
+                <View style={s.logoShell}>
+                  <Image
+                    source={require('../../assets/branding/jackal-logo.png')}
+                    style={s.logo}
+                    resizeMode="contain"
                   />
-
-                  {/* Password */}
-                  <GlassInput
-                    label="Password"
-                    value={password}
-                    onChange={(t) => { setPassword(t); setErrors(p => ({ ...p, password: undefined, general: undefined })); }}
-                    placeholder="Enter your password"
-                    secure={!showPassword}
-                    onFocus={() => setPassFocused(true)}
-                    onBlur={() => setPassFocused(false)}
-                    focused={passFocused}
-                    error={errors.password}
-                    returnKeyType="done"
-                    onSubmit={handleLogin}
-                    right={
-                      <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
-                        <Text style={s.showHide}>{showPassword ? 'Hide' : 'Show'}</Text>
-                      </TouchableOpacity>
-                    }
-                  />
-
-                  {/* Forgot */}
-                  <TouchableOpacity onPress={handleForgotPassword} style={s.forgotRow}>
-                    <Text style={s.forgotText}>Forgot password?</Text>
-                  </TouchableOpacity>
-
-                  {/* Sign In button */}
-                  <TouchableOpacity
-                    style={[s.btn, (isSubmitting || loading) && s.btnDisabled]}
-                    onPress={handleLogin}
-                    disabled={isSubmitting || loading}
-                    activeOpacity={0.85}
-                  >
-                    <View style={s.btnHighlight} />
-                    {isSubmitting || loading ? (
-                      <ActivityIndicator color={GOLD_L} size="small" />
-                    ) : (
-                      <Text style={s.btnText}>{mode === 'unlock' ? 'Unlock' : 'Sign In'}</Text>
-                    )}
-                  </TouchableOpacity>
                 </View>
-              </GlassPanel>
-            </Animated.View>
+              </Animated.View>
 
-            {/* ── Footer ───────────────────────────────────────────────────── */}
+              {/* Glass form card */}
+              <Animated.View style={[s.cardWrap, { opacity: cardOp, transform: [{ translateY: cardY }] }]}>
+                <GlassPanel style={s.card}>
+                  <View style={s.cardInner}>
+
+                    <Text style={s.cardTitle}>
+                      {mode === 'unlock' ? 'Unlock Account' : 'Welcome Back'}
+                    </Text>
+                    <Text style={s.cardSub}>
+                      {mode === 'unlock'
+                        ? 'Re-enter your credentials to continue'
+                        : 'Sign in to Jackal Adventures Africa'}
+                    </Text>
+
+                    {/* Gold rule */}
+                    <View style={s.rule}>
+                      <View style={s.ruleLine} />
+                      <View style={s.ruleDot}  />
+                      <View style={s.ruleLine} />
+                    </View>
+
+                    {/* Error banner */}
+                    {errors.general ? (
+                      <View style={s.errBanner}>
+                        <View style={s.errBannerWash} />
+                        <Text style={s.errIcon}>⚠</Text>
+                        <Text style={s.errText}>{errors.general}</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Email */}
+                    <GlassInput
+                      label="Email Address"
+                      value={email}
+                      onChange={(t) => { setEmail(t); setErrors(p => ({ ...p, email: undefined, general: undefined })); }}
+                      placeholder="you@jackaladventures.com"
+                      keyboardType="email-address"
+                      onFocus={() => setEmailFocused(true)}
+                      onBlur={() => setEmailFocused(false)}
+                      focused={emailFocused}
+                      error={errors.email}
+                      returnKeyType="next"
+                    />
+
+                    {/* Password */}
+                    <GlassInput
+                      label="Password"
+                      value={password}
+                      onChange={(t) => { setPassword(t); setErrors(p => ({ ...p, password: undefined, general: undefined })); }}
+                      placeholder="Enter your password"
+                      secure={!showPassword}
+                      onFocus={() => setPassFocused(true)}
+                      onBlur={() => setPassFocused(false)}
+                      focused={passFocused}
+                      error={errors.password}
+                      returnKeyType="done"
+                      onSubmit={handleLogin}
+                      right={
+                        <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+                          <Text style={s.showHide}>{showPassword ? 'Hide' : 'Show'}</Text>
+                        </TouchableOpacity>
+                      }
+                    />
+
+                    {/* Forgot */}
+                    <TouchableOpacity onPress={handleForgotPassword} style={s.forgotRow}>
+                      <Text style={s.forgotText}>Forgot password?</Text>
+                    </TouchableOpacity>
+
+                    {/* Sign In button */}
+                    <TouchableOpacity
+                      style={[s.btn, (isSubmitting || loading) && s.btnDisabled]}
+                      onPress={handleLogin}
+                      disabled={isSubmitting || loading}
+                      activeOpacity={0.85}
+                    >
+                      <View style={s.btnHighlight} />
+                      {isSubmitting || loading ? (
+                        <ActivityIndicator color={GOLD_L} size="small" />
+                      ) : (
+                        <Text style={s.btnText}>{mode === 'unlock' ? 'Unlock' : 'Sign In'}</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </GlassPanel>
+              </Animated.View>
+
+            </View>{/* /body */}
+
+            {/* ── Footer — always visible, no scrolling required ───────────── */}
             <Animated.View style={[s.footer, { opacity: footerOp }]}>
               <View style={s.footerDivider}>
                 <View style={s.footerLine} />
@@ -357,7 +356,7 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
               <Text style={s.footerBrand}>Jackal Adventures Africa</Text>
             </Animated.View>
 
-          </ScrollView>
+          </View>{/* /outer */}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
@@ -374,55 +373,62 @@ const s = StyleSheet.create({
   ovBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SH * 0.55, backgroundColor: 'rgba(0,0,0,0.38)' },
   ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(30,18,4,0.06)' },
 
-  safe:   { flex: 1, backgroundColor: 'transparent' },
-  kav:    { flex: 1 },
-  scroll: {
-    flexGrow: 1,
+  safe:  { flex: 1, backgroundColor: 'transparent' },
+  kav:   { flex: 1 },
+
+  // Outer column: body + footer fill the SafeAreaView (no minHeight hack, no ScrollView)
+  outer: {
+    flex: 1,
     paddingHorizontal: 22,
-    paddingTop: 16,
-    paddingBottom: 40,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    minHeight: SH,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
   },
 
-  // Logo
-  logoWrap:  { alignItems: 'center', justifyContent: 'center', marginBottom: 28, position: 'relative', width: 124, height: 124 },
-  halo:      { position: 'absolute', width: 124, height: 124, borderRadius: 62, backgroundColor: 'rgba(200,146,42,0.10)', borderWidth: 1, borderColor: 'rgba(200,146,42,0.20)' },
+  // body: logo + card centred in the remaining space above the footer
+  body: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+
+  // Logo — slightly compact so everything fits without scrolling on all iPhones
+  logoWrap:  { alignItems: 'center', justifyContent: 'center', marginBottom: 20, position: 'relative', width: 112, height: 112 },
+  halo:      { position: 'absolute', width: 112, height: 112, borderRadius: 56, backgroundColor: 'rgba(200,146,42,0.10)', borderWidth: 1, borderColor: 'rgba(200,146,42,0.20)' },
   logoShell: {
-    width: 108, height: 108, borderRadius: 54,
+    width: 96, height: 96, borderRadius: 48,
     backgroundColor: '#ffffff',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.5, shadowRadius: 24, elevation: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 20, elevation: 14,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
   },
-  logo: { width: 84, height: 84 },
+  logo: { width: 76, height: 76 },
 
   // Card
-  cardWrap: { width: '100%', marginBottom: 18 },
-  card:     { width: '100%' },
-  cardInner:{ paddingHorizontal: 22, paddingTop: 24, paddingBottom: 22 },
-  cardTitle:{ fontSize: 22, fontWeight: '800', color: '#ffffff', letterSpacing: -0.4, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  cardSub:  { fontSize: 13, color: 'rgba(255,255,255,0.62)', lineHeight: 18, marginBottom: 14 },
+  cardWrap:  { width: '100%' },
+  card:      { width: '100%' },
+  cardInner: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 18 },
+  cardTitle: { fontSize: 21, fontWeight: '800', color: '#ffffff', letterSpacing: -0.4, marginBottom: 3, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  cardSub:   { fontSize: 13, color: 'rgba(255,255,255,0.62)', lineHeight: 18, marginBottom: 12 },
 
   // Gold rule
-  rule:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+  rule:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   ruleLine: { flex: 1, height: 1, backgroundColor: 'rgba(200,146,42,0.35)' },
   ruleDot:  { width: 5, height: 5, borderRadius: 2.5, backgroundColor: GOLD },
 
   // Error banner
-  errBanner:    { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,80,80,0.35)', paddingHorizontal: 14, paddingVertical: 11, marginBottom: 16, gap: 10 },
+  errBanner:    { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,80,80,0.35)', paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14, gap: 10 },
   errBannerWash:{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(180,30,30,0.2)' } as any,
   errIcon:      { color: '#ff9580', fontSize: 13, marginTop: 1 },
   errText:      { flex: 1, color: '#ffb5a5', fontSize: 13, lineHeight: 18 },
 
-  showHide:  { color: GOLD_L, fontSize: 13, fontWeight: '700', paddingVertical: 12 },
-  forgotRow: { alignSelf: 'flex-end', marginBottom: 20, marginTop: 2 },
+  showHide:  { color: GOLD_L, fontSize: 13, fontWeight: '700', paddingVertical: 11 },
+  forgotRow: { alignSelf: 'flex-end', marginBottom: 18, marginTop: 2 },
   forgotText:{ color: GOLD_L, fontSize: 13, fontWeight: '600' },
 
   // CTA button
   btn: {
-    height: 54, borderRadius: 16, backgroundColor: BROWN,
+    height: 52, borderRadius: 16, backgroundColor: BROWN,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     shadowColor: GOLD, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.38, shadowRadius: 20, elevation: 12,
     borderWidth: 1.4, borderColor: 'rgba(200,146,42,0.5)',
@@ -431,11 +437,11 @@ const s = StyleSheet.create({
   btnDisabled:  { opacity: 0.55 },
   btnText:      { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.8 },
 
-  // Footer
-  footer:        { alignItems: 'center', paddingBottom: 4 },
-  footerDivider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  // Footer — sits at bottom of outer, always within safe area bounds
+  footer:        { alignItems: 'center', paddingBottom: 2 },
+  footerDivider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   footerLine:    { width: 28, height: 1, backgroundColor: 'rgba(200,146,42,0.25)' },
   footerDot:     { width: 4, height: 4, borderRadius: 2, backgroundColor: GOLD + '44' },
-  footerText:    { color: 'rgba(255,255,255,0.38)', fontSize: 11, letterSpacing: 0.5 },
-  footerBrand:   { color: GOLD + 'aa', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 3 },
+  footerText:    { color: 'rgba(255,255,255,0.42)', fontSize: 11, letterSpacing: 0.5 },
+  footerBrand:   { color: GOLD + 'bb', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 3 },
 });
