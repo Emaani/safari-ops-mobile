@@ -291,9 +291,12 @@ export function useDashboardCalculations(
     console.log('[DashboardCalculations]   Display Currency:', displayCurrency);
     console.log('[DashboardCalculations] Conversion Rates:', conversionRates);
 
-    // Helper for dashboard filter matching
+    // Helper for dashboard filter matching.
+    // "all" = every month within the selected year (not all-time).
     const matchesDashboardFilter = (date: Date): boolean => {
-      if (dashboardMonthFilter === 'all') return true;
+      if (dashboardMonthFilter === 'all') {
+        return date.getFullYear() === dashboardFilterYear;
+      }
       return (
         date.getMonth() === dashboardMonthFilter &&
         date.getFullYear() === dashboardFilterYear
@@ -304,32 +307,22 @@ export function useDashboardCalculations(
     // FILTER DATA BASED ON DASHBOARD MONTH FILTER
     // ========================================================================
 
-    const dashboardFilteredBookings =
-      dashboardMonthFilter === 'all'
-        ? bookings
-        : bookings.filter((b) =>
-            matchesDashboardFilter(new Date(b.start_date))
-          );
+    const dashboardFilteredBookings = bookings.filter((b) =>
+      matchesDashboardFilter(new Date(b.start_date))
+    );
 
     console.log(`[DashboardCalculations] Dashboard filtered bookings: ${dashboardFilteredBookings.length} of ${bookings.length} total`);
     if (dashboardFilteredBookings.length !== bookings.length) {
       console.log(`[DashboardCalculations] ${bookings.length - dashboardFilteredBookings.length} bookings filtered out by date filter`);
     }
 
-    const dashboardFilteredTransactions =
-      dashboardMonthFilter === 'all'
-        ? financialTransactions
-        : financialTransactions.filter((t) =>
-            matchesDashboardFilter(new Date(t.transaction_date))
-          );
+    const dashboardFilteredTransactions = financialTransactions.filter((t) =>
+      matchesDashboardFilter(new Date(t.transaction_date))
+    );
 
-    const dashboardFilteredCRs = (
-      dashboardMonthFilter === 'all'
-        ? cashRequisitions
-        : cashRequisitions.filter((cr) =>
-            matchesDashboardFilter(new Date(cr.created_at))
-          )
-    ).filter(isValidExpenseCR);
+    const dashboardFilteredCRs = cashRequisitions
+      .filter((cr) => matchesDashboardFilter(new Date(cr.created_at)))
+      .filter(isValidExpenseCR);
 
     // ========================================================================
     // CALCULATE KPIS
@@ -376,55 +369,41 @@ export function useDashboardCalculations(
     const fleetUtilization =
       totalFleet > 0 ? Math.round((vehiclesHired / totalFleet) * 100) : 0;
 
-    // Revenue MTD - only count bookings with actual payments received
-    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    // Revenue MTD — bookings in the current calendar month of the selected year.
+    // dashboardFilteredBookings is already year-scoped; the MTD window further
+    // narrows to this month when viewing "all months."
+    const startOfMonth = new Date(dashboardFilterYear, currentMonth, 1);
+    const endOfMonth   = new Date(dashboardFilterYear, currentMonth + 1, 0, 23, 59, 59);
     const revenueMTD = dashboardFilteredBookings
       .filter((b) => {
-        const bookingDate = new Date(b.start_date);
-        const eligible = isRevenueEligible(b);
-        return (
-          eligible &&
-          b.amount_paid > 0 &&
-          (dashboardMonthFilter === 'all'
-            ? bookingDate >= startOfMonth && bookingDate <= now
-            : true)
-        );
+        if (!isRevenueEligible(b) || b.amount_paid <= 0) return false;
+        if (dashboardMonthFilter === 'all') {
+          const d = new Date(b.start_date);
+          return d >= startOfMonth && d <= endOfMonth;
+        }
+        return true; // specific month already scoped by dashboardFilteredBookings
       })
-      .reduce((sum, b) => {
-        const amountInBase = convertToBaseCurrency(
-          b.amount_paid,
-          b.currency,
-          conversionRates
-        );
-        return sum + amountInBase;
-      }, 0);
+      .reduce((sum, b) =>
+        sum + convertToBaseCurrency(b.amount_paid, b.currency, conversionRates), 0);
 
-    const revenueMTDDisplay = convertFromBaseCurrency(
-      revenueMTD,
-      displayCurrency,
-      conversionRates
-    );
+    const revenueMTDDisplay = convertFromBaseCurrency(revenueMTD, displayCurrency, conversionRates);
 
-    // Revenue YTD
+    // Revenue YTD — all revenue in the selected year up to today.
+    // dashboardFilteredBookings is already year-scoped, so no extra year check needed.
+    const startOfYear = new Date(dashboardFilterYear, 0, 1);
     const revenueYTD = dashboardFilteredBookings
       .filter((b) => {
-        const eligible = isRevenueEligible(b);
-        return (
-          eligible &&
-          b.amount_paid > 0 &&
-          (dashboardMonthFilter === 'all'
-            ? new Date(b.start_date).getFullYear() === currentYear
-            : true)
-        );
+        if (!isRevenueEligible(b) || b.amount_paid <= 0) return false;
+        // When viewing a specific month, YTD = from Jan 1 of that year to end of that month
+        if (dashboardMonthFilter !== 'all') {
+          return new Date(b.start_date) >= startOfYear;
+        }
+        // "All months" = year-to-date (up to today for current year, full year for past years)
+        const d = new Date(b.start_date);
+        return dashboardFilterYear === currentYear ? d <= now : true;
       })
-      .reduce((sum, b) => {
-        const amountInBase = convertToBaseCurrency(
-          b.amount_paid,
-          b.currency,
-          conversionRates
-        );
-        return sum + amountInBase;
-      }, 0);
+      .reduce((sum, b) =>
+        sum + convertToBaseCurrency(b.amount_paid, b.currency, conversionRates), 0);
 
     const revenueYTDDisplay = convertFromBaseCurrency(
       revenueYTD,
@@ -457,12 +436,9 @@ export function useDashboardCalculations(
 
     // 2. Safari profit calculation (PRIORITY 1 FIX)
     // Filter safari bookings by dashboard filter
-    const dashboardFilteredSafariBookings =
-      dashboardMonthFilter === 'all'
-        ? safariBookings
-        : safariBookings.filter((s) =>
-            matchesDashboardFilter(new Date(s.start_date))
-          );
+    const dashboardFilteredSafariBookings = safariBookings.filter((s) =>
+      matchesDashboardFilter(new Date(s.start_date))
+    );
 
     console.log(`[DashboardCalculations] Safari bookings breakdown:`);
     dashboardFilteredSafariBookings.forEach((s, idx) => {
