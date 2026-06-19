@@ -7,7 +7,7 @@
  *
  * Background: assets/safari/jackal-brand-fleet.jpg (Jackal Adventures fleet — branded spare-tyre covers)
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Alert,
   Animated,
@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppPreferences } from '../contexts/AppPreferencesContext';
 import type { AuthError } from '../services/authService';
+import { saveCredentials, loadCredentials } from '../lib/secureCredentials';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -130,7 +131,13 @@ const gi = StyleSheet.create({
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
   const { signIn, loading } = useAuth();
-  const { biometricAvailable, biometricEnabled, biometricLabel, setBiometricEnabled } = useAppPreferences();
+  const {
+    biometricAvailable,
+    biometricEnabled,
+    biometricLabel,
+    setBiometricEnabled,
+    authenticateWithBiometrics,
+  } = useAppPreferences();
 
   const [email,        setEmail]        = useState('');
   const [password,     setPassword]     = useState('');
@@ -166,6 +173,45 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
     Animated.timing(footerOp, { toValue: 1, duration: 700, delay: 650, useNativeDriver: true }).start();
   }, []);
 
+  // ── WhatsApp-style auto biometric sign-in ────────────────────────────────────
+  // When Face ID is enabled: load saved credentials, fill fields, then
+  // automatically fire the Face ID prompt. On success, sign in immediately
+  // — no button press required.
+  const triggerBiometricLogin = useCallback(async () => {
+    const saved = await loadCredentials();
+    if (!saved) return; // no stored creds — fall through to manual form
+
+    // Pre-populate fields so user sees their identity (same as WhatsApp)
+    setEmail(saved.email);
+    setPassword(saved.password);
+
+    setIsSubmitting(true);
+    try {
+      const ok = await authenticateWithBiometrics();
+      if (!ok) {
+        // User cancelled or failed — leave fields filled so they can tap Sign In
+        setIsSubmitting(false);
+        return;
+      }
+      // Biometric passed → sign in silently
+      await signIn(saved.email, saved.password);
+      // AuthContext sets isAuthenticated → navigator redirects automatically
+    } catch (error: unknown) {
+      const ae = error as AuthError;
+      setErrors({ general: ae.message || 'Sign in failed. Please try again.' });
+      setIsSubmitting(false);
+    }
+  }, [authenticateWithBiometrics, signIn]);
+
+  // Fire automatically on mount when biometrics are enabled
+  useEffect(() => {
+    if (biometricEnabled && biometricAvailable) {
+      // Small delay so the entrance animation has started before the system prompt
+      const t = setTimeout(() => { void triggerBiometricLogin(); }, 600);
+      return () => clearTimeout(t);
+    }
+  }, []); // intentionally runs once on mount only
+
   // ── Validation ───────────────────────────────────────────────────────────────
   const validateForm = (): boolean => {
     const e: typeof errors = {};
@@ -183,22 +229,34 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
     return Object.keys(e).length === 0;
   };
 
-  // ── Login ────────────────────────────────────────────────────────────────────
+  // ── Password sign-in ─────────────────────────────────────────────────────────
   const handleLogin = async () => {
     setErrors({});
     if (!validateForm()) return;
     setIsSubmitting(true);
     try {
       await signIn(email.trim(), password);
+
       if (biometricAvailable && !biometricEnabled) {
+        // First-time: offer to enable Face ID
         Alert.alert(
           `Enable ${biometricLabel}`,
-          `Use ${biometricLabel} for faster, secure sign-in next time?`,
+          `Use ${biometricLabel} to sign in instantly next time — no password needed.`,
           [
             { text: 'Not Now', style: 'cancel' },
-            { text: 'Enable', onPress: () => { void setBiometricEnabled(true); } },
+            {
+              text: 'Enable',
+              onPress: () => {
+                void setBiometricEnabled(true);
+                // Save credentials so auto-login can use them
+                void saveCredentials(email.trim(), password);
+              },
+            },
           ]
         );
+      } else if (biometricEnabled) {
+        // Refresh stored credentials in case the password changed
+        void saveCredentials(email.trim(), password);
       }
     } catch (error: unknown) {
       const ae = error as AuthError;
@@ -339,6 +397,21 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
                         <Text style={s.btnText}>{mode === 'unlock' ? 'Unlock' : 'Sign In'}</Text>
                       )}
                     </TouchableOpacity>
+
+                    {/* Face ID / Biometric quick-unlock button (shown when enabled) */}
+                    {biometricEnabled && biometricAvailable && (
+                      <TouchableOpacity
+                        style={[s.biometricBtn, (isSubmitting || loading) && s.btnDisabled]}
+                        onPress={() => { void triggerBiometricLogin(); }}
+                        disabled={isSubmitting || loading}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={s.biometricIcon}>
+                          {biometricLabel === 'Face ID' ? '🔐' : '👆'}
+                        </Text>
+                        <Text style={s.biometricText}>Sign in with {biometricLabel}</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </GlassPanel>
               </Animated.View>
@@ -436,6 +509,22 @@ const s = StyleSheet.create({
   btnHighlight: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: 'rgba(232,184,75,0.45)' },
   btnDisabled:  { opacity: 0.55 },
   btnText:      { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.8 },
+
+  // Biometric quick-unlock button
+  biometricBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'rgba(200,146,42,0.4)',
+    backgroundColor: 'rgba(200,146,42,0.08)',
+    gap: 8,
+  },
+  biometricIcon: { fontSize: 20, color: GOLD_L },
+  biometricText: { fontSize: 14, fontWeight: '700', color: GOLD_L, letterSpacing: 0.3 },
 
   // Footer — sits at bottom of outer, always within safe area bounds
   footer:        { alignItems: 'center', paddingBottom: 2 },

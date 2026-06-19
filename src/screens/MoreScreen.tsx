@@ -34,6 +34,7 @@ import {
 import { clearAllNotifications } from '../services/notificationService';
 import { supabase } from '../lib/supabase';
 import { FadeSlideIn } from '../components/ui';
+import { clearCredentials } from '../lib/secureCredentials';
 
 // ─── Language config ──────────────────────────────────────────────────────────
 
@@ -395,7 +396,11 @@ export default function MoreScreen() {
       Alert.alert(t('common.biometric'), t('biometric.unavailable'));
       return;
     }
-    void setBiometricEnabled(!biometricEnabled);
+    const next = !biometricEnabled;
+    void setBiometricEnabled(next);
+    // Erase saved credentials when Face ID is disabled so they can't be
+    // recovered from the device keychain without re-enabling the feature.
+    if (!next) void clearCredentials();
   }, [biometricAvailable, biometricEnabled, setBiometricEnabled, t]);
 
   const navigateToTab = useCallback((tab: string, isStack?: boolean) => {
