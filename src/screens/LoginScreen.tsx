@@ -282,15 +282,16 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
   return (
     <View style={s.root}>
 
-      {/* ── Full-bleed background — Jackal Adventures fleet lineup ─────────── */}
+      {/* ── Full-bleed background — Jackal Adventures vehicle with jackal logo ─ */}
       <Animated.Image
-        source={require('../../assets/safari/jackal-brand-fleet.jpg')}
+        source={require('../../assets/safari/jackal-vehicle-logo.jpg')}
         style={[s.bgImage, { transform: [{ scale: bgScale }] }]}
         resizeMode="cover"
       />
 
-      {/* Layered overlays for depth and contrast */}
+      {/* Layered overlays — warm sandy tones with strong contrast for glass card */}
       <View style={s.ovTop}    />
+      <View style={s.ovMid}    />
       <View style={s.ovBottom} />
       <View style={s.ovWarm}   />
 
@@ -441,10 +442,13 @@ const s = StyleSheet.create({
   root:     { flex: 1, backgroundColor: '#1a1208' },
 
   bgImage:  { position: 'absolute', top: 0, left: 0, width: SW, height: SH },
-  // Light overlays — let the fleet photo show prominently
-  ovTop:    { position: 'absolute', top: 0, left: 0, right: 0, height: SH * 0.35, backgroundColor: 'rgba(0,0,0,0.05)' },
-  ovBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SH * 0.55, backgroundColor: 'rgba(0,0,0,0.38)' },
-  ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(30,18,4,0.06)' },
+  // Overlays tuned for the warm sandy vehicle image:
+  // top darkens the bright sky/upper area, mid creates depth behind the logo,
+  // bottom ensures the glass card stays legible, warm tints to sandy amber palette
+  ovTop:    { position: 'absolute', top: 0, left: 0, right: 0, height: SH * 0.42, backgroundColor: 'rgba(20,12,2,0.22)' },
+  ovMid:    { position: 'absolute', top: SH * 0.18, left: 0, right: 0, height: SH * 0.30, backgroundColor: 'rgba(10,6,0,0.18)' },
+  ovBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SH * 0.72, backgroundColor: 'rgba(8,4,0,0.52)' },
+  ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(40,22,4,0.10)' },
 
   safe:  { flex: 1, backgroundColor: 'transparent' },
   kav:   { flex: 1 },
@@ -465,24 +469,48 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  // Logo — slightly compact so everything fits without scrolling on all iPhones
-  logoWrap:  { alignItems: 'center', justifyContent: 'center', marginBottom: 20, position: 'relative', width: 112, height: 112 },
-  halo:      { position: 'absolute', width: 112, height: 112, borderRadius: 56, backgroundColor: 'rgba(200,146,42,0.10)', borderWidth: 1, borderColor: 'rgba(200,146,42,0.20)' },
+  // Logo — outer halo ring + inner white shell; enhanced glow for premium feel
+  logoWrap:  { alignItems: 'center', justifyContent: 'center', marginBottom: 22, position: 'relative', width: 128, height: 128 },
+  // Outer glow ring — wide, warm gold
+  halo: {
+    position: 'absolute',
+    width: 128, height: 128, borderRadius: 64,
+    backgroundColor: 'rgba(200,146,42,0.14)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(200,146,42,0.38)',
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 22,
+  },
   logoShell: {
-    width: 96, height: 96, borderRadius: 48,
+    width: 100, height: 100, borderRadius: 50,
     backgroundColor: '#ffffff',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 20, elevation: 14,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
+    // Deep drop-shadow + gold glow underneath
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 24,
+    elevation: 18,
+    borderWidth: 2.5,
+    borderColor: 'rgba(232,184,75,0.75)',
   },
-  logo: { width: 76, height: 76 },
+  logo: { width: 80, height: 80 },
 
   // Card
   cardWrap:  { width: '100%' },
   card:      { width: '100%' },
   cardInner: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 18 },
-  cardTitle: { fontSize: 21, fontWeight: '800', color: '#ffffff', letterSpacing: -0.4, marginBottom: 3, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  cardSub:   { fontSize: 13, color: 'rgba(255,255,255,0.62)', lineHeight: 18, marginBottom: 12 },
+  cardTitle: {
+    fontSize: 22, fontWeight: '800', color: '#ffffff', letterSpacing: -0.3,
+    marginBottom: 4, textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
+  },
+  cardSub: {
+    fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 18,
+    marginBottom: 14, textAlign: 'center',
+  },
 
   // Gold rule
   rule:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
@@ -496,7 +524,7 @@ const s = StyleSheet.create({
   errText:      { flex: 1, color: '#ffb5a5', fontSize: 13, lineHeight: 18 },
 
   showHide:  { color: GOLD_L, fontSize: 13, fontWeight: '700', paddingVertical: 11 },
-  forgotRow: { alignSelf: 'flex-end', marginBottom: 18, marginTop: 2 },
+  forgotRow: { alignSelf: 'center', marginBottom: 18, marginTop: 4 },
   forgotText:{ color: GOLD_L, fontSize: 13, fontWeight: '600' },
 
   // CTA button
