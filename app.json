@@ -13,13 +13,13 @@
       "backgroundColor": "#ffffff"
     },
     "notification": {
-      "color": "#1e40af",
+      "color": "#8B6B3E",
       "androidMode": "default",
       "androidCollapsedTitle": "Jackal Adventures"
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "25",
+      "buildNumber": "47",
       "bundleIdentifier": "com.jackalwild.jackaladventures",
       "infoPlist": {
         "UIBackgroundModes": [
@@ -58,7 +58,7 @@
       [
         "expo-notifications",
         {
-          "color": "#1e40af",
+          "color": "#8B6B3E",
           "defaultChannel": "default"
         }
       ],
