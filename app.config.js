@@ -24,7 +24,7 @@ export default {
       backgroundColor: '#ffffff',
     },
     notification: {
-      color: '#1e40af',
+      color: '#8B6B3E',
       androidMode: 'default',
       androidCollapsedTitle: 'Jackal Adventures',
     },
@@ -49,7 +49,6 @@ export default {
       permissions: ['RECEIVE_BOOT_COMPLETED', 'VIBRATE', 'POST_NOTIFICATIONS'],
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      useNextNotificationsApi: true,
     },
     web: {
       favicon: './assets/favicon.png',
@@ -65,11 +64,12 @@ export default {
       [
         'expo-notifications',
         {
-          color: '#1e40af',
+          color: '#8B6B3E',
           defaultChannel: 'default',
         },
       ],
       '@react-native-community/datetimepicker',
+      'expo-secure-store',
     ],
     extra: {
       // Embedded at build time — available via expo-constants in the bundle
