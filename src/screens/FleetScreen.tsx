@@ -33,16 +33,16 @@ import { tapLight, selectionTick } from '../lib/haptics';
 // ============================================================================
 
 const COLORS = {
-  primary:    '#1f4d45',
-  success:    '#3d8f6a',
-  warning:    '#b8883f',
-  danger:     '#c96d4d',
-  purple:     '#8366d7',
-  background: '#f6f2eb',
-  card:       '#fffdf9',
-  text:       '#181512',
-  textMuted:  '#7f7565',
-  border:     '#e1d7c8',
+  primary:    '#8B6B3E',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  purple:     '#7A5AF8',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 const STATUS_FILTERS: { label: string; value: VehicleStatus | 'all' }[] = [
@@ -245,10 +245,10 @@ export function FleetScreen() {
     <>
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
-        <StatCard title="Total Fleet"  value={stats.total}       color={COLORS.primary} bgColor="#dce8e3" delay={0}   />
-        <StatCard title="Available"    value={stats.available}   color={COLORS.success} bgColor="#ddf0e8" delay={60}  />
+        <StatCard title="Total Fleet"  value={stats.total}       color={COLORS.primary} bgColor="#F5E8D0" delay={0}   />
+        <StatCard title="Available"    value={stats.available}   color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
         <StatCard title="On Safari"    value={stats.booked}      color={COLORS.purple}  bgColor="#ede8f9" delay={120} />
-        <StatCard title="Maintenance"  value={stats.maintenance} color={COLORS.warning} bgColor="#f5e8ce" delay={180} />
+        <StatCard title="Maintenance"  value={stats.maintenance} color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
       </View>
 
       {/* Search Bar */}
@@ -338,7 +338,7 @@ export function FleetScreen() {
               <Text style={styles.heroSub}>{stats.total} vehicles · {stats.available} available</Text>
             </View>
             {stats.maintenance > 0 && (
-              <View style={[styles.heroBadge, { backgroundColor: '#b8883f' }]}>
+              <View style={[styles.heroBadge, { backgroundColor: '#C6A563' }]}>
                 <Text style={styles.heroBadgeText}>{stats.maintenance} in service</Text>
               </View>
             )}
@@ -415,18 +415,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
   },
-  hero: { backgroundColor: '#171513', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 12 },
-  heroEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#b8ab95' },
+  hero: { backgroundColor: '#1C1611', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 12 },
+  heroEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#C4A882' },
   heroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   heroTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -1, color: '#fffaf3' },
-  heroSub: { fontSize: 13, color: '#b8ab95', marginTop: 2 },
+  heroSub: { fontSize: 13, color: '#C4A882', marginTop: 2 },
   heroBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   heroBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   heroTabs: { flexDirection: 'row', gap: 8 },
   heroTab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
-  heroTabActive: { backgroundColor: '#fffdf9' },
-  heroTabText: { fontSize: 13, fontWeight: '700', color: '#b8ab95' },
-  heroTabTextActive: { color: '#181512', fontWeight: '800' },
+  heroTabActive: { backgroundColor: '#FFFFFF' },
+  heroTabText: { fontSize: 13, fontWeight: '700', color: '#C4A882' },
+  heroTabTextActive: { color: '#1C1C1E', fontWeight: '800' },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,

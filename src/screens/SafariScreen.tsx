@@ -30,29 +30,29 @@ import type { Booking } from '../types/dashboard';
 // ============================================================================
 
 const COLORS = {
-  background: '#f6f2eb',
-  card: '#fffdf9',
-  hero: '#171513',
-  heroMuted: '#b8ab95',
-  primary: '#1f4d45',
-  primarySoft: '#dce8e3',
-  text: '#181512',
-  textMuted: '#7f7565',
-  border: '#e1d7c8',
-  gold: '#b8883f',
-  goldSoft: '#f5e8ce',
-  danger: '#c96d4d',
-  success: '#3d8f6a',
+  background:  '#F2F2F7',
+  card:        '#FFFFFF',
+  hero:        '#1C1611',
+  heroMuted:   '#C4A882',
+  primary:     '#8B6B3E',
+  primarySoft: '#FEF0DC',
+  text:        '#1C1C1E',
+  textMuted:   '#6C6C70',
+  border:      '#E5E5EA',
+  gold:        '#C6A563',
+  goldSoft:    '#FDE8C0',
+  danger:      '#FF3B30',
+  success:     '#34A853',
 };
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  Active: { bg: '#dce8e3', text: '#1f4d45', label: 'Active' },
-  'In-Progress': { bg: '#d4ede2', text: '#3d8f6a', label: 'In Progress' },
-  Planning: { bg: '#f5e8ce', text: '#b8883f', label: 'Planning' },
-  Confirmed: { bg: '#e8edf5', text: '#4a7fc1', label: 'Confirmed' },
-  Completed: { bg: '#ede9e4', text: '#7f7565', label: 'Completed' },
-  Cancelled: { bg: '#fde8e0', text: '#c96d4d', label: 'Cancelled' },
-  Pending: { bg: '#f5e8ce', text: '#b8883f', label: 'Pending' },
+  Active:        { bg: '#E8F7EE', text: '#1A6B3C', label: 'Active' },
+  'In-Progress': { bg: '#E8F7EE', text: '#1A6B3C', label: 'In Progress' },
+  Planning:      { bg: '#FEF3DC', text: '#7a5000', label: 'Planning' },
+  Confirmed:     { bg: '#FEF0DC', text: '#8B6B3E', label: 'Confirmed' },
+  Completed:     { bg: '#EDE8FE', text: '#5436CC', label: 'Completed' },
+  Cancelled:     { bg: '#FFEEED', text: '#CC1400', label: 'Cancelled' },
+  Pending:       { bg: '#FEF3DC', text: '#7a5000', label: 'Pending' },
 };
 
 type FilterTab = 'all' | 'active' | 'upcoming' | 'history';
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#264a42',
+    backgroundColor: '#4A2E12',
     opacity: 0.32,
   },
   heroGlowRight: {
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     paddingVertical: 16,
     marginBottom: 20,
-    shadowColor: '#201a13',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 8,

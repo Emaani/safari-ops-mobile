@@ -16,24 +16,25 @@ import type { Vehicle } from '../../types/dashboard';
 // ============================================================================
 
 const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#8B6B3E',
+  gold:       '#C6A563',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  purple:     '#7A5AF8',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  available: { bg: '#dcfce7', text: '#166534' },
-  booked: { bg: '#dbeafe', text: '#1e40af' },
-  rented: { bg: '#e0e7ff', text: '#3730a3' },
-  maintenance: { bg: '#fef3c7', text: '#92400e' },
-  out_of_service: { bg: '#fee2e2', text: '#991b1b' },
+  available:     { bg: '#E8F7EE', text: '#1A6B3C' },
+  booked:        { bg: '#EDE8FE', text: '#5436CC' },
+  rented:        { bg: '#FEF0DC', text: '#8B6B3E' },
+  maintenance:   { bg: '#FEF3DC', text: '#7a5000' },
+  out_of_service:{ bg: '#FFEEED', text: '#CC1400' },
 };
 
 // ============================================================================
@@ -62,7 +63,7 @@ function TruckIcon({ size = 24, color = COLORS.primary }: { size?: number; color
 
 function StarIcon({ size = 16, filled = false }: { size?: number; filled?: boolean }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? '#f59e0b' : 'none'} stroke="#f59e0b" strokeWidth={2}>
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? '#C6A563' : 'none'} stroke="#C6A563" strokeWidth={2}>
       <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
     </Svg>
   );

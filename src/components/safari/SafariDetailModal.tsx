@@ -17,23 +17,24 @@ import { formatCurrency } from '../../lib/utils';
 // ============================================================================
 
 const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  safari: '#059669',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#8B6B3E',
+  gold:       '#C6A563',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  purple:     '#7A5AF8',
+  safari:     '#C6A563',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  Confirmed: { bg: '#dbeafe', text: '#1e40af' },
-  'In-Progress': { bg: '#dcfce7', text: '#166534' },
-  Completed: { bg: '#f3e8ff', text: '#6b21a8' },
+  Confirmed:     { bg: '#FEF0DC', text: '#8B6B3E' },
+  'In-Progress': { bg: '#E8F7EE', text: '#1A6B3C' },
+  Completed:     { bg: '#EDE8FE', text: '#5436CC' },
 };
 
 // ============================================================================
@@ -176,19 +177,19 @@ export function SafariDetailModal({ safari, visible, onClose }: SafariDetailModa
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Payment Information</Text>
             <View style={styles.paymentGrid}>
-              <View style={[styles.paymentItem, { backgroundColor: '#d1fae5' }]}>
+              <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
                 <Text style={styles.paymentLabel}>Total Cost</Text>
                 <Text style={styles.paymentValue}>
                   {formatCurrency(totalCost, currency)}
                 </Text>
               </View>
-              <View style={[styles.paymentItem, { backgroundColor: '#dcfce7' }]}>
+              <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
                 <Text style={styles.paymentLabel}>Amount Paid</Text>
                 <Text style={[styles.paymentValue, { color: COLORS.success }]}>
                   {formatCurrency(amountPaid, currency)}
                 </Text>
               </View>
-              <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#fef3c7' : '#dcfce7' }]}>
+              <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#FDE8C0' : '#D8F0E4' }]}>
                 <Text style={styles.paymentLabel}>Balance</Text>
                 <Text style={[styles.paymentValue, { color: balance > 0 ? COLORS.warning : COLORS.success }]}>
                   {formatCurrency(balance, currency)}
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#D8F0E4',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#D8F0E4',
   },
   durationText: {
     fontSize: 14,

@@ -71,8 +71,8 @@ const s = StyleSheet.create({
   icon:    { fontSize: 48, marginBottom: 16 },
   title:   { fontSize: 20, fontWeight: '800', color: '#181512', marginBottom: 10, textAlign: 'center' },
   body:    { fontSize: 14, color: '#7f7565', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  devBox:  { backgroundColor: '#f0ebe2', borderRadius: 8, padding: 10, marginBottom: 16, maxHeight: 120, width: '100%' },
-  devText: { fontSize: 11, color: '#c96d4d', fontFamily: 'Courier' },
-  btn:     { backgroundColor: '#1f4d45', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 },
+  devBox:  { backgroundColor: '#F2F2F7', borderRadius: 8, padding: 10, marginBottom: 16, maxHeight: 120, width: '100%' },
+  devText: { fontSize: 11, color: '#FF3B30', fontFamily: 'Courier' },
+  btn:     { backgroundColor: '#8B6B3E', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

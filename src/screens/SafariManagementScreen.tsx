@@ -32,29 +32,29 @@ const { width: SW } = Dimensions.get('window');
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#f6f2eb',
-  card:        '#fffdf9',
-  hero:        '#171513',
-  heroMuted:   '#b8ab95',
-  primary:     '#1f4d45',
-  primarySoft: '#dce8e3',
-  gold:        '#b8883f',
-  goldSoft:    '#f5e8ce',
-  success:     '#3d8f6a',
-  danger:      '#c96d4d',
-  text:        '#181512',
-  textMuted:   '#7f7565',
-  border:      '#e1d7c8',
-  input:       '#f0ebe2',
+  bg:          '#F2F2F7',
+  card:        '#FFFFFF',
+  hero:        '#1C1611',
+  heroMuted:   '#C4A882',
+  primary:     '#8B6B3E',
+  primarySoft: '#FEF0DC',
+  gold:        '#C6A563',
+  goldSoft:    '#FDE8C0',
+  success:     '#34A853',
+  danger:      '#FF3B30',
+  text:        '#1C1C1E',
+  textMuted:   '#6C6C70',
+  border:      '#E5E5EA',
+  input:       '#F2F2F7',
 };
 
 const STATUS_CFG: Record<string, { bg: string; text: string; label: string }> = {
-  draft:     { bg: '#f0ebe2', text: '#7f7565', label: 'Draft' },
-  pending:   { bg: '#f5e8ce', text: '#b8883f', label: 'Pending' },
-  confirmed: { bg: '#dce8f5', text: '#1a5a8f', label: 'Confirmed' },
-  active:    { bg: '#dce8e3', text: '#1f4d45', label: 'Active' },
-  completed: { bg: '#ede9e4', text: '#5c5048', label: 'Completed' },
-  cancelled: { bg: '#fde8e0', text: '#c96d4d', label: 'Cancelled' },
+  draft:     { bg: '#F2F2F7', text: '#6C6C70', label: 'Draft' },
+  pending:   { bg: '#FEF3DC', text: '#7a5000', label: 'Pending' },
+  confirmed: { bg: '#E5F0FF', text: '#1a5a8f', label: 'Confirmed' },
+  active:    { bg: '#E8F7EE', text: '#1A6B3C', label: 'Active' },
+  completed: { bg: '#EDE8FE', text: '#5436CC', label: 'Completed' },
+  cancelled: { bg: '#FFEEED', text: '#CC1400', label: 'Cancelled' },
 };
 const STATUS_KEYS = ['all', 'draft', 'pending', 'confirmed', 'active', 'completed', 'cancelled'];
 
@@ -134,11 +134,12 @@ function calcDays(start?: string, end?: string) {
   const d = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
   return `${d} day${d !== 1 ? 's' : ''}`;
 }
-function getPaymentLabel(paid = 0, total = 0, deposit = 0): { label: string; color: string } {
-  if (paid <= 0) return { label: 'Unpaid', color: C.danger };
-  if (paid >= total) return { label: 'Fully Paid', color: C.success };
-  if (paid >= deposit) return { label: 'Partial', color: C.gold };
-  return { label: 'Deposit Pending', color: C.gold };
+function getPaymentLabel(paid = 0, total = 0, deposit = 0): { label: string; color: string; pct: number } {
+  const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+  if (paid <= 0) return { label: 'Unpaid', color: C.danger, pct: 0 };
+  if (paid >= total) return { label: 'Fully Paid', color: C.success, pct: 100 };
+  if (paid >= deposit) return { label: `${pct}% Paid`, color: C.gold, pct };
+  return { label: `${pct}% – Deposit Due`, color: C.gold, pct };
 }
 
 // ─── Shared tiny components ───────────────────────────────────────────────────
@@ -246,7 +247,7 @@ function BookingCard({ b, onPress }: { b: SafariBooking; onPress: () => void }) 
   );
 }
 const bc = StyleSheet.create({
-  card: { flexDirection: 'row', backgroundColor: C.card, borderRadius: 16, marginBottom: 10, overflow: 'hidden', borderWidth: 1, borderColor: C.border, shadowColor: '#201a13', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
+  card: { flexDirection: 'row', backgroundColor: C.card, borderRadius: 16, marginBottom: 10, overflow: 'hidden', borderWidth: 1, borderColor: C.border, shadowColor: '#000000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
   accent: { width: 5 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   ref: { fontSize: 14, fontWeight: '800', color: C.text, flex: 1, letterSpacing: -0.2 },
@@ -307,20 +308,43 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
   const saveOps = useCallback(async () => {
     if (!booking) return;
     setSaving(true);
-    try {
-      // Build update payload with only available column names;
-      // vehicle_id / guide_id may not exist — try both and ignore column errors
-      const u: Record<string, any> = {};
-      if (selVehicle) u.vehicle_id = selVehicle.id;
-      if (selGuide)   u.guide_id   = selGuide.id;
 
-      if (Object.keys(u).length > 0) {
-        const { error } = await supabase.from('safari_bookings').update(u).eq('id', booking.id);
-        if (error && !error.message.includes('does not exist')) throw error;
-        // If column doesn't exist, silently skip — assignment visible via vehicle/guide table only
+    // Supabase returns code PGRST204 / "Could not find … schema cache" when a column
+    // doesn't exist — the old "does not exist" check missed this exact message.
+    const isSchemaErr = (err: any) =>
+      err?.code === 'PGRST204' ||
+      err?.message?.includes('schema cache') ||
+      err?.message?.includes('Could not find') ||
+      err?.message?.includes('does not exist');
+
+    try {
+      // Update vehicle_id (column always exists)
+      if (selVehicle) {
+        const { error } = await supabase
+          .from('safari_bookings')
+          .update({ vehicle_id: selVehicle.id })
+          .eq('id', booking.id);
+        if (error && !isSchemaErr(error)) throw error;
       }
 
-      // Mark vehicle as booked (always safe — vehicles table always has status column)
+      // Update guide — try guide_id first, fall back to assigned_guide_id
+      if (selGuide) {
+        const { error: eg1 } = await supabase
+          .from('safari_bookings')
+          .update({ guide_id: selGuide.id })
+          .eq('id', booking.id);
+        if (eg1 && isSchemaErr(eg1)) {
+          const { error: eg2 } = await supabase
+            .from('safari_bookings')
+            .update({ assigned_guide_id: selGuide.id })
+            .eq('id', booking.id);
+          if (eg2 && !isSchemaErr(eg2)) throw eg2;
+        } else if (eg1) {
+          throw eg1;
+        }
+      }
+
+      // Mark vehicle as booked
       if (selVehicle && selVehicle.status === 'available') {
         try { await supabase.from('vehicles').update({ status: 'booked' }).eq('id', selVehicle.id); } catch { /* non-fatal */ }
       }
@@ -335,6 +359,12 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
   const st = STATUS_CFG[booking.status] || STATUS_CFG.pending;
   const pay = getPaymentLabel(booking.amount_paid, booking.total_price_usd, booking.deposit_amount);
   const balance = (booking.total_price_usd || 0) - (booking.amount_paid || 0);
+
+  // Accurate profit margin: always compute from raw cost fields
+  const totalRevenue  = booking.total_price_usd || 0;
+  const totalCosts    = (booking.total_expenses_usd || 0) + (booking.vehicle_hire_cost_usd || 0);
+  const netProfit     = totalRevenue - totalCosts;
+  const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -372,11 +402,13 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
             <View style={dm.sect}>
               <Text style={dm.sectTitle}>Financial Summary</Text>
               {[
-                { l: 'Total Revenue', v: formatCurrency(booking.total_price_usd || 0, 'USD'), big: true },
+                { l: 'Total Revenue', v: formatCurrency(totalRevenue, 'USD'), big: true },
+                totalCosts > 0 ? { l: 'Total Costs', v: formatCurrency(totalCosts, 'USD'), c: C.danger } : null,
+                totalCosts > 0 ? { l: 'Net Profit', v: formatCurrency(netProfit, 'USD'), c: netProfit >= 0 ? C.success : C.danger } : null,
                 { l: 'Amount Paid', v: formatCurrency(booking.amount_paid || 0, 'USD'), c: C.success },
                 { l: 'Balance Due', v: formatCurrency(balance, 'USD'), c: balance > 0 ? C.danger : C.success },
                 booking.deposit_amount ? { l: 'Deposit Required', v: formatCurrency(booking.deposit_amount, 'USD') } : null,
-                booking.profit_margin != null ? { l: 'Profit Margin', v: `${(booking.profit_margin).toFixed(1)}%`, c: booking.profit_margin >= 0 ? C.success : C.danger } : null,
+                profitMarginPct != null ? { l: 'Profit Margin', v: `${profitMarginPct.toFixed(1)}%`, c: profitMarginPct >= 0 ? C.success : C.danger } : null,
               ].filter(Boolean).map((row: any, i) => (
                 <View key={i} style={dm.finRow}>
                   <Text style={dm.finL}>{row.l}</Text>
@@ -713,8 +745,10 @@ function BookingsTab() {
       deposit_amount:    d.deposit_amount   ?? d.deposit      ?? undefined,
       amount_paid:       d.amount_paid      ?? d.paid         ?? undefined,
       booking_direction: d.booking_direction ?? d.direction   ?? undefined,
-      profit_margin:     d.profit_margin     ?? undefined,
-      customer_name:     d.customer_name     ?? d.client_name ?? undefined,
+      profit_margin:        d.profit_margin        ?? undefined,
+      total_expenses_usd:   d.total_expenses_usd   ?? undefined,
+      vehicle_hire_cost_usd: d.vehicle_hire_cost_usd ?? undefined,
+      customer_name:        d.customer_name        ?? d.client_name ?? undefined,
       customer_email:    d.customer_email    ?? d.email       ?? undefined,
       // FK ids — may or may not exist; store what we have
       vehicle_id:        d.vehicle_id        ?? d.assigned_vehicle_id ?? undefined,
@@ -1154,7 +1188,7 @@ function OperationsTab() {
                   <TouchableOpacity style={op.iconBtn} onPress={() => { setEditGuide(g); setShowGuideModal(true); }}>
                     <Ico.Edit s={14} c={C.primary} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteGuide(g)}>
+                  <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deleteGuide(g)}>
                     <Ico.Trash s={14} c={C.danger} />
                   </TouchableOpacity>
                 </View>
@@ -1395,7 +1429,7 @@ function PackagesTab() {
               <TouchableOpacity style={op.iconBtn} onPress={() => { setEditPkg(p); setShowPkgModal(true); }}>
                 <Ico.Edit s={14} c={C.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deletePkg(p)}>
+              <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deletePkg(p)}>
                 <Ico.Trash s={14} c={C.danger} />
               </TouchableOpacity>
             </View>
@@ -1723,7 +1757,7 @@ function AirportsTab() {
                 <TouchableOpacity style={op.iconBtn} onPress={() => { setEditAirport(a); setShowModal(true); }}>
                   <Ico.Edit s={14} c={C.primary} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteAirport(a)}>
+                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deleteAirport(a)}>
                   <Ico.Trash s={14} c={C.danger} />
                 </TouchableOpacity>
               </View>
@@ -1922,7 +1956,7 @@ function HotelsLodgesTab() {
               <TouchableOpacity style={op.iconBtn} onPress={() => { setEditLodge(l); setShowModal(true); }}>
                 <Ico.Edit s={14} c={C.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteLodge(l)}>
+              <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deleteLodge(l)}>
                 <Ico.Trash s={14} c={C.danger} />
               </TouchableOpacity>
             </View>
@@ -2017,7 +2051,7 @@ function NationalParksTab() {
   if (loading) return <LoadingView label="Loading national parks…" />;
 
   const CAT_COLORS: Record<string, { bg: string; text: string }> = {
-    'A+': { bg: '#fde8e0', text: '#c96d4d' },
+    'A+': { bg: '#FFEEED', text: '#CC1400' },
     A: { bg: C.goldSoft, text: C.gold },
     B: { bg: C.primarySoft, text: C.primary },
   };
@@ -2071,7 +2105,7 @@ function NationalParksTab() {
                   </View>
                   <View style={{ gap: 8 }}>
                     <TouchableOpacity style={op.iconBtn} onPress={() => startEdit(p)}><Ico.Edit s={14} c={C.primary} /></TouchableOpacity>
-                    <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deletePark(p)}><Ico.Trash s={14} c={C.danger} /></TouchableOpacity>
+                    <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deletePark(p)}><Ico.Trash s={14} c={C.danger} /></TouchableOpacity>
                   </View>
                 </>
               )}
@@ -2326,7 +2360,7 @@ function ClientFormModal({ visible, client, onClose, onSaved }: {
 const KYC_CFG: Record<string, { bg: string; text: string }> = {
   Complete:        { bg: C.primarySoft, text: C.primary },
   'Pending Review':{ bg: C.goldSoft,    text: C.gold    },
-  Incomplete:      { bg: '#fde8e0',     text: C.danger  },
+  Incomplete:      { bg: '#FFEEED',     text: C.danger  },
 };
 
 function ClientsTab() {
@@ -2413,7 +2447,7 @@ function ClientsTab() {
                 <TouchableOpacity style={op.iconBtn} onPress={() => { setEditClient(c); setShowModal(true); }}>
                   <Ico.Edit s={14} c={C.primary} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#fde8e0' }]} onPress={() => deleteClient(c)}>
+                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deleteClient(c)}>
                   <Ico.Trash s={14} c={C.danger} />
                 </TouchableOpacity>
               </View>
@@ -2496,9 +2530,9 @@ export function SafariManagementScreen() {
 
 const sc = StyleSheet.create({
   hero: { backgroundColor: C.hero, paddingHorizontal: 20, paddingBottom: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
-  glowL: { position: 'absolute', top: -30, left: -20, width: 120, height: 120, borderRadius: 60, backgroundColor: '#264a42', opacity: 0.3 },
+  glowL: { position: 'absolute', top: -30, left: -20, width: 120, height: 120, borderRadius: 60, backgroundColor: '#4A2E12', opacity: 0.3 },
   glowR: { position: 'absolute', right: -40, bottom: -20, width: 150, height: 150, borderRadius: 75, backgroundColor: '#6c5228', opacity: 0.18 },
-  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 5 },
+  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', color: '#C4A882', marginBottom: 5 },
   heroTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.8, color: '#fffaf3', marginBottom: 14 },
   tabRow: { flexDirection: 'row', gap: 8 },
   tabPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },

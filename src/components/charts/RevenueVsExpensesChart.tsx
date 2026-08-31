@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { FadeSlideIn } from '../ui/FadeSlideIn';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Svg, Path, Circle, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 
@@ -30,19 +31,17 @@ interface RevenueVsExpensesChartProps {
 // ─── Colours ─────────────────────────────────────────────────────────────────
 
 const C = {
-  bg:       '#171513',
-  surface:  '#1e1a17',
+  bg:       '#1C1611',
+  surface:  '#231B12',
   border:   '#2e2822',
-  revenue:  '#3d8f6a',
-  expense:  '#c96d4d',
+  revenue:  '#34A853',
+  expense:  '#FF3B30',
   text:     '#fffaf3',
   muted:    '#6b6256',
   grid:     '#ffffff',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const SCREEN_W = Dimensions.get('window').width;
 
 function fmt(v: number, currency = 'USD'): string {
   const prefix = currency === 'USD' ? '$' : currency + ' ';
@@ -91,11 +90,12 @@ export function RevenueVsExpensesChart({
     setSelectedIndex(activeMonthIndex);
   }, [activeMonthIndex]);
 
-  // Chart dimensions
-  const W     = SCREEN_W - 48;  // card has 16+16 margin + 8+8 padding
+  // Chart dimensions — scroll padding 20×2 + card padding 16×2 = 72
+  const { width: screenW } = useWindowDimensions();
+  const W     = screenW - 72;
   const H     = 200;
   const PAD_L = 42;
-  const PAD_R = 14;
+  const PAD_R = 20;
   const PAD_T = 18;
   const PAD_B = 30;
   const plotW = W - PAD_L - PAD_R;
@@ -132,9 +132,6 @@ export function RevenueVsExpensesChart({
   const selected = selectedIndex >= 0 && selectedIndex < chartData.length
     ? chartData[selectedIndex]
     : null;
-
-  const lastRev = revPts[n - 1];
-  const lastExp = expPts[n - 1];
 
   // ─── Empty / Loading ─────────────────────────────────────────────────────
 
@@ -266,19 +263,6 @@ export function RevenueVsExpensesChart({
           );
         })}
 
-        {/* Endpoint value bubbles (rightmost point) */}
-        {lastRev && (
-          <SvgText x={lastRev.x + 6} y={lastRev.y + 4} fontSize="10"
-            fill={C.revenue} fontWeight="700" textAnchor="start">
-            +{fmtAxis(chartData[n-1]?.revenue ?? 0)}
-          </SvgText>
-        )}
-        {lastExp && (
-          <SvgText x={lastExp.x + 6} y={lastExp.y + 4} fontSize="10"
-            fill={C.expense} fontWeight="700" textAnchor="start">
-            -{fmtAxis(chartData[n-1]?.expenses ?? 0)}
-          </SvgText>
-        )}
       </Svg>
 
       {/* Tap-to-select month rail */}
@@ -303,11 +287,12 @@ export function RevenueVsExpensesChart({
 
       {/* Selected month detail */}
       {selected ? (
+        <FadeSlideIn key={selectedIndex} distance={6}>
         <View style={styles.detailCard}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={styles.detailMonth}>{selected.month}</Text>
             <View style={[styles.netBadge,
-              { backgroundColor: selected.revenue - selected.expenses >= 0 ? '#172420' : '#2a1e1b' }]}>
+              { backgroundColor: selected.revenue - selected.expenses >= 0 ? '#1e2a1e' : '#2a1e1b' }]}>
               <Text style={[styles.netBadgeText,
                 { color: selected.revenue - selected.expenses >= 0 ? C.revenue : C.expense }]}>
                 {selected.revenue - selected.expenses >= 0 ? '+' : ''}
@@ -333,6 +318,7 @@ export function RevenueVsExpensesChart({
             </View>
           </View>
         </View>
+        </FadeSlideIn>
       ) : (
         /* Totals summary row */
         <View style={styles.summaryRow}>
@@ -440,12 +426,12 @@ const styles = StyleSheet.create({
     color: C.muted,
   },
   monthChipTextActive: {
-    color: '#171513',
+    color: '#1C1611',
   },
 
   // Selected detail card
   detailCard: {
-    backgroundColor: '#1e1a17',
+    backgroundColor: '#231B12',
     borderRadius: 14,
     padding: 14,
     gap: 10,
@@ -497,7 +483,7 @@ const styles = StyleSheet.create({
   // Summary row (default, no selection)
   summaryRow: {
     flexDirection: 'row',
-    backgroundColor: '#1e1a17',
+    backgroundColor: '#231B12',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,

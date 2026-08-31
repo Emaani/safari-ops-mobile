@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
-import { Svg, Path, Circle } from 'react-native-svg';
+import { Svg, Path } from 'react-native-svg';
 import type { Repair } from '../../types/dashboard';
 
 // ============================================================================
@@ -8,22 +8,23 @@ import type { Repair } from '../../types/dashboard';
 // ============================================================================
 
 const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#8B6B3E',
+  gold:       '#C6A563',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
-  critical: { bg: '#fee2e2', text: '#991b1b' },
-  high: { bg: '#fef3c7', text: '#92400e' },
-  medium: { bg: '#dbeafe', text: '#1e40af' },
-  low: { bg: '#dcfce7', text: '#166534' },
+  critical: { bg: '#FFEEED', text: '#CC1400' },
+  high:     { bg: '#FEF3DC', text: '#7a5000' },
+  medium:   { bg: '#FEF0DC', text: '#8B6B3E' },
+  low:      { bg: '#E8F7EE', text: '#1A6B3C' },
 };
 
 // ============================================================================

@@ -18,16 +18,17 @@ import { getBookingStatusConfig } from '../../constants/bookingStatus';
 // ============================================================================
 
 const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#8B6B3E',
+  gold:       '#C6A563',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  purple:     '#7A5AF8',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 // Status colors sourced from unified constants — see src/constants/bookingStatus.ts
@@ -176,13 +177,13 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit }: Bookin
                   {formatCurrency(totalCost, currency)}
                 </Text>
               </View>
-              <View style={[styles.paymentItem, { backgroundColor: '#dcfce7' }]}>
+              <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
                 <Text style={styles.paymentLabel}>Amount Paid</Text>
                 <Text style={[styles.paymentValue, { color: COLORS.success }]}>
                   {formatCurrency(amountPaid, currency)}
                 </Text>
               </View>
-              <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#fef3c7' : '#dcfce7' }]}>
+              <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#FDE8C0' : '#D8F0E4' }]}>
                 <Text style={styles.paymentLabel}>Balance</Text>
                 <Text style={[styles.paymentValue, { color: balance > 0 ? COLORS.warning : COLORS.success }]}>
                   {formatCurrency(balance, currency)}
@@ -388,7 +389,7 @@ const styles = StyleSheet.create({
     height: 32,
   },
   editBtn: {
-    backgroundColor: '#1f4d45',
+    backgroundColor: '#8B6B3E',
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
@@ -404,7 +405,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    backgroundColor: '#f5f0e8',
+    backgroundColor: '#F2F2F7',
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,

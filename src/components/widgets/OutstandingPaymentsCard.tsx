@@ -106,19 +106,16 @@ export function OutstandingPaymentsCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fffdf9',
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: 20,
-    borderWidth: 1,
-    borderColor: '#e1d7c8',
-    shadowColor: '#201a13',
-    shadowOffset: {
-      width: 0,
-      height: 12,
-    },
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 3,
+    shadowRadius: 10,
+    elevation: 2,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -128,8 +125,8 @@ const styles = StyleSheet.create({
     right: -20,
     width: 132,
     height: 132,
-    backgroundColor: '#e7d5b0',
-    opacity: 0.32,
+    backgroundColor: '#FEF0DC',
+    opacity: 0.5,
     borderRadius: 66,
   },
   content: {
@@ -144,7 +141,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#7f7565',
+    color: '#6C6C70',
     textTransform: 'uppercase',
     letterSpacing: 0.9,
     marginBottom: 14,
@@ -157,7 +154,7 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#181512',
+    color: '#1C1C1E',
     letterSpacing: -1.3,
     marginBottom: 10,
   },
@@ -170,7 +167,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     fontWeight: '400',
-    color: '#7f7565',
+    color: '#6C6C70',
   },
   badge: {
     backgroundColor: '#fbede7',
@@ -189,10 +186,10 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 18,
-    backgroundColor: '#1f4d45',
+    backgroundColor: '#8B6B3E',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#1f4d45',
+    shadowColor: '#8B6B3E',
     shadowOffset: {
       width: 0,
       height: 4,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,46 @@ import {
   ActivityIndicator,
   ScrollView,
   ViewStyle,
+  Animated,
 } from 'react-native';
 import { Svg, Path, Rect } from 'react-native-svg';
-import { formatCurrency, formatDateDMY, getStatusColor } from '../../lib/utils';
-import type { Booking, Currency } from '../../types/dashboard';
+import { formatCurrency } from '../../lib/utils';
+import { getBookingStatusConfig } from '../../constants/bookingStatus';
+import type { Currency } from '../../types/dashboard';
 
 // Booking item type for the widget (simplified from full Booking type)
 interface BookingItem {
   id: string;
   booking_number?: string;
   start_date: string;
+  end_date?: string;
   status: string;
   total_cost: number;
   currency: Currency;
+}
+
+const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function formatDateRange(start: string, end?: string): string {
+  const s = new Date(start);
+  const startStr = `${s.getDate()} ${SHORT_MONTHS[s.getMonth()]}`;
+  if (!end) return startStr;
+  const e = new Date(end);
+  const endStr = `${e.getDate()} ${SHORT_MONTHS[e.getMonth()]}`;
+  const nights = Math.max(0, Math.round((e.getTime() - s.getTime()) / 86400000));
+  return nights > 0 ? `${startStr} – ${endStr} · ${nights}d` : startStr;
+}
+
+// If the trip's end date has passed but the DB status was never updated,
+// show the correct effective status rather than the stale stored value.
+function getEffectiveStatus(status: string, endDate?: string): string {
+  if (!endDate) return status;
+  if (status !== 'In-Progress' && status !== 'Pending') return status;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  return end < today ? 'Completed' : status;
 }
 
 interface RecentBookingsWidgetProps {
@@ -31,7 +58,7 @@ interface RecentBookingsWidgetProps {
 }
 
 // Calendar icon component
-function CalendarIcon({ size = 16, color = '#6b7280' }: { size?: number; color?: string }) {
+function CalendarIcon({ size = 16, color = '#6C6C70' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -55,14 +82,32 @@ function FileTextIcon({ size = 40, color = '#9ca3af' }: { size?: number; color?:
   );
 }
 
-// Status badge component
+// Status badge component — uses pastel bg/text/dot from bookingStatus.ts for all statuses
 function StatusBadge({ status }: { status: string }) {
-  const backgroundColor = getStatusColor(status);
-  const displayStatus = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ').replace(/-/g, ' ');
+  const { bg, text, dot, label } = getBookingStatusConfig(status);
+  const isActive = status === 'In-Progress';
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!isActive) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.6, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isActive, pulseAnim]);
 
   return (
-    <View style={[styles.statusBadge, { backgroundColor }]}>
-      <Text style={styles.statusBadgeText}>{displayStatus}</Text>
+    <View style={[styles.statusBadge, { backgroundColor: bg, borderColor: dot }]}>
+      {isActive ? (
+        <Animated.View style={[styles.statusDot, { backgroundColor: dot, transform: [{ scale: pulseAnim }] }]} />
+      ) : (
+        <View style={[styles.statusDot, { backgroundColor: dot }]} />
+      )}
+      <Text style={[styles.statusBadgeText, { color: text }]}>{label}</Text>
     </View>
   );
 }
@@ -86,13 +131,13 @@ function BookingListItem({
     >
       <View style={styles.bookingHeader}>
         <Text style={styles.bookingNumber}>{booking.booking_number || `#${booking.id.slice(0, 8)}`}</Text>
-        <StatusBadge status={booking.status} />
+        <StatusBadge status={getEffectiveStatus(booking.status, booking.end_date)} />
       </View>
 
       <View style={styles.bookingDetails}>
         <View style={styles.dateContainer}>
-          <CalendarIcon size={14} color="#6b7280" />
-          <Text style={styles.dateText}>{formatDateDMY(booking.start_date)}</Text>
+          <CalendarIcon size={14} color="#6C6C70" />
+          <Text style={styles.dateText}>{formatDateRange(booking.start_date, booking.end_date)}</Text>
         </View>
         <Text style={styles.amountText}>
           {formatCurrency(booking.total_cost, booking.currency)}
@@ -117,7 +162,7 @@ function EmptyState() {
 function LoadingState() {
   return (
     <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#1f4d45" />
+      <ActivityIndicator size="large" color="#8B6B3E" />
       <Text style={styles.loadingText}>Loading bookings...</Text>
     </View>
   );
@@ -186,12 +231,12 @@ export function RecentBookingsWidget({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fffdf9',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#e1d7c8',
-    shadowColor: '#201a13',
+    borderColor: '#E5E5EA',
+    shadowColor: '#1C1C1E',
     shadowOffset: {
       width: 0,
       height: 12,
@@ -207,16 +252,16 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#efe6d8',
+    borderBottomColor: '#F2F2F7',
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#181512',
+    color: '#1C1C1E',
     letterSpacing: -0.6,
   },
   countBadge: {
-    backgroundColor: '#f1eadf',
+    backgroundColor: '#F2F2F7',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
@@ -224,7 +269,7 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#7d7465',
+    color: '#6C6C70',
   },
   scrollView: {
     maxHeight: 300,
@@ -240,7 +285,7 @@ const styles = StyleSheet.create({
   },
   bookingItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#efe6d8',
+    borderBottomColor: '#F2F2F7',
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -251,18 +296,26 @@ const styles = StyleSheet.create({
   bookingNumber: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#181512',
+    color: '#1C1C1E',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   statusBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#ffffff',
-    textTransform: 'capitalize',
+    letterSpacing: 0.1,
   },
   bookingDetails: {
     flexDirection: 'row',
@@ -276,13 +329,13 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 13,
-    fontWeight: '400',
-    color: '#6b7280',
+    fontWeight: '500',
+    color: '#6C6C70',
   },
   amountText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: '700',
+    color: '#1C1C1E',
   },
   loadingContainer: {
     height: 150,
@@ -292,8 +345,8 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    fontWeight: '400',
-    color: '#6b7280',
+    fontWeight: '500',
+    color: '#6C6C70',
   },
   emptyContainer: {
     height: 150,
@@ -304,14 +357,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     marginTop: 12,
     fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: '700',
+    color: '#1C1C1E',
   },
   emptySubtitle: {
     marginTop: 4,
     fontSize: 13,
     fontWeight: '400',
-    color: '#9ca3af',
+    color: '#9a8f7e',
     textAlign: 'center',
   },
 });

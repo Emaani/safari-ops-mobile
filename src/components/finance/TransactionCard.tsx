@@ -9,17 +9,18 @@ import { formatCurrency } from '../../lib/utils';
 // ============================================================================
 
 const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  income: '#059669',
-  expense: '#dc2626',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#8B6B3E',
+  gold:       '#C6A563',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  income:     '#34A853',
+  expense:    '#FF3B30',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 // ============================================================================
@@ -79,7 +80,7 @@ export function TransactionCard({ transaction, onPress, displayCurrency = 'USD' 
       <View style={styles.leftSection}>
         <View style={[
           styles.iconContainer,
-          { backgroundColor: isIncome ? '#d1fae5' : '#fee2e2' }
+          { backgroundColor: isIncome ? '#D8F0E4' : '#fdf0ec' }
         ]}>
           {isIncome ? (
             <ArrowUpIcon size={18} color={COLORS.income} />

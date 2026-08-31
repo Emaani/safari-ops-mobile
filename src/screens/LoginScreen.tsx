@@ -29,6 +29,8 @@ import type { AuthError } from '../services/authService';
 import { saveCredentials, loadCredentials } from '../lib/secureCredentials';
 
 const { width: SW, height: SH } = Dimensions.get('window');
+// Natural image height at full screen width — shows 100% of image with no side-cropping
+const IMG_DISPLAY_H = Math.round(SW * 1540 / 853);
 
 // ─── Brand palette ────────────────────────────────────────────────────────────
 const GOLD   = '#c8922a';
@@ -282,11 +284,11 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
   return (
     <View style={s.root}>
 
-      {/* ── Full-bleed background — Jackal Adventures vehicle with jackal logo ─ */}
+      {/* ── Full-width background — shows entire image, no side-cropping ──── */}
       <Animated.Image
-        source={require('../../assets/safari/jackal-vehicle-logo.jpg')}
+        source={require('../../assets/safari/jackal-safari-sunset.jpg')}
         style={[s.bgImage, { transform: [{ scale: bgScale }] }]}
-        resizeMode="cover"
+        resizeMode="stretch"
       />
 
       {/* Layered overlays — warm sandy tones with strong contrast for glass card */}
@@ -399,20 +401,6 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
                       )}
                     </TouchableOpacity>
 
-                    {/* Face ID / Biometric quick-unlock button (shown when enabled) */}
-                    {biometricEnabled && biometricAvailable && (
-                      <TouchableOpacity
-                        style={[s.biometricBtn, (isSubmitting || loading) && s.btnDisabled]}
-                        onPress={() => { void triggerBiometricLogin(); }}
-                        disabled={isSubmitting || loading}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={s.biometricIcon}>
-                          {biometricLabel === 'Face ID' ? '🔐' : '👆'}
-                        </Text>
-                        <Text style={s.biometricText}>Sign in with {biometricLabel}</Text>
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </GlassPanel>
               </Animated.View>
@@ -441,14 +429,13 @@ export default function LoginScreen({ mode = 'login' }: LoginScreenProps) {
 const s = StyleSheet.create({
   root:     { flex: 1, backgroundColor: '#1a1208' },
 
-  bgImage:  { position: 'absolute', top: 0, left: 0, width: SW, height: SH },
-  // Overlays tuned for the warm sandy vehicle image:
-  // top darkens the bright sky/upper area, mid creates depth behind the logo,
-  // bottom ensures the glass card stays legible, warm tints to sandy amber palette
-  ovTop:    { position: 'absolute', top: 0, left: 0, right: 0, height: SH * 0.42, backgroundColor: 'rgba(20,12,2,0.22)' },
-  ovMid:    { position: 'absolute', top: SH * 0.18, left: 0, right: 0, height: SH * 0.30, backgroundColor: 'rgba(10,6,0,0.18)' },
-  ovBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SH * 0.72, backgroundColor: 'rgba(8,4,0,0.52)' },
-  ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(40,22,4,0.10)' },
+  // Natural aspect-ratio fill — full image visible, no side-cropping
+  bgImage:  { position: 'absolute', top: 0, left: 0, width: SW, height: IMG_DISPLAY_H },
+  // Sky + upper vehicle area stays clear; transition then heavy dark for card readability
+  ovTop:    { position: 'absolute', top: 0, left: 0, right: 0, height: SH * 0.38, backgroundColor: 'rgba(6,3,0,0.08)' },
+  ovMid:    { position: 'absolute', top: SH * 0.38, left: 0, right: 0, height: SH * 0.10, backgroundColor: 'rgba(8,4,0,0.50)' },
+  ovBottom: { position: 'absolute', top: SH * 0.48, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5,2,0,0.82)' },
+  ovWarm:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(38,16,2,0.06)' },
 
   safe:  { flex: 1, backgroundColor: 'transparent' },
   kav:   { flex: 1 },
@@ -537,22 +524,6 @@ const s = StyleSheet.create({
   btnHighlight: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: 'rgba(232,184,75,0.45)' },
   btnDisabled:  { opacity: 0.55 },
   btnText:      { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.8 },
-
-  // Biometric quick-unlock button
-  biometricBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    paddingVertical: 13,
-    borderRadius: 14,
-    borderWidth: 1.2,
-    borderColor: 'rgba(200,146,42,0.4)',
-    backgroundColor: 'rgba(200,146,42,0.08)',
-    gap: 8,
-  },
-  biometricIcon: { fontSize: 20, color: GOLD_L },
-  biometricText: { fontSize: 14, fontWeight: '700', color: GOLD_L, letterSpacing: 0.3 },
 
   // Footer — sits at bottom of outer, always within safe area bounds
   footer:        { alignItems: 'center', paddingBottom: 2 },

@@ -9,26 +9,27 @@ import { formatCurrency } from '../../lib/utils';
 // ============================================================================
 
 const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+  primary:    '#8B6B3E',
+  gold:       '#C6A563',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  purple:     '#7A5AF8',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  Pending: { bg: '#fef3c7', text: '#92400e' },
-  Approved: { bg: '#dbeafe', text: '#1e40af' },
-  Completed: { bg: '#dcfce7', text: '#166534' },
-  Resolved: { bg: '#f3e8ff', text: '#6b21a8' },
-  Rejected: { bg: '#fee2e2', text: '#991b1b' },
-  Declined: { bg: '#fee2e2', text: '#991b1b' },
-  Cancelled: { bg: '#f3f4f6', text: '#6b7280' },
+  Pending:   { bg: '#FEF3DC', text: '#7a5000' },
+  Approved:  { bg: '#FEF0DC', text: '#8B6B3E' },
+  Completed: { bg: '#E8F7EE', text: '#1A6B3C' },
+  Resolved:  { bg: '#EDE8FE', text: '#5436CC' },
+  Rejected:  { bg: '#FFEEED', text: '#CC1400' },
+  Declined:  { bg: '#FFEEED', text: '#CC1400' },
+  Cancelled: { bg: '#F2F2F7', text: '#6C6C70' },
 };
 
 // ============================================================================

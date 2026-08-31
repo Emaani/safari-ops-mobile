@@ -277,19 +277,6 @@ export function useDashboardCalculations(
     const currentYear = now.getFullYear();
 
     // CRITICAL DEBUG: Log all inputs to calculations
-    console.log('[DashboardCalculations] ========== CALCULATION START ==========');
-    console.log('[DashboardCalculations] Input counts:');
-    console.log('[DashboardCalculations]   Vehicles:', vehicles.length);
-    console.log('[DashboardCalculations]   Bookings:', bookings.length);
-    console.log('[DashboardCalculations]   Repairs:', repairs.length);
-    console.log('[DashboardCalculations]   Financial Transactions:', financialTransactions.length);
-    console.log('[DashboardCalculations]   Cash Requisitions:', cashRequisitions.length);
-    console.log('[DashboardCalculations]   Safari Bookings:', safariBookings.length);
-    console.log('[DashboardCalculations] Filters:');
-    console.log('[DashboardCalculations]   Dashboard Month Filter:', dashboardMonthFilter);
-    console.log('[DashboardCalculations]   Dashboard Filter Year:', dashboardFilterYear);
-    console.log('[DashboardCalculations]   Display Currency:', displayCurrency);
-    console.log('[DashboardCalculations] Conversion Rates:', conversionRates);
 
     // Helper for dashboard filter matching.
     // "all" = every month within the selected year (not all-time).
@@ -311,9 +298,7 @@ export function useDashboardCalculations(
       matchesDashboardFilter(new Date(b.start_date))
     );
 
-    console.log(`[DashboardCalculations] Dashboard filtered bookings: ${dashboardFilteredBookings.length} of ${bookings.length} total`);
     if (dashboardFilteredBookings.length !== bookings.length) {
-      console.log(`[DashboardCalculations] ${bookings.length - dashboardFilteredBookings.length} bookings filtered out by date filter`);
     }
 
     const dashboardFilteredTransactions = financialTransactions.filter((t) =>
@@ -416,9 +401,7 @@ export function useDashboardCalculations(
     const revenueEligibleBookings = dashboardFilteredBookings
       .filter((b) => isRevenueEligible(b) && b.amount_paid > 0);
 
-    console.log(`[DashboardCalculations] Revenue-eligible bookings breakdown:`);
     revenueEligibleBookings.forEach((b, idx) => {
-      console.log(`  [${idx + 1}] Status: ${b.status}, Amount Paid: ${b.amount_paid} ${b.currency}, ID: ${b.id.slice(0, 8)}`);
     });
 
     const totalBookingRevenue = revenueEligibleBookings
@@ -428,11 +411,9 @@ export function useDashboardCalculations(
           b.currency,
           conversionRates
         );
-        console.log(`  Converting ${b.amount_paid} ${b.currency} to base: ${amountInBase} (rate: ${conversionRates[b.currency]})`);
         return sum + amountInBase;
       }, 0);
 
-    console.log(`[DashboardCalculations] Total booking revenue in base currency: ${totalBookingRevenue}`);
 
     // 2. Safari profit calculation (PRIORITY 1 FIX)
     // Filter safari bookings by dashboard filter
@@ -440,13 +421,11 @@ export function useDashboardCalculations(
       matchesDashboardFilter(new Date(s.start_date))
     );
 
-    console.log(`[DashboardCalculations] Safari bookings breakdown:`);
     dashboardFilteredSafariBookings.forEach((s, idx) => {
       const revenue = displayCurrency === 'USD' ? (s.total_price_usd || 0) : (s.total_price_ugx || 0);
       const expenses = displayCurrency === 'USD'
         ? (s.total_expenses_usd || 0) + (s.vehicle_hire_cost_usd || 0)
         : (s.total_expenses_ugx || 0) + (s.vehicle_hire_cost_ugx || 0);
-      console.log(`  [${idx + 1}] Revenue: ${revenue}, Expenses: ${expenses}, Profit: ${revenue - expenses} (${displayCurrency})`);
     });
 
     // Safari profit = total_price - (total_expenses + vehicle_hire_cost)
@@ -458,7 +437,6 @@ export function useDashboardCalculations(
       return sum + profit;
     }, 0);
 
-    console.log(`[DashboardCalculations] Total safari profit (base USD): ${totalSafariProfit}`);
 
     // 3. Additional income from financial transactions (non-booking revenue, filtered)
     const totalTransactionRevenue = dashboardFilteredTransactions
@@ -479,14 +457,6 @@ export function useDashboardCalculations(
       conversionRates
     );
 
-    console.log(`[DashboardCalculations] Total revenue calculation (dashboard-parity):`);
-    console.log(`  Fleet Booking Revenue (base): ${totalBookingRevenue}`);
-    console.log(`  Safari Profit (base, shown separately): ${totalSafariProfit}`);
-    console.log(`  Transaction Revenue (base): ${totalTransactionRevenue}`);
-    console.log(`  Total (base): ${totalBookingRevenue + totalTransactionRevenue}`);
-    console.log(`  Display Currency: ${displayCurrency}`);
-    console.log(`  Conversion Rate: ${conversionRates[displayCurrency]}`);
-    console.log(`  Total Revenue Display: ${totalRevenueDisplay}`);
 
     // Outstanding Payments — any non-cancelled booking with balance_due > 0 (matches web dashboard)
     // Uses the DB balance_due column when available, falls back to total_amount - amount_paid
@@ -841,7 +811,7 @@ export function useDashboardCalculations(
       {
         status: 'Available',
         count: vehiclesAvailable,
-        color: '#10b981', // green
+        color: '#34A853',
       },
       {
         status: 'Hired',
@@ -851,7 +821,7 @@ export function useDashboardCalculations(
       {
         status: 'Maintenance',
         count: vehiclesMaintenance,
-        color: '#f59e0b', // amber
+        color: '#C6A563', // amber
       },
     ].filter((item) => item.count > 0);
 

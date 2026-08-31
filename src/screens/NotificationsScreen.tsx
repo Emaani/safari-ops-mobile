@@ -84,10 +84,10 @@ const TYPE_EMOJI: Record<string, string> = {
 };
 
 const PRIORITY_COLOR: Record<string, string> = {
-  urgent: '#c96d4d',
-  high:   '#b8883f',
-  medium: '#1f4d45',
-  low:    '#7f7565',
+  urgent: '#FF3B30',
+  high:   '#F5A623',
+  medium: '#8B6B3E',
+  low:    '#6C6C70',
 };
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -154,18 +154,18 @@ function SkeletonItem() {
 const skeletonStyles = StyleSheet.create({
   item: {
     flexDirection: 'row',
-    backgroundColor: '#fffdf9',
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 16,
     marginHorizontal: 16,
     marginVertical: 5,
     borderWidth: 1,
-    borderColor: '#e1d7c8',
+    borderColor: '#E5E5EA',
     gap: 12,
   },
-  icon:  { width: 40, height: 40, borderRadius: 14, backgroundColor: '#e1d7c8' },
+  icon:  { width: 40, height: 40, borderRadius: 14, backgroundColor: '#E5E5EA' },
   lines: { flex: 1, justifyContent: 'center' },
-  line:  { height: 12, borderRadius: 6, backgroundColor: '#e1d7c8' },
+  line:  { height: 12, borderRadius: 6, backgroundColor: '#E5E5EA' },
 });
 
 // ─── Notification Detail Modal ────────────────────────────────────────────────
@@ -202,7 +202,7 @@ function NotificationDetailModal({
   if (!notification) return null;
 
   const emoji = TYPE_EMOJI[notification.type] || '🔔';
-  const priorityColor = PRIORITY_COLOR[notification.priority] || '#7f7565';
+  const priorityColor = PRIORITY_COLOR[notification.priority] || '#6C6C70';
   const isUnread = notification.status === 'unread';
 
   const metaRows: { label: string; value: string }[] = [
@@ -280,7 +280,7 @@ function NotificationDetailModal({
             onPress={() => { onDelete(notification.id); onClose(); }}
             activeOpacity={0.85}
           >
-            <TrashIcon size={15} color="#c96d4d" />
+            <TrashIcon size={15} color="#FF3B30" />
             <Text style={detailStyles.actionDangerText}>Delete</Text>
           </TouchableOpacity>
         </View>
@@ -292,7 +292,7 @@ function NotificationDetailModal({
 const detailStyles = StyleSheet.create({
   sheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#fffdf9',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
@@ -310,20 +310,20 @@ const detailStyles = StyleSheet.create({
   priorityBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   priorityDot: { width: 6, height: 6, borderRadius: 3 },
   priorityText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
-  unreadBadge: { backgroundColor: '#1f4d4520', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  unreadBadgeText: { fontSize: 11, fontWeight: '700', color: '#1f4d45' },
-  titleText: { fontSize: 18, fontWeight: '800', color: '#181512', letterSpacing: -0.4, lineHeight: 24 },
-  messageBox: { backgroundColor: '#f6f2eb', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e1d7c8' },
+  unreadBadge: { backgroundColor: '#8B6B3E20', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  unreadBadgeText: { fontSize: 11, fontWeight: '700', color: '#8B6B3E' },
+  titleText: { fontSize: 18, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.4, lineHeight: 24 },
+  messageBox: { backgroundColor: '#F2F2F7', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E5EA' },
   messageText: { fontSize: 15, color: '#3d3428', lineHeight: 22 },
-  metaCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e1d7c8', marginBottom: 20, overflow: 'hidden' },
+  metaCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E5E5EA', marginBottom: 20, overflow: 'hidden' },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  metaRowBorder: { borderBottomWidth: 1, borderBottomColor: '#f0ebe0' },
+  metaRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F5ECD9' },
   metaLabel: { fontSize: 13, color: '#9a8f7e', fontWeight: '600' },
-  metaValue: { fontSize: 13, color: '#181512', fontWeight: '700', maxWidth: '60%', textAlign: 'right' },
+  metaValue: { fontSize: 13, color: '#1C1C1E', fontWeight: '700', maxWidth: '60%', textAlign: 'right' },
   actions: { flexDirection: 'row', gap: 10 },
   actionPrimary: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, backgroundColor: '#1f4d45', borderRadius: 16, paddingVertical: 14,
+    gap: 8, backgroundColor: '#8B6B3E', borderRadius: 16, paddingVertical: 14,
   },
   actionPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   actionDanger: {
@@ -331,7 +331,7 @@ const detailStyles = StyleSheet.create({
     gap: 7, backgroundColor: '#fdf0ec', borderRadius: 16, paddingVertical: 14,
     paddingHorizontal: 20, borderWidth: 1, borderColor: '#f0cfc5',
   },
-  actionDangerText: { color: '#c96d4d', fontSize: 14, fontWeight: '700' },
+  actionDangerText: { color: '#FF3B30', fontSize: 14, fontWeight: '700' },
 });
 
 // ─── Notification Item ────────────────────────────────────────────────────────
@@ -343,7 +343,7 @@ function NotificationItem({ item, onPress, onDelete }: {
 }) {
   const isUnread = item.status === 'unread';
   const emoji = TYPE_EMOJI[item.type] || '🔔';
-  const priorityColor = PRIORITY_COLOR[item.priority] || '#7f7565';
+  const priorityColor = PRIORITY_COLOR[item.priority] || '#6C6C70';
 
   return (
     <TouchableOpacity
@@ -361,7 +361,7 @@ function NotificationItem({ item, onPress, onDelete }: {
             {item.title}
           </Text>
           <TouchableOpacity onPress={() => onDelete(item.id)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <TrashIcon size={16} color="#b8ab95" />
+            <TrashIcon size={16} color="#C4A882" />
           </TouchableOpacity>
         </View>
         <Text style={styles.notifMessage} numberOfLines={2}>{item.message}</Text>
@@ -433,7 +433,7 @@ function StaffPickerModal({
           <TextInput
             style={pickerStyles.search}
             placeholder="Search by name or email…"
-            placeholderTextColor="#b8ab95"
+            placeholderTextColor="#C4A882"
             value={search}
             onChangeText={setSearch}
             autoCapitalize="none"
@@ -441,7 +441,7 @@ function StaffPickerModal({
           />
         </View>
         {loading ? (
-          <ActivityIndicator color="#1f4d45" style={{ marginTop: 32 }} />
+          <ActivityIndicator color="#8B6B3E" style={{ marginTop: 32 }} />
         ) : filtered.length === 0 ? (
           <View style={pickerStyles.empty}>
             <Text style={pickerStyles.emptyText}>No staff members found</Text>
@@ -469,7 +469,7 @@ function StaffPickerModal({
                     <Text style={pickerStyles.email}>{item.email}</Text>
                   )}
                 </View>
-                <ArrowRightIcon size={16} color="#b8ab95" />
+                <ArrowRightIcon size={16} color="#C4A882" />
               </TouchableOpacity>
             )}
             contentContainerStyle={{ paddingBottom: 40 }}
@@ -483,29 +483,29 @@ function StaffPickerModal({
 const pickerStyles = StyleSheet.create({
   sheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#fffdf9', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingTop: 12, maxHeight: '80%',
   },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#d4c9b5', alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 17, fontWeight: '800', color: '#181512', paddingHorizontal: 20, marginBottom: 12 },
+  title: { fontSize: 17, fontWeight: '800', color: '#1C1C1E', paddingHorizontal: 20, marginBottom: 12 },
   searchWrap: { paddingHorizontal: 16, marginBottom: 8 },
   search: {
-    backgroundColor: '#f6f2eb', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, color: '#181512', borderWidth: 1, borderColor: '#e1d7c8',
+    backgroundColor: '#F2F2F7', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
+    fontSize: 14, color: '#1C1C1E', borderWidth: 1, borderColor: '#E5E5EA',
   },
   empty: { alignItems: 'center', paddingTop: 32 },
   emptyText: { fontSize: 14, color: '#9a8f7e' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#f0ebe0',
+    borderBottomWidth: 1, borderBottomColor: '#F5ECD9',
   },
   avatar: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#1f4d45', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#8B6B3E', alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  name: { fontSize: 15, fontWeight: '700', color: '#181512' },
+  name: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
   email: { fontSize: 12, color: '#9a8f7e', marginTop: 1 },
 });
 
@@ -534,15 +534,15 @@ function MessageBubble({ message, isMine }: { message: Message; isMine: boolean 
 const msgStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end', marginHorizontal: 16, marginVertical: 4, gap: 8 },
   rowMine: { justifyContent: 'flex-end' },
-  avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1f4d45', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#8B6B3E', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   avatarText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   bubble: { maxWidth: '75%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
-  bubbleTheirs: { backgroundColor: '#fffdf9', borderWidth: 1, borderColor: '#e1d7c8', borderBottomLeftRadius: 6 },
-  bubbleMine: { backgroundColor: '#1f4d45', borderBottomRightRadius: 6 },
-  senderName: { fontSize: 11, fontWeight: '800', color: '#1f4d45', letterSpacing: 0.2, marginBottom: 2 },
+  bubbleTheirs: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E5EA', borderBottomLeftRadius: 6 },
+  bubbleMine: { backgroundColor: '#8B6B3E', borderBottomRightRadius: 6 },
+  senderName: { fontSize: 11, fontWeight: '800', color: '#8B6B3E', letterSpacing: 0.2, marginBottom: 2 },
   bodyText: { fontSize: 14, color: '#3d3428', lineHeight: 20 },
   bodyTextMine: { color: '#f0f9f5' },
-  timeText: { fontSize: 10, color: '#b8ab95', fontWeight: '600', alignSelf: 'flex-end' },
+  timeText: { fontSize: 10, color: '#C4A882', fontWeight: '600', alignSelf: 'flex-end' },
   timeTextMine: { color: 'rgba(240,249,245,0.6)' },
 });
 
@@ -608,10 +608,10 @@ function ChatThread({
       <View style={threadStyles.header}>
         {onBack && (
           <TouchableOpacity onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 8 }}>
-            <BackIcon size={20} color="#1f4d45" />
+            <BackIcon size={20} color="#8B6B3E" />
           </TouchableOpacity>
         )}
-        <View style={[threadStyles.threadAvatar, isBroadcast && { backgroundColor: '#b8883f' }]}>
+        <View style={[threadStyles.threadAvatar, isBroadcast && { backgroundColor: '#C6A563' }]}>
           <Text style={threadStyles.threadAvatarText}>{isBroadcast ? '📣' : getInitials(title)}</Text>
         </View>
         <View style={{ flex: 1 }}>
@@ -661,7 +661,7 @@ function ChatThread({
         <TextInput
           style={threadStyles.input}
           placeholder={isBroadcast ? 'Broadcast to all staff…' : 'Type a message…'}
-          placeholderTextColor="#b8ab95"
+          placeholderTextColor="#C4A882"
           value={draft}
           onChangeText={setDraft}
           multiline
@@ -685,36 +685,36 @@ const threadStyles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#e1d7c8',
-    backgroundColor: '#fffdf9',
+    borderBottomWidth: 1, borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
   },
   threadAvatar: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#1f4d45', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#8B6B3E', alignItems: 'center', justifyContent: 'center',
   },
   threadAvatarText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  threadTitle: { fontSize: 15, fontWeight: '800', color: '#181512' },
+  threadTitle: { fontSize: 15, fontWeight: '800', color: '#1C1C1E' },
   threadSub: { fontSize: 11, color: '#9a8f7e', marginTop: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12, paddingBottom: 80 },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#181512', letterSpacing: -0.4 },
-  emptyMsg: { fontSize: 14, color: '#7f7565', textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.4 },
+  emptyMsg: { fontSize: 14, color: '#6C6C70', textAlign: 'center', lineHeight: 20 },
   dateSep: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginVertical: 12, gap: 10 },
-  dateLine: { flex: 1, height: 1, backgroundColor: '#e1d7c8' },
-  dateLabel: { fontSize: 11, fontWeight: '700', color: '#b8ab95', letterSpacing: 0.4 },
+  dateLine: { flex: 1, height: 1, backgroundColor: '#E5E5EA' },
+  dateLabel: { fontSize: 11, fontWeight: '700', color: '#C4A882', letterSpacing: 0.4 },
   compose: {
     flexDirection: 'row', alignItems: 'flex-end',
     paddingHorizontal: 16, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: '#e1d7c8',
-    backgroundColor: '#fffdf9', gap: 10,
+    borderTopWidth: 1, borderTopColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF', gap: 10,
   },
   input: {
     flex: 1, minHeight: 44, maxHeight: 120,
-    backgroundColor: '#f6f2eb', borderRadius: 22,
+    backgroundColor: '#F2F2F7', borderRadius: 22,
     paddingHorizontal: 16, paddingVertical: 11,
-    fontSize: 15, color: '#181512', borderWidth: 1, borderColor: '#e1d7c8',
+    fontSize: 15, color: '#1C1C1E', borderWidth: 1, borderColor: '#E5E5EA',
   },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1f4d45', alignItems: 'center', justifyContent: 'center' },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#8B6B3E', alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { backgroundColor: '#b8d4cc' },
 });
 
@@ -767,7 +767,7 @@ function ConversationList({
   return (
     <View style={{ flex: 1 }}>
       <TouchableOpacity style={convStyles.newDMBtn} onPress={onNewDM} activeOpacity={0.85}>
-        <PlusIcon size={16} color="#1f4d45" />
+        <PlusIcon size={16} color="#8B6B3E" />
         <Text style={convStyles.newDMText}>New Direct Message</Text>
       </TouchableOpacity>
 
@@ -822,28 +822,28 @@ const convStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginVertical: 12,
     paddingVertical: 12, paddingHorizontal: 16,
-    backgroundColor: '#dce8e3', borderRadius: 14,
+    backgroundColor: '#F5E8D0', borderRadius: 14,
   },
-  newDMText: { fontSize: 14, fontWeight: '700', color: '#1f4d45' },
+  newDMText: { fontSize: 14, fontWeight: '700', color: '#8B6B3E' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12, paddingBottom: 80 },
   emptyEmoji: { fontSize: 40 },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#181512', letterSpacing: -0.4 },
-  emptyMsg: { fontSize: 13, color: '#7f7565', textAlign: 'center', lineHeight: 19 },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.4 },
+  emptyMsg: { fontSize: 13, color: '#6C6C70', textAlign: 'center', lineHeight: 19 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#f0ebe0',
-    backgroundColor: '#fffdf9',
+    borderBottomWidth: 1, borderBottomColor: '#F5ECD9',
+    backgroundColor: '#FFFFFF',
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1f4d45', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#8B6B3E', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
-  name: { fontSize: 15, fontWeight: '600', color: '#181512' },
+  name: { fontSize: 15, fontWeight: '600', color: '#1C1C1E' },
   nameBold: { fontWeight: '800' },
-  time: { fontSize: 11, color: '#b8ab95', fontWeight: '600' },
+  time: { fontSize: 11, color: '#C4A882', fontWeight: '600' },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   preview: { fontSize: 13, color: '#9a8f7e', flex: 1, marginRight: 8 },
-  badge: { backgroundColor: '#1f4d45', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  badge: { backgroundColor: '#8B6B3E', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 });
 
@@ -905,7 +905,7 @@ function MessagesView({
   }, [activeThread, sendMessage]);
 
   if (loading) {
-    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color="#1f4d45" size="large" /></View>;
+    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color="#8B6B3E" size="large" /></View>;
   }
 
   // DM thread open
@@ -990,17 +990,17 @@ const msgTabStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1d7c8',
-    backgroundColor: '#fffdf9',
+    borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
     gap: 8,
   },
   tab: {
     flex: 1, paddingVertical: 9, borderRadius: 12,
-    alignItems: 'center', backgroundColor: '#f6f2eb',
-    borderWidth: 1, borderColor: '#e1d7c8',
+    alignItems: 'center', backgroundColor: '#F2F2F7',
+    borderWidth: 1, borderColor: '#E5E5EA',
   },
-  tabActive: { backgroundColor: '#1f4d45', borderColor: '#1f4d45' },
-  tabText: { fontSize: 13, fontWeight: '700', color: '#7f7565' },
+  tabActive: { backgroundColor: '#8B6B3E', borderColor: '#8B6B3E' },
+  tabText: { fontSize: 13, fontWeight: '700', color: '#6C6C70' },
   tabTextActive: { color: '#fff' },
 });
 
@@ -1176,7 +1176,7 @@ export default function NotificationsScreen({ navigation, route }: any) {
         <>
           {unreadCount > 0 && !loading && (
             <TouchableOpacity style={styles.markAllBtn} onPress={handleMarkAllRead} activeOpacity={0.8}>
-              <CheckIcon size={15} color="#3d8f6a" />
+              <CheckIcon size={15} color="#34A853" />
               <Text style={styles.markAllText}>Mark all as read</Text>
             </TouchableOpacity>
           )}
@@ -1206,8 +1206,8 @@ export default function NotificationsScreen({ navigation, route }: any) {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
-                  tintColor="#1f4d45"
-                  colors={['#1f4d45']}
+                  tintColor="#8B6B3E"
+                  colors={['#8B6B3E']}
                 />
               }
             />
@@ -1287,18 +1287,18 @@ function ArrowRightIcon({ size, color }: { size: number; color: string }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f6f2eb' },
+  safe: { flex: 1, backgroundColor: '#F2F2F7' },
   header: {
-    backgroundColor: '#171513',
+    backgroundColor: '#1C1611',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
     gap: 16,
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  headerEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 4 },
+  headerEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#C4A882', marginBottom: 4 },
   headerTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -1, color: '#fffaf3' },
-  unreadBadge: { backgroundColor: '#c96d4d', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  unreadBadge: { backgroundColor: '#FF3B30', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   unreadBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   tabsScroll: { flexDirection: 'row', gap: 8, paddingRight: 4 },
   tab: {
@@ -1306,47 +1306,47 @@ const styles = StyleSheet.create({
     paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  tabActive: { backgroundColor: '#fffdf9' },
-  tabText: { fontSize: 13, fontWeight: '700', color: '#b8ab95' },
-  tabTextActive: { color: '#181512' },
+  tabActive: { backgroundColor: '#FFFFFF' },
+  tabText: { fontSize: 13, fontWeight: '700', color: '#C4A882' },
+  tabTextActive: { color: '#1C1C1E' },
   tabCount: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  tabCountActive: { backgroundColor: '#1f4d45' },
-  tabCountText: { fontSize: 10, fontWeight: '800', color: '#b8ab95' },
+  tabCountActive: { backgroundColor: '#8B6B3E' },
+  tabCountText: { fontSize: 10, fontWeight: '800', color: '#C4A882' },
   tabCountTextActive: { color: '#fff' },
   markAllBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     alignSelf: 'flex-end', marginHorizontal: 16, marginTop: 12,
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
-    backgroundColor: '#dce8e3',
+    backgroundColor: '#F5E8D0',
   },
-  markAllText: { fontSize: 12, fontWeight: '700', color: '#3d8f6a' },
+  markAllText: { fontSize: 12, fontWeight: '700', color: '#34A853' },
   listContent: { paddingTop: 10, paddingBottom: 120, flexGrow: 1 },
   item: {
-    flexDirection: 'row', backgroundColor: '#fffdf9', borderRadius: 20,
+    flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20,
     padding: 16, marginHorizontal: 16, marginVertical: 5,
-    borderWidth: 1, borderColor: '#e1d7c8', gap: 12,
-    shadowColor: '#201a13', shadowOffset: { width: 0, height: 6 },
+    borderWidth: 1, borderColor: '#E5E5EA', gap: 12,
+    shadowColor: '#000000', shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.05, shadowRadius: 12, elevation: 2,
   },
-  itemUnread: { backgroundColor: '#edf5f2', borderColor: '#1f4d45' },
+  itemUnread: { backgroundColor: '#FDF5E0', borderColor: '#8B6B3E' },
   iconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', position: 'relative' },
   iconEmoji: { fontSize: 22, lineHeight: 28 },
-  unreadPip: { position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: '#edf5f2' },
+  unreadPip: { position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: '#FDF5E0' },
   notifContent: { flex: 1, gap: 4 },
   contentTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  notifTitle: { fontSize: 14, fontWeight: '600', color: '#181512', flex: 1, marginRight: 8 },
+  notifTitle: { fontSize: 14, fontWeight: '600', color: '#1C1C1E', flex: 1, marginRight: 8 },
   notifTitleUnread: { fontWeight: '800' },
-  notifMessage: { fontSize: 13, color: '#7f7565', lineHeight: 18 },
+  notifMessage: { fontSize: 13, color: '#6C6C70', lineHeight: 18 },
   notifMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
-  notifDate: { fontSize: 11, color: '#b8ab95', fontWeight: '600' },
+  notifDate: { fontSize: 11, color: '#C4A882', fontWeight: '600' },
   typePill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   typePillText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 10 },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#181512', letterSpacing: -0.4 },
-  emptyMsg: { fontSize: 14, color: '#7f7565', textAlign: 'center', paddingHorizontal: 48, lineHeight: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.4 },
+  emptyMsg: { fontSize: 14, color: '#6C6C70', textAlign: 'center', paddingHorizontal: 48, lineHeight: 20 },
   errorWrap: { alignItems: 'center', paddingTop: 48, gap: 14 },
-  errorTitle: { fontSize: 15, color: '#c96d4d', fontWeight: '600' },
-  retryBtn: { backgroundColor: '#1f4d45', borderRadius: 14, paddingHorizontal: 24, paddingVertical: 10 },
+  errorTitle: { fontSize: 15, color: '#FF3B30', fontWeight: '600' },
+  retryBtn: { backgroundColor: '#8B6B3E', borderRadius: 14, paddingHorizontal: 24, paddingVertical: 10 },
   retryText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

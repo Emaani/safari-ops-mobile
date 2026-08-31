@@ -145,11 +145,11 @@ export function matchesDashboardFilter(
 export function getStatusColor(status: string): string {
   const normalized = status.toLowerCase();
 
-  if (normalized === 'completed') return '#10b981'; // green
-  if (normalized === 'in-progress' || normalized === 'in_progress') return '#f59e0b'; // amber
-  if (normalized === 'confirmed') return '#3b82f6'; // blue
-  if (normalized === 'pending') return '#6b7280'; // gray
-  if (normalized === 'cancelled' || normalized === 'rejected') return '#ef4444'; // red
+  if (normalized === 'completed') return '#7A5AF8';
+  if (normalized === 'in-progress' || normalized === 'in_progress') return '#34A853';
+  if (normalized === 'confirmed') return '#8B6B3E';
+  if (normalized === 'pending') return '#F5A623';
+  if (normalized === 'cancelled' || normalized === 'rejected') return '#FF3B30';
 
-  return '#6b7280'; // default gray
+  return '#6C6C70';
 }

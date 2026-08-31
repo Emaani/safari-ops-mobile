@@ -20,27 +20,27 @@ interface FleetStatusChartProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  Available: '#3d8f6a',
-  available: '#3d8f6a',
-  Booked: '#8366d7',
-  booked: '#8366d7',
-  Rented: '#8366d7',
-  rented: '#8366d7',
-  'On Safari': '#8366d7',
-  Maintenance: '#b8883f',
-  maintenance: '#b8883f',
-  'Out of Service': '#c96d4d',
-  'out of service': '#c96d4d',
-  Operational: '#3d8f6a',
-  operational: '#3d8f6a',
+  Available: '#34A853',
+  available: '#34A853',
+  Booked: '#7A5AF8',
+  booked: '#7A5AF8',
+  Rented: '#7A5AF8',
+  rented: '#7A5AF8',
+  'On Safari': '#7A5AF8',
+  Maintenance: '#F5A623',
+  maintenance: '#F5A623',
+  'Out of Service': '#FF3B30',
+  'out of service': '#FF3B30',
+  Operational: '#34A853',
+  operational: '#34A853',
 };
 
 const CARD_COLORS = {
-  background: '#fffdf9',
-  text: '#181512',
-  textMuted: '#7f7565',
-  border: '#e1d7c8',
-  sectionBg: '#f5f0e8',
+  background: '#FFFFFF',
+  text: '#1C1C1E',
+  textMuted: '#6C6C70',
+  border: '#E5E5EA',
+  sectionBg: '#F2F2F7',
 };
 
 const getStatusColor = (status: string, provided?: string): string => {
@@ -76,7 +76,7 @@ export function FleetStatusChart({ data, loading = false }: FleetStatusChartProp
     return (
       <View style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4a7fc1" />
+          <ActivityIndicator size="large" color="#8B6B3E" />
           <Text style={styles.mutedText}>Loading fleet status…</Text>
         </View>
       </View>

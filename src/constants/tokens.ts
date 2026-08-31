@@ -7,55 +7,55 @@
 
 // ─── Colour palette ───────────────────────────────────────────────────────────
 export const palette = {
-  // Backgrounds
-  bg:           '#f6f2eb',
-  card:         '#fffdf9',
-  cardAlt:      '#ece6da',
-  hero:         '#171513',
-  heroAlt:      '#1e1a16',
+  // Backgrounds — Apple system grouped hierarchy
+  bg:           '#F2F2F7',   // systemGroupedBackground
+  card:         '#FFFFFF',   // systemBackground (pure white cards)
+  cardAlt:      '#F9F9F9',   // secondarySystemBackground
+  hero:         '#1C1611',   // retained for login / dramatic hero surfaces
+  heroAlt:      '#231B12',
 
-  // Brand greens
-  primary:      '#1f4d45',
-  primaryMid:   '#2a6358',
-  primarySoft:  '#dce8e3',
-  primaryXSoft: '#edf5f2',
+  // Brand accent — luxury bronze (unchanged)
+  primary:      '#8B6B3E',
+  primaryMid:   '#A07848',
+  primarySoft:  '#FEF0DC',   // lighter so it reads on white cards
+  primaryXSoft: '#FDF8EF',
 
-  // Semantic
-  success:      '#3d8f6a',
-  successSoft:  '#ddf0e8',
-  successXSoft: '#eef9f3',
+  // Semantic — kept on-brand but works on white backgrounds
+  success:      '#34A853',   // iOS green — replaces earthy #3d8f6a
+  successSoft:  '#E8F7EE',
+  successXSoft: '#F4FBF7',
 
-  warning:      '#b8883f',
-  warningSoft:  '#f5e8ce',
-  warningXSoft: '#fdf5e8',
+  warning:      '#F5A623',   // iOS amber — replaces muddy #C6A563
+  warningSoft:  '#FEF3DC',
+  warningXSoft: '#FEFBF2',
 
-  danger:       '#c96d4d',
-  dangerSoft:   '#fdf0ec',
-  dangerXSoft:  '#fef6f3',
+  danger:       '#FF3B30',   // iOS red (system red)
+  dangerSoft:   '#FFEEED',
+  dangerXSoft:  '#FFF5F5',
 
-  purple:       '#8366d7',
-  purpleSoft:   '#ede8f9',
-  purpleXSoft:  '#f5f2fd',
+  purple:       '#7A5AF8',   // iOS indigo-ish
+  purpleSoft:   '#EDE8FE',
+  purpleXSoft:  '#F6F3FF',
 
-  gold:         '#b78a43',
-  goldSoft:     '#f2e5ca',
-  goldXSoft:    '#faf3e8',
+  gold:         '#C6A563',   // brand gold (unchanged)
+  goldSoft:     '#FDE8C0',
+  goldXSoft:    '#FFF8E0',
 
-  // Text
-  text:         '#181512',
-  textMuted:    '#7f7565',
-  textSoft:     '#9a8f7e',
-  textHero:     '#fffaf3',
-  textHeroMuted:'#b8ab95',
+  // Text — Apple label hierarchy
+  text:         '#1C1C1E',   // primaryLabel
+  textMuted:    '#6C6C70',   // secondaryLabel
+  textSoft:     '#AEAEB2',   // tertiaryLabel
+  textHero:     '#FFFFFF',
+  textHeroMuted:'#C4A882',
   textInverse:  '#ffffff',
 
-  // Borders / surface
-  border:       '#e1d7c8',
-  borderStrong: '#cdc0ad',
-  surface:      '#f0ebe0',
-  shadow:       '#201a13',
+  // Borders / surface — Apple separator system
+  border:       '#E5E5EA',   // separator (non-opaque)
+  borderStrong: '#C7C7CC',   // opaqueSeparator
+  surface:      '#F2F2F7',   // same as bg for inset section backgrounds
+  shadow:       '#000000',   // pure black for Apple-style subtle shadows
 
-  // Transparent utilities
+  // Utilities
   white:        '#ffffff',
   black:        '#000000',
 } as const;
@@ -151,34 +151,41 @@ export const type = {
   relaxed: 1.65,
 } as const;
 
-// ─── Shadow presets ───────────────────────────────────────────────────────────
+// ─── Shadow presets — Apple-quality: very subtle, black base ─────────────────
 export const shadow = {
+  xs: {
+    shadowColor: palette.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
   sm: {
     shadowColor: palette.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
     elevation: 2,
   },
   md: {
     shadowColor: palette.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 12,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
     elevation: 4,
   },
   lg: {
     shadowColor: palette.shadow,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOpacity: 0.10,
+    shadowRadius: 22,
+    elevation: 6,
   },
   xl: {
     shadowColor: palette.shadow,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.20,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
     shadowRadius: 32,
-    elevation: 14,
+    elevation: 10,
   },
 } as const;

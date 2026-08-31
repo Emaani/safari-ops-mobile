@@ -26,17 +26,17 @@ import type { Currency } from '../../types/dashboard';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#f6f2eb',
-  card:    '#fffdf9',
-  hero:    '#171513',
-  primary: '#1f4d45',
-  danger:  '#c96d4d',
-  warning: '#b8883f',
-  success: '#3d8f6a',
-  text:    '#181512',
-  muted:   '#7f7565',
-  border:  '#e1d7c8',
-  input:   '#f0ebe2',
+  bg:      '#F2F2F7',
+  card:    '#FFFFFF',
+  hero:    '#1C1611',
+  primary: '#8B6B3E',
+  danger:  '#FF3B30',
+  warning: '#F5A623',
+  success: '#34A853',
+  text:    '#1C1C1E',
+  muted:   '#6C6C70',
+  border:  '#E5E5EA',
+  input:   '#F2F2F7',
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ const STATUS_COLOR: Record<SafariStatus, string> = {
   Confirmed:     C.success,
   Pending:       C.warning,
   'In-Progress': C.primary,
-  Completed:     '#8366d7',
+  Completed:     '#7A5AF8',
   Cancelled:     C.danger,
 };
 
@@ -499,7 +499,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
               <Text style={styles.headerTitle}>Create Safari</Text>
             </View>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} style={styles.closeBtn}>
-              <CloseIcon color="#b8ab95" />
+              <CloseIcon color="#C4A882" />
             </TouchableOpacity>
           </View>
 
@@ -771,7 +771,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 const styles = StyleSheet.create({
   container:             { flex: 1, backgroundColor: C.bg },
   header:                { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  headerEyebrow:         { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  headerEyebrow:         { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   headerTitle:           { fontSize: 24, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.6 },
   closeBtn:              { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   body:                  { padding: 20 },

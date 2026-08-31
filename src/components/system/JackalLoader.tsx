@@ -24,7 +24,7 @@ const LOGO = require('../../../assets/jackal-loader-logo.png');
 const LOGO_RATIO = 0.924;
 
 // ─── Gold ring colours ────────────────────────────────────────────────────────
-const GOLD = '#b8883f';
+const GOLD = '#C6A563';
 
 interface JackalLoaderProps {
   /** Optional status label shown below the animation */

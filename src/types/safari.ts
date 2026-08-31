@@ -14,6 +14,8 @@ export interface SafariBooking {
   amount_paid?: number;
   booking_direction?: string;
   profit_margin?: number;
+  total_expenses_usd?: number;
+  vehicle_hire_cost_usd?: number;
   checklist_sent?: boolean;
   customer_name?: string;
   customer_email?: string;

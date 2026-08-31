@@ -76,20 +76,20 @@ export function useInAppNotification() {
 // ─── Accent colours per type ──────────────────────────────────────────────────
 
 const ACCENT: Record<InAppNotifType, string> = {
-  booking_new:          '#1f4d45',   // primary
-  booking_started:      '#f59e0b',   // amber
-  booking_completed:    '#10b981',   // green
-  booking_confirmed:    '#8b5cf6',   // purple
-  booking_cancelled:    '#ef4444',   // red
-  cr_raised:            '#d97706',   // orange
-  cr_assigned:          '#1f4d45',   // primary
-  cr_approved:          '#059669',   // emerald
-  cr_rejected:          '#dc2626',   // red
-  cr_completed:         '#10b981',   // green
-  vehicle_maintenance:  '#f97316',   // orange
-  vehicle_available:    '#22c55e',   // green
-  payment:              '#059669',   // emerald
-  info:                 '#6b7280',   // grey
+  booking_new:          '#8B6B3E',
+  booking_started:      '#F5A623',
+  booking_completed:    '#34A853',
+  booking_confirmed:    '#7A5AF8',
+  booking_cancelled:    '#FF3B30',
+  cr_raised:            '#F5A623',
+  cr_assigned:          '#8B6B3E',
+  cr_approved:          '#34A853',
+  cr_rejected:          '#FF3B30',
+  cr_completed:         '#34A853',
+  vehicle_maintenance:  '#F5A623',
+  vehicle_available:    '#34A853',
+  payment:              '#34A853',
+  info:                 '#6C6C70',
 };
 
 const EMOJI: Record<InAppNotifType, string> = {

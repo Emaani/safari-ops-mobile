@@ -139,7 +139,7 @@ const shellStyles = StyleSheet.create({
     flex: 1,
   },
   offlineBanner: {
-    backgroundColor: '#b8883f',
+    backgroundColor: '#8B6B3E',
     paddingVertical: 6,
     paddingHorizontal: 16,
     alignItems: 'center',
@@ -377,27 +377,35 @@ function MainTabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown:             false,
-        tabBarShowLabel:         false,
+        tabBarShowLabel:         true,
         tabBarActiveTintColor:   ACCENT,
-        tabBarInactiveTintColor: theme.dark ? '#6b6256' : '#9e9285',
+        tabBarInactiveTintColor: theme.dark ? '#636366' : '#8E8E93',
+        tabBarLabelStyle: {
+          fontSize:     10,
+          fontWeight:   '600',
+          letterSpacing: 0.1,
+          marginTop:    2,
+        },
         tabBarStyle: {
           position:        'absolute',
-          left:            10,
-          right:           10,
-          bottom:          14,
+          left:            12,
+          right:           12,
+          bottom:          16,
           borderTopWidth:  0,
-          backgroundColor: theme.dark ? '#1e1a17' : '#fffdf9',
-          height:          62,
-          paddingBottom:   0,
-          paddingTop:      0,
-          borderRadius:    24,
+          backgroundColor: theme.dark ? 'rgba(28,22,17,0.96)' : 'rgba(255,255,255,0.96)',
+          height:          72,
+          paddingBottom:   8,
+          paddingTop:      10,
+          borderRadius:    22,
           shadowColor:     '#000',
-          shadowOffset:    { width: 0, height: 16 },
-          shadowOpacity:   theme.dark ? 0.4 : 0.13,
-          shadowRadius:    24,
-          elevation:       12,
+          shadowOffset:    { width: 0, height: 8 },
+          shadowOpacity:   theme.dark ? 0.35 : 0.10,
+          shadowRadius:    20,
+          elevation:       10,
+          borderWidth:     StyleSheet.hairlineWidth,
+          borderColor:     theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
         },
-        tabBarItemStyle:  { borderRadius: 18, marginHorizontal: 1, marginVertical: 6 },
+        tabBarItemStyle: { borderRadius: 14, marginHorizontal: 0, paddingHorizontal: 0 },
       }}
     >
       {tabs.map((tab) => (
@@ -509,7 +517,7 @@ function NotificationBell({ navigation, userId }: { navigation: any; userId: str
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 // Each icon has two variants: outlined (inactive) and filled (active)
 
-const ACCENT = '#1f4d45';   // earth forest green — matches app primary
+const ACCENT = '#8B6B3E';   // luxury bronze — matches app primary
 
 function DashboardIcon({ color, size }: { color: string; size: number }) {
   const active = color === ACCENT;

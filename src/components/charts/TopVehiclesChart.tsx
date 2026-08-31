@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { formatCompactCurrency } from '../../lib/utils';
 
 interface TopVehicle {
   id?: string;
@@ -21,14 +22,14 @@ interface TopVehiclesChartProps {
 }
 
 const CARD_COLORS = {
-  background: '#fffdf9',
-  text: '#181512',
-  textMuted: '#7f7565',
-  border: '#e1d7c8',
-  track: '#ede6d8',
-  sevenSeater: '#8366d7',
-  fiveSeater: '#3d8f6a',
-  gold: '#b78a43',
+  background: '#FFFFFF',
+  text: '#1C1C1E',
+  textMuted: '#6C6C70',
+  border: '#E5E5EA',
+  track: '#F2F2F7',
+  sevenSeater: '#7A5AF8',
+  fiveSeater: '#34A853',
+  gold: '#C6A563',
   silver: '#8a9ab0',
   bronze: '#b87c5a',
 };
@@ -36,14 +37,6 @@ const CARD_COLORS = {
 const RANK_COLORS = [CARD_COLORS.gold, CARD_COLORS.silver, CARD_COLORS.bronze];
 const RANK_LABELS = ['🥇', '🥈', '🥉'];
 
-const formatCurrency = (value: number, currency: string = 'USD'): string => {
-  const absValue = Math.abs(value);
-  if (absValue >= 1_000_000)
-    return `${currency === 'USD' ? '$' : currency}${(value / 1_000_000).toFixed(1)}M`;
-  if (absValue >= 1_000)
-    return `${currency === 'USD' ? '$' : currency}${(value / 1_000).toFixed(1)}K`;
-  return `${currency === 'USD' ? '$' : currency}${value.toFixed(0)}`;
-};
 
 export function TopVehiclesChart({
   data,
@@ -142,7 +135,7 @@ export function TopVehiclesChart({
               {/* Stats */}
               <View style={styles.statsRow}>
                 <Text style={[styles.revenueText, { color: accentColor }]}>
-                  {formatCurrency(vehicle.revenue, currency)}
+                  {formatCompactCurrency(vehicle.revenue, currency as any)}
                 </Text>
                 <Text style={styles.tripsBadgeText}>
                   {vehicle.tripCount} {vehicle.tripCount === 1 ? 'trip' : 'trips'}

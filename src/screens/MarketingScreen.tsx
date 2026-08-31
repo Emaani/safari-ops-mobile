@@ -30,20 +30,20 @@ const { width: SW } = Dimensions.get('window');
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#f6f2eb',
-  card:        '#fffdf9',
-  hero:        '#171513',
-  heroMuted:   '#b8ab95',
-  primary:     '#1f4d45',
-  primarySoft: '#dce8e3',
-  gold:        '#b8883f',
-  goldSoft:    '#f5e8ce',
-  success:     '#3d8f6a',
-  danger:      '#c96d4d',
-  text:        '#181512',
-  textMuted:   '#7f7565',
-  border:      '#e1d7c8',
-  input:       '#f0ebe2',
+  bg:          '#F2F2F7',
+  card:        '#FFFFFF',
+  hero:        '#1C1611',
+  heroMuted:   '#C4A882',
+  primary:     '#8B6B3E',
+  primarySoft: '#FEF0DC',
+  gold:        '#C6A563',
+  goldSoft:    '#FDE8C0',
+  success:     '#34A853',
+  danger:      '#FF3B30',
+  text:        '#1C1C1E',
+  textMuted:   '#6C6C70',
+  border:      '#E5E5EA',
+  input:       '#F2F2F7',
 };
 
 const PROMO_TYPES = ['banner', 'featured_safari', 'featured_vehicle', 'seasonal', 'partner'];
@@ -456,7 +456,7 @@ function SafariCatalogTab() {
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                 {p.category ? <View style={sc2.tag}><Text style={sc2.tagT}>{p.category}</Text></View> : null}
                 {p.country ? <View style={[sc2.tag, { backgroundColor: C.goldSoft }]}><Text style={[sc2.tagT, { color: C.gold }]}>{p.country}</Text></View> : null}
-                {!p.is_active ? <View style={[sc2.tag, { backgroundColor: '#fde8e0' }]}><Text style={[sc2.tagT, { color: C.danger }]}>Inactive</Text></View> : null}
+                {!p.is_active ? <View style={[sc2.tag, { backgroundColor: '#FFEEED' }]}><Text style={[sc2.tagT, { color: C.danger }]}>Inactive</Text></View> : null}
               </View>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 {p.duration_days ? <Text style={sc2.meta}>{p.duration_days} days</Text> : null}
@@ -741,7 +741,7 @@ const pr = StyleSheet.create({
   sub: { fontSize: 12, color: C.textMuted, marginTop: 2 },
   dates: { fontSize: 11, color: C.textMuted, marginTop: 4 },
   activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#fde8e0', alignItems: 'center', justifyContent: 'center' },
+  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFEEED', alignItems: 'center', justifyContent: 'center' },
 });
 
 const fabSt = StyleSheet.create({
@@ -940,8 +940,8 @@ function MarketingCommandCenterTab() {
         </View>
       )}
       {ga4Error && !unavailable && (
-        <View style={[cc.warnBanner, { backgroundColor: '#fef3c7' }]}>
-          <Text style={[cc.warnText, { color: '#92400e' }]}>⚠ {ga4Error}</Text>
+        <View style={[cc.warnBanner, { backgroundColor: '#FDE8C0' }]}>
+          <Text style={[cc.warnText, { color: '#7a5522' }]}>⚠ {ga4Error}</Text>
         </View>
       )}
 
@@ -1208,7 +1208,7 @@ const cc = StyleSheet.create({
   sourceTag:    { fontSize: 11, fontWeight: '700', color: C.gold, backgroundColor: C.goldSoft, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
   sourceTagInline: { fontSize: 10, fontWeight: '700', color: C.gold },
   warnBanner:   { backgroundColor: '#fde68a20', borderRadius: 10, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#fbbf24' },
-  warnText:     { fontSize: 12, fontWeight: '700', color: '#92400e', marginBottom: 2 },
+  warnText:     { fontSize: 12, fontWeight: '700', color: '#7a5522', marginBottom: 2 },
   warnSub:      { fontSize: 11, color: '#78350f' },
   kpiCard:      { flex: 1, minWidth: '45%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
   kpiLabel:     { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 },
@@ -1272,8 +1272,8 @@ function WebsiteAnalyticsTab() {
         </View>
       )}
       {error && !unavailable && (
-        <View style={[cc.warnBanner, { backgroundColor: '#fef3c7' }]}>
-          <Text style={[cc.warnText, { color: '#92400e' }]}>{error}</Text>
+        <View style={[cc.warnBanner, { backgroundColor: '#FDE8C0' }]}>
+          <Text style={[cc.warnText, { color: '#7a5522' }]}>{error}</Text>
         </View>
       )}
 
@@ -1426,7 +1426,7 @@ interface BlogPost {
 const BLOG_STATUS_CFG: Record<BlogStatus, { bg: string; text: string; label: string }> = {
   draft:     { bg: C.input,      text: C.textMuted, label: 'Draft' },
   published: { bg: C.primarySoft, text: C.primary,  label: 'Published' },
-  archived:  { bg: '#f5e8ce',    text: C.gold,      label: 'Archived' },
+  archived:  { bg: '#FDE8C0',    text: C.gold,      label: 'Archived' },
 };
 
 function BlogFormModal({ visible, post, onClose, onSaved }: {
@@ -1627,7 +1627,7 @@ const bl = StyleSheet.create({
   card: { backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
   statusT: { fontSize: 11, fontWeight: '700' },
-  deleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#fde8e0', alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFEEED', alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 15, fontWeight: '800', color: C.text, letterSpacing: -0.3, marginBottom: 4 },
   excerpt: { fontSize: 12, color: C.textMuted, lineHeight: 17 },
   meta: { fontSize: 11, color: C.textMuted },
@@ -1658,7 +1658,7 @@ function BlogAnalyticsTab() {
 
       {/* Error */}
       {error ? (
-        <View style={{ backgroundColor: '#fde8e0', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+        <View style={{ backgroundColor: '#FFEEED', borderRadius: 10, padding: 12, marginBottom: 14 }}>
           <Text style={{ fontSize: 12, color: C.danger }}>{error}</Text>
         </View>
       ) : null}
@@ -2050,7 +2050,7 @@ const md = StyleSheet.create({
   fileName: { fontSize: 14, fontWeight: '700', color: C.text },
   meta: { fontSize: 11, color: C.textMuted },
   url: { fontSize: 10, color: C.gold, marginTop: 3, fontStyle: 'italic' },
-  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#fde8e0', alignItems: 'center', justifyContent: 'center' },
+  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFEEED', alignItems: 'center', justifyContent: 'center' },
   // Setup / unavailable state
   unavailableCard: { backgroundColor: C.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   unavailableTitle: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 10, textAlign: 'center' },
@@ -2116,8 +2116,8 @@ export function MarketingScreen() {
 const ms = StyleSheet.create({
   hero: { backgroundColor: C.hero, paddingHorizontal: 20, paddingBottom: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
   glowL: { position: 'absolute', top: -30, left: -20, width: 120, height: 120, borderRadius: 60, backgroundColor: '#6c5228', opacity: 0.3 },
-  glowR: { position: 'absolute', right: -40, bottom: -20, width: 150, height: 150, borderRadius: 75, backgroundColor: '#264a42', opacity: 0.18 },
-  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 5 },
+  glowR: { position: 'absolute', right: -40, bottom: -20, width: 150, height: 150, borderRadius: 75, backgroundColor: '#4A2E12', opacity: 0.18 },
+  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', color: '#C4A882', marginBottom: 5 },
   heroTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.8, color: '#fffaf3', marginBottom: 14 },
   tabRow: { flexDirection: 'row', gap: 8 },
   tabPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },

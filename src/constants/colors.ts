@@ -10,38 +10,38 @@ export const COLORS = {
   primaryDark: '#2563eb',
 
   // Semantic colors
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
+  success: '#34A853',
+  warning: '#F5A623',
+  danger: '#FF3B30',
   info: '#3b82f6',
 
   // Accent colors
-  purple: '#9333ea',
-  income: '#059669',
-  expense: '#dc2626',
+  purple: '#7A5AF8',
+  income: '#34A853',
+  expense: '#FF3B30',
 
   // Neutral colors
-  background: '#f3f4f6',
+  background: '#F2F2F7',
   card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  textLight: '#9ca3af',
-  border: '#e5e7eb',
-  borderLight: '#f3f4f6',
+  text: '#1C1C1E',
+  textMuted: '#6C6C70',
+  textLight: '#AEAEB2',
+  border: '#E5E5EA',
+  borderLight: '#F2F2F7',
 
   // Status colors for bookings/vehicles
   statusColors: {
-    confirmed: '#3b82f6',
-    'in-progress': '#10b981',
-    inProgress: '#10b981',
-    completed: '#6b7280',
-    pending: '#f59e0b',
-    cancelled: '#ef4444',
-    available: '#10b981',
-    booked: '#3b82f6',
-    rented: '#9333ea',
-    maintenance: '#f59e0b',
-    out_of_service: '#ef4444',
+    confirmed: '#8B6B3E',
+    'in-progress': '#34A853',
+    inProgress: '#34A853',
+    completed: '#7A5AF8',
+    pending: '#F5A623',
+    cancelled: '#FF3B30',
+    available: '#34A853',
+    booked: '#8B6B3E',
+    rented: '#7A5AF8',
+    maintenance: '#F5A623',
+    out_of_service: '#FF3B30',
   },
 } as const;
 

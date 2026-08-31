@@ -29,22 +29,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import { sendCRNotificationToUser } from '../../services/notificationService';
+import { useInAppNotification } from '../system/InAppNotificationBanner';
+import { notifySuccess } from '../../lib/haptics';
 import { formatCurrency } from '../../lib/utils';
 import type { Currency } from '../../types/dashboard';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#f6f2eb',
-  card:    '#fffdf9',
-  hero:    '#171513',
-  primary: '#1f4d45',
-  success: '#3d8f6a',
-  danger:  '#c96d4d',
-  warning: '#b8883f',
-  text:    '#181512',
-  muted:   '#7f7565',
-  border:  '#e1d7c8',
-  input:   '#f0ebe2',
+  bg:      '#F2F2F7',
+  card:    '#FFFFFF',
+  hero:    '#1C1611',
+  primary: '#8B6B3E',
+  success: '#34A853',
+  danger:  '#FF3B30',
+  warning: '#F5A623',
+  text:    '#1C1C1E',
+  muted:   '#6C6C70',
+  border:  '#E5E5EA',
+  input:   '#F2F2F7',
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -427,6 +429,7 @@ const approverStyles = StyleSheet.create({
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName }: AddExpenseModalProps) {
   const insets = useSafeAreaInsets();
+  const { showNotification } = useInAppNotification();
   const [submitting, setSubmitting] = useState(false);
 
   const [category,        setCategory]        = useState(CATEGORIES[0]);
@@ -527,11 +530,14 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
       }
 
       reset();
-      Alert.alert(
-        'Requisition Submitted',
-        `${cr_number} has been raised and assigned to ${displayName(approver!)} for approval.\n\nStatus: Pending`,
-        [{ text: 'OK', onPress: onSuccess }]
-      );
+      notifySuccess();
+      showNotification({
+        type: 'cr_raised',
+        title: 'Requisition Submitted',
+        body: `${cr_number} sent to ${displayName(approver!)} for approval.`,
+        screen: 'Finance',
+      });
+      onSuccess();
     } catch (e: any) {
       Alert.alert('Submission Failed', e?.message || 'Failed to submit requisition. Please try again.');
     } finally {
@@ -551,7 +557,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
               <Text style={styles.headerTitle}>Cash Requisition</Text>
             </View>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} style={styles.closeBtn}>
-              <CloseIcon color="#b8ab95" />
+              <CloseIcon color="#C4A882" />
             </TouchableOpacity>
           </View>
 
@@ -734,7 +740,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 const styles = StyleSheet.create({
   container:         { flex: 1, backgroundColor: C.bg },
   header:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  headerEyebrow:     { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  headerEyebrow:     { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   headerTitle:       { fontSize: 24, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.6 },
   closeBtn:          { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   body:              { padding: 20 },
@@ -755,7 +761,7 @@ const styles = StyleSheet.create({
   segActive:         { backgroundColor: C.primary + '18', borderColor: C.primary },
   segText:           { fontSize: 12, fontWeight: '600', color: C.muted },
   segTextActive:     { color: C.primary, fontWeight: '800' },
-  notice:            { backgroundColor: '#f5e8ce', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#e8d0a0' },
+  notice:            { backgroundColor: '#FDE8C0', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#e8d0a0' },
   noticeText:        { fontSize: 13, color: '#7a5c2a', lineHeight: 19 },
   submitBtn:         { backgroundColor: C.danger, borderRadius: 18, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   submitBtnDisabled: { opacity: 0.6 },

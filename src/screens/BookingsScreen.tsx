@@ -37,16 +37,16 @@ import type { Booking, BookingStatus } from '../types/dashboard';
 // ============================================================================
 
 const COLORS = {
-  primary:    '#1f4d45',
-  success:    '#3d8f6a',
-  warning:    '#b8883f',
-  danger:     '#c96d4d',
-  purple:     '#8366d7',
-  background: '#f6f2eb',
-  card:       '#fffdf9',
-  text:       '#181512',
-  textMuted:  '#7f7565',
-  border:     '#e1d7c8',
+  primary:    '#8B6B3E',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  purple:     '#7A5AF8',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
 };
 
 const STATUS_FILTERS: { label: string; value: BookingStatus | 'all' }[] = [
@@ -325,9 +325,9 @@ export function BookingsScreen() {
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <StatCard title="Total"     value={stats.total}     color={COLORS.purple}  bgColor="#ede8f9" delay={0}   />
-        <StatCard title="Active"    value={stats.active}    color={COLORS.success} bgColor="#ddf0e8" delay={60}  />
-        <StatCard title="Confirmed" value={stats.confirmed} color={COLORS.primary} bgColor="#dce8e3" delay={120} />
-        <StatCard title="Pending"   value={stats.pending}   color={COLORS.warning} bgColor="#f5e8ce" delay={180} />
+        <StatCard title="Active"    value={stats.active}    color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
+        <StatCard title="Confirmed" value={stats.confirmed} color={COLORS.primary} bgColor="#F5E8D0" delay={120} />
+        <StatCard title="Pending"   value={stats.pending}   color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
       </View>
 
       {/* Search Bar */}
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   },
   // ── Hero header ──────────────────────────────────────────────────────────
   hero: {
-    backgroundColor: '#171513',
+    backgroundColor: '#1C1611',
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 16,
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.4,
     textTransform: 'uppercase',
-    color: '#b8ab95',
+    color: '#C4A882',
   },
   heroRow: {
     flexDirection: 'row',
@@ -599,11 +599,11 @@ const styles = StyleSheet.create({
   },
   heroSub: {
     fontSize: 13, lineHeight: 19,
-    color: '#b8ab95',
+    color: '#C4A882',
     marginTop: 2,
   },
   heroBadge: {
-    backgroundColor: '#3d8f6a',
+    backgroundColor: '#8B6B3E',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -624,15 +624,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   heroTabActive: {
-    backgroundColor: '#fffdf9',
+    backgroundColor: '#FFFFFF',
   },
   heroTabText: {
     fontSize: 13, lineHeight: 19,
     fontWeight: '700',
-    color: '#b8ab95',
+    color: '#C4A882',
   },
   heroTabTextActive: {
-    color: '#181512',
+    color: '#1C1C1E',
     fontWeight: '800',
   },
   listContent: {

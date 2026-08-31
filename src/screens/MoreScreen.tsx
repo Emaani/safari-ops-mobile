@@ -242,7 +242,7 @@ function ChangePasswordModal({
                     key={i}
                     style={[
                       styles.strengthBar,
-                      { backgroundColor: newPassword.length >= threshold ? '#3d8f6a' : theme.colors.border },
+                      { backgroundColor: newPassword.length >= threshold ? '#34A853' : theme.colors.border },
                     ]}
                   />
                 ))}
@@ -440,7 +440,7 @@ export default function MoreScreen() {
                 <Text style={[styles.heroTitle, { color: theme.colors.accentContrast, textAlign: isRTL ? 'right' : 'left' }]}>
                   {user?.user_metadata?.full_name || user?.email?.split('@')[0] || '—'}
                 </Text>
-                <Text style={[styles.heroSubtitle, { color: '#b8ab95', textAlign: isRTL ? 'right' : 'left' }]}>
+                <Text style={[styles.heroSubtitle, { color: '#C4A882', textAlign: isRTL ? 'right' : 'left' }]}>
                   {roleLabel}
                 </Text>
                 <Text style={[styles.heroEmail, { textAlign: isRTL ? 'right' : 'left' }]}>
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     padding: 18,
-    shadowColor: '#201a13',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.07,
     shadowRadius: 16,

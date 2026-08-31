@@ -23,20 +23,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import type { Vehicle } from '../../types/dashboard';
+import { useInAppNotification } from '../system/InAppNotificationBanner';
+import { notifySuccess } from '../../lib/haptics';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#f6f2eb',
-  card:    '#fffdf9',
-  hero:    '#171513',
-  primary: '#1f4d45',
-  success: '#3d8f6a',
-  danger:  '#c96d4d',
-  warning: '#b8883f',
-  text:    '#181512',
-  muted:   '#7f7565',
-  border:  '#e1d7c8',
-  input:   '#f0ebe2',
+  bg:      '#F2F2F7',
+  card:    '#FFFFFF',
+  hero:    '#1C1611',
+  primary: '#8B6B3E',
+  success: '#34A853',
+  danger:  '#FF3B30',
+  warning: '#F5A623',
+  text:    '#1C1C1E',
+  muted:   '#6C6C70',
+  border:  '#E5E5EA',
+  input:   '#F2F2F7',
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,7 +82,7 @@ const STATUS_COLOR: Record<BookingStatus, string> = {
   Confirmed:     C.success,
   Pending:       C.warning,
   'In-Progress': C.primary,
-  Completed:     '#8366d7',
+  Completed:     '#7A5AF8',
   Cancelled:     C.danger,
 };
 const VEHICLE_STATUS_COLOR: Record<string, string> = {
@@ -256,7 +258,7 @@ function VehiclePickerSheet({
             <Text style={vpSt.eyebrow}>Fleet</Text>
             <Text style={vpSt.title}>Select Vehicle</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={vpSt.closeBtn}><CloseIcon color="#b8ab95" /></TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={vpSt.closeBtn}><CloseIcon color="#C4A882" /></TouchableOpacity>
         </View>
 
         {/* Search */}
@@ -353,7 +355,7 @@ function VehiclePickerSheet({
 const vpSt = StyleSheet.create({
   container:      { flex: 1, backgroundColor: C.bg },
   header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  eyebrow:        { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  eyebrow:        { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   title:          { fontSize: 24, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.6 },
   closeBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   searchWrap:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 14, marginHorizontal: 16, marginTop: 14, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: C.border },
@@ -403,7 +405,7 @@ function DriverPickerSheet({
             <Text style={dpSt.eyebrow}>Safari Team</Text>
             <Text style={dpSt.title}>Select Driver / Guide</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={dpSt.closeBtn}><CloseIcon color="#b8ab95" /></TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={dpSt.closeBtn}><CloseIcon color="#C4A882" /></TouchableOpacity>
         </View>
 
         <View style={dpSt.searchWrap}>
@@ -470,7 +472,7 @@ function DriverPickerSheet({
 const dpSt = StyleSheet.create({
   container:    { flex: 1, backgroundColor: C.bg },
   header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  eyebrow:      { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  eyebrow:      { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   title:        { fontSize: 24, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.6 },
   closeBtn:     { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   searchWrap:   { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 14, marginHorizontal: 16, marginTop: 14, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: C.border },
@@ -699,6 +701,7 @@ const fld = StyleSheet.create({
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId }: NewBookingModalProps) {
   const insets = useSafeAreaInsets();
+  const { showNotification } = useInAppNotification();
   const [submitting, setSubmitting] = useState(false);
 
   // Client
@@ -929,8 +932,14 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         });
       }
       reset();
+      notifySuccess();
+      showNotification({
+        type: 'booking_new',
+        title: 'Booking Created',
+        body: `${bookingData?.booking_reference || 'New booking'} created successfully.`,
+        screen: 'Bookings',
+      });
       onSuccess();
-      Alert.alert('Booking Created', `Booking ${bookingData?.booking_reference || 'new booking'} has been successfully created.`);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to create booking. Please try again.');
     } finally {
@@ -942,8 +951,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   const selectedGuide   = guides.find(g => g.id === driverId);
 
   return (
-    <>
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={[st.container, { paddingTop: insets.top || 12 }]}>
 
@@ -954,7 +962,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                 <Text style={st.headerTitle}>Create New Booking</Text>
               </View>
               <TouchableOpacity onPress={() => { reset(); onClose(); }} style={st.closeBtn}>
-                <CloseIcon color="#b8ab95" />
+                <CloseIcon color="#C4A882" />
               </TouchableOpacity>
             </View>
 
@@ -1252,9 +1260,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
 
-      {/* Scrollable vehicle picker sheet */}
+      {/* Picker sheets nested inside main modal so iOS presents from the correct VC */}
       <VehiclePickerSheet
         visible={vehicleSheetOpen}
         vehicles={vehicles}
@@ -1264,7 +1271,6 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         conflictingIds={conflictingVehicleIds}
       />
 
-      {/* Scrollable driver/guide picker sheet */}
       <DriverPickerSheet
         visible={driverSheetOpen}
         guides={guides}
@@ -1272,7 +1278,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         onSelect={setDriverId}
         onClose={() => setDriverSheetOpen(false)}
       />
-    </>
+    </Modal>
   );
 }
 
@@ -1280,7 +1286,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 const st = StyleSheet.create({
   container:        { flex: 1, backgroundColor: C.bg },
   header:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  headerEyebrow:    { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  headerEyebrow:    { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   headerTitle:      { fontSize: 24, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.6 },
   closeBtn:         { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   body:             { padding: 20 },

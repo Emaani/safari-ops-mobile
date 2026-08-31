@@ -3,38 +3,39 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Svg, Path, Circle } from 'react-native-svg';
 import type { Vehicle } from '../../types/dashboard';
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const COLORS = {
-  primary: '#1f4d45',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#9333ea',
-  background: '#f3f4f6',
-  card: '#ffffff',
-  text: '#111827',
-  textMuted: '#6b7280',
-  border: '#e5e7eb',
+const P = {
+  primary:     '#8B6B3E',
+  gold:        '#C6A563',
+  goldSoft:    '#FDE8C0',
+  success:     '#34A853',
+  successSoft: '#E8F7EE',
+  warning:     '#F5A623',
+  warningSoft: '#FEF3DC',
+  danger:      '#FF3B30',
+  dangerSoft:  '#FFEEED',
+  purple:      '#7A5AF8',
+  purpleSoft:  '#EDE8FE',
+  card:        '#FFFFFF',
+  bg:          '#F2F2F7',
+  text:        '#1C1C1E',
+  textMuted:   '#6C6C70',
+  textSoft:    '#AEAEB2',
+  border:      '#E5E5EA',
+  primarySoft: '#FEF0DC',
+  primaryXSoft:'#FDF8EF',
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  available: { bg: '#dcfce7', text: '#166534' },
-  booked: { bg: '#dbeafe', text: '#1e40af' },
-  rented: { bg: '#e0e7ff', text: '#3730a3' },
-  maintenance: { bg: '#fef3c7', text: '#92400e' },
-  out_of_service: { bg: '#fee2e2', text: '#991b1b' },
+const STATUS: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  available:     { bg: P.successSoft, text: '#1A6B3C', dot: P.success, label: 'Available'      },
+  booked:        { bg: P.purpleSoft,  text: '#5436CC', dot: P.purple,  label: 'Booked'         },
+  rented:        { bg: P.primarySoft, text: P.primary, dot: P.primary, label: 'Rented'         },
+  maintenance:   { bg: P.warningSoft, text: '#7a5000', dot: P.warning, label: 'Maintenance'    },
+  out_of_service:{ bg: P.dangerSoft,  text: '#CC1400', dot: P.danger,  label: 'Out of Service' },
 };
 
-// ============================================================================
-// ICON COMPONENT
-// ============================================================================
-
-function TruckIcon({ size = 20, color = COLORS.primary }: { size?: number; color?: string }) {
+function TruckIcon({ color = P.primary }: { color?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M1 3h15v13H1z" />
       <Path d="M16 8h4l3 3v5h-7V8z" />
       <Circle cx="5.5" cy="18.5" r="2.5" />
@@ -43,153 +44,146 @@ function TruckIcon({ size = 20, color = COLORS.primary }: { size?: number; color
   );
 }
 
-function StarIcon({ size = 14, filled = false }: { size?: number; filled?: boolean }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? '#f59e0b' : 'none'} stroke="#f59e0b" strokeWidth={2}>
-      <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-    </Svg>
-  );
-}
-
-// ============================================================================
-// COMPONENT
-// ============================================================================
-
 interface VehicleCardProps {
   vehicle: Vehicle;
   onPress: (vehicle: Vehicle) => void;
 }
 
 export function VehicleCard({ vehicle, onPress }: VehicleCardProps) {
-  const statusColors = STATUS_COLORS[vehicle.status] || STATUS_COLORS.available;
+  const st         = STATUS[vehicle.status] ?? STATUS.available;
   const vehicleName = `${vehicle.make} ${vehicle.model}`;
-  const capacity = vehicle.capacity?.replace('_', ' ').replace('seater', ' Seater') || 'N/A';
+  const capacity   = vehicle.capacity?.replace('_', ' ')
+    .replace(/(\d+)\s*seater/i, '$1-Seater') || 'N/A';
+  const driver     = vehicle.drivers?.full_name || 'Unassigned';
 
   return (
-    <TouchableOpacity
-      style={styles.container}
-      onPress={() => onPress(vehicle)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <TruckIcon size={20} color={COLORS.primary} />
+    <TouchableOpacity style={s.card} onPress={() => onPress(vehicle)} activeOpacity={0.78}>
+      {/* Luxury accent bar */}
+      <View style={[s.accentBar, { backgroundColor: st.dot }]} />
+
+      {/* Header */}
+      <View style={s.header}>
+        <View style={s.iconWrap}>
+          <TruckIcon color={P.primary} />
         </View>
-        <View style={styles.headerInfo}>
-          <Text style={styles.licensePlate}>{vehicle.license_plate}</Text>
-          <Text style={styles.vehicleName} numberOfLines={1}>
-            {vehicleName}
-          </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.plate}>{vehicle.license_plate}</Text>
+          <Text style={s.name} numberOfLines={1}>{vehicleName}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
-          <Text style={[styles.statusText, { color: statusColors.text }]}>
-            {vehicle.status?.replace('_', ' ')}
-          </Text>
+        <View style={[s.badge, { backgroundColor: st.bg }]}>
+          <View style={[s.dot, { backgroundColor: st.dot }]} />
+          <Text style={[s.badgeText, { color: st.text }]}>{st.label}</Text>
         </View>
       </View>
 
-      <View style={styles.details}>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Capacity</Text>
-          <Text style={styles.detailValue}>{capacity}</Text>
+      {/* Divider */}
+      <View style={s.divider} />
+
+      {/* Details */}
+      <View style={s.details}>
+        <View style={s.detailCol}>
+          <Text style={s.detailLabel}>Capacity</Text>
+          <Text style={s.detailValue}>{capacity}</Text>
         </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Driver</Text>
-          <Text style={styles.detailValue} numberOfLines={1}>
-            {vehicle.drivers?.full_name || 'Unassigned'}
-          </Text>
+        <View style={s.detailCol}>
+          <Text style={s.detailLabel}>Driver</Text>
+          <Text style={s.detailValue} numberOfLines={1}>{driver}</Text>
         </View>
-        {vehicle.rating !== undefined && vehicle.rating > 0 && (
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Rating</Text>
-            <View style={styles.ratingContainer}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <StarIcon key={star} size={12} filled={star <= (vehicle.rating || 0)} />
-              ))}
-            </View>
+        {(vehicle as any).year ? (
+          <View style={s.detailCol}>
+            <Text style={s.detailLabel}>Year</Text>
+            <Text style={s.detailValue}>{(vehicle as any).year}</Text>
           </View>
-        )}
+        ) : null}
       </View>
     </TouchableOpacity>
   );
 }
 
-// ============================================================================
-// STYLES
-// ============================================================================
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 16,
+const s = StyleSheet.create({
+  card: {
+    backgroundColor: P.card,
+    borderRadius: 20,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: P.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  accentBar: {
+    height: 3,
+    width: '100%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 12,
+    padding: 16,
+    paddingBottom: 12,
   },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#eff6ff',
-    justifyContent: 'center',
+  iconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: P.primaryXSoft,
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
   },
-  headerInfo: {
-    flex: 1,
+  plate: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: P.text,
+    letterSpacing: 0.3,
   },
-  licensePlate: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  vehicleName: {
-    fontSize: 13,
-    color: COLORS.textMuted,
+  name: {
+    fontSize: 12,
+    color: P.textMuted,
     marginTop: 2,
   },
-  statusBadge: {
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
-  statusText: {
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
     fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+    fontWeight: '700',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: P.border,
+    marginHorizontal: 16,
   },
   details: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 12,
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 24,
   },
-  detailItem: {
-    minWidth: 80,
-  },
+  detailCol: {},
   detailLabel: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    marginBottom: 2,
+    fontSize: 10,
+    fontWeight: '700',
+    color: P.textSoft,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 3,
   },
   detailValue: {
     fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    gap: 2,
+    fontWeight: '600',
+    color: P.text,
   },
 });

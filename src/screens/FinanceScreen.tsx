@@ -39,19 +39,19 @@ import { formatCurrency } from '../lib/utils';
 // ============================================================================
 
 const COLORS = {
-  primary:    '#1f4d45',
-  success:    '#3d8f6a',
-  warning:    '#b8883f',
-  danger:     '#c96d4d',
-  income:     '#3d8f6a',
-  expense:    '#c96d4d',
-  background: '#f6f2eb',
-  card:       '#fffdf9',
-  text:       '#181512',
-  textMuted:  '#7f7565',
-  border:     '#e1d7c8',
-  revenueBg:  '#ddf0e8',
-  expenseBg:  '#fdf0ec',
+  primary:    '#8B6B3E',
+  success:    '#34A853',
+  warning:    '#F5A623',
+  danger:     '#FF3B30',
+  income:     '#34A853',
+  expense:    '#FF3B30',
+  background: '#F2F2F7',
+  card:       '#FFFFFF',
+  text:       '#1C1C1E',
+  textMuted:  '#6C6C70',
+  border:     '#E5E5EA',
+  revenueBg:  '#E8F7EE',
+  expenseBg:  '#FFEEED',
 };
 
 const CURRENCIES: { label: string; value: Currency }[] = [
@@ -74,7 +74,7 @@ const CR_STATUS_FILTERS: { label: string; value: 'all' | CRStatus }[] = [
 function crStatusColor(status: string): string {
   switch (status) {
     case 'Pending':             return COLORS.warning;
-    case 'Approved':            return '#3d8f6a';
+    case 'Approved':            return '#34A853';
     case 'Completed':
     case 'Resolved':            return COLORS.success;
     case 'Declined':
@@ -222,22 +222,22 @@ function RevenueExpenseChart({ revenueItems, expenseItems, currency }: {
   const totalRev = data.reduce((s, d) => s + d.revenue, 0);
   const totalExp = data.reduce((s, d) => s + d.expense, 0);
 
-  const revColor = '#3d8f6a';  // forest green — revenue
-  const expColor = '#c96d4d';  // terracotta — expense
+  const revColor = '#34A853';
+  const expColor = '#FF3B30';
 
   return (
-    <View style={{ backgroundColor: '#171513', borderRadius: 18, padding: 16, marginBottom: 16 }}>
+    <View style={{ backgroundColor: '#1C1611', borderRadius: 18, padding: 16, marginBottom: 16 }}>
       {/* Header */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <Text style={{ fontSize: 15, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.3 }}>Expense Status</Text>
         <View style={{ flexDirection: 'row', gap: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: expColor }} />
-            <Text style={{ fontSize: 10, color: '#b8ab95', fontWeight: '600' }}>Expenses</Text>
+            <Text style={{ fontSize: 10, color: '#C4A882', fontWeight: '600' }}>Expenses</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: revColor }} />
-            <Text style={{ fontSize: 10, color: '#b8ab95', fontWeight: '600' }}>Revenue</Text>
+            <Text style={{ fontSize: 10, color: '#C4A882', fontWeight: '600' }}>Revenue</Text>
           </View>
         </View>
       </View>
@@ -320,7 +320,7 @@ function RevenueExpenseChart({ revenueItems, expenseItems, currency }: {
             -{fmt(totalExp)}
           </Text>
         </View>
-        <View style={{ backgroundColor: '#172420', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 }}>
+        <View style={{ backgroundColor: '#1e2a1e', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 }}>
           <Text style={{ color: revColor, fontSize: 13, fontWeight: '800' }}>
             +{fmt(totalRev)}
           </Text>
@@ -393,15 +393,15 @@ function RevenueRow({ item, displayCurrency, onPress }: { item: RevenueItem; dis
 
   return (
     <TouchableOpacity style={styles.rowCard} onPress={() => onPress(item)} activeOpacity={0.75}>
-      <View style={[styles.rowIconWrap, { backgroundColor: '#dcfce7' }]}>
+      <View style={[styles.rowIconWrap, { backgroundColor: '#D8F0E4' }]}>
         <TrendUpIcon size={16} color={COLORS.income} />
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle || date}</Text>
         <View style={styles.rowMeta}>
-          <View style={[styles.sourceBadge, { backgroundColor: '#dbeafe' }]}>
-            <Text style={[styles.sourceBadgeText, { color: '#3d8f6a' }]}>{SOURCE_LABELS[item.source] || item.source}</Text>
+          <View style={[styles.sourceBadge, { backgroundColor: '#F5E8D0' }]}>
+            <Text style={[styles.sourceBadgeText, { color: '#8B6B3E' }]}>{SOURCE_LABELS[item.source] || item.source}</Text>
           </View>
           <View style={[styles.sourceBadge, { backgroundColor: statusColor + '22' }]}>
             <Text style={[styles.sourceBadgeText, { color: statusColor }]}>{item.status}</Text>
@@ -430,15 +430,15 @@ function ExpenseRow({ item, displayCurrency, onPress }: { item: ExpenseItem; dis
 
   return (
     <TouchableOpacity style={styles.rowCard} onPress={() => onPress(item)} activeOpacity={0.75}>
-      <View style={[styles.rowIconWrap, { backgroundColor: '#fee2e2' }]}>
+      <View style={[styles.rowIconWrap, { backgroundColor: '#fdf0ec' }]}>
         <TrendDownIcon size={16} color={COLORS.expense} />
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle || date}</Text>
         <View style={styles.rowMeta}>
-          <View style={[styles.sourceBadge, { backgroundColor: '#fef3c7' }]}>
-            <Text style={[styles.sourceBadgeText, { color: '#92400e' }]}>{sourceLabel}</Text>
+          <View style={[styles.sourceBadge, { backgroundColor: '#FDE8C0' }]}>
+            <Text style={[styles.sourceBadgeText, { color: '#7a5522' }]}>{sourceLabel}</Text>
           </View>
           <View style={[styles.sourceBadge, { backgroundColor: statusColor + '22' }]}>
             <Text style={[styles.sourceBadgeText, { color: statusColor }]}>{item.status}</Text>
@@ -489,8 +489,8 @@ function CRCard({ cr, displayCurrency, onPress }: { cr: CashRequisition; display
 
         {/* Category + Department */}
         <View style={styles.crBadgeRow}>
-          <View style={[styles.crBadge, { backgroundColor: '#fef3c7' }]}>
-            <Text style={[styles.crBadgeText, { color: '#92400e' }]}>{cr.expense_category}</Text>
+          <View style={[styles.crBadge, { backgroundColor: '#FDE8C0' }]}>
+            <Text style={[styles.crBadgeText, { color: '#7a5522' }]}>{cr.expense_category}</Text>
           </View>
           {cr.department ? (
             <View style={[styles.crBadge, { backgroundColor: COLORS.primary + '15' }]}>
@@ -532,8 +532,8 @@ function CRCard({ cr, displayCurrency, onPress }: { cr: CashRequisition; display
               <Text style={styles.crPayee}>Payee: {cr.payee_name}</Text>
             ) : null}
             {cr.payment_mode ? (
-              <View style={[styles.crBadge, { backgroundColor: '#e0f2fe' }]}>
-                <Text style={[styles.crBadgeText, { color: '#0369a1' }]}>{cr.payment_mode}</Text>
+              <View style={[styles.crBadge, { backgroundColor: '#F5E8D0' }]}>
+                <Text style={[styles.crBadgeText, { color: '#8B6B3E' }]}>{cr.payment_mode}</Text>
               </View>
             ) : null}
           </View>
@@ -599,7 +599,7 @@ function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress }
       ListHeaderComponent={
         <View>
           <View style={pc.summaryRow}>
-            <View style={[pc.summaryCard, { backgroundColor: '#f5e8ce' }]}>
+            <View style={[pc.summaryCard, { backgroundColor: '#FDE8C0' }]}>
               <Text style={pc.summaryLabel}>All Time</Text>
               <Text style={[pc.summaryValue, { color: COLORS.warning }]}>{formatCurrency(total, currency)}</Text>
               <Text style={pc.summaryCount}>{pettyCashItems.length} entries</Text>
@@ -645,14 +645,14 @@ function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress }
 const pc = StyleSheet.create({
   summaryRow:    { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   summaryCard:   { flex: 1, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)' },
-  summaryLabel:  { fontSize: 11, fontWeight: '700', color: '#7f7565', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  summaryLabel:  { fontSize: 11, fontWeight: '700', color: '#6C6C70', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   summaryValue:  { fontSize: 20, fontWeight: '800', letterSpacing: -0.5, marginBottom: 2 },
-  summaryCount:  { fontSize: 12, color: '#7f7565' },
-  listHeader:    { fontSize: 13, fontWeight: '700', color: '#7f7565', textTransform: 'uppercase', letterSpacing: 0.6, paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4 },
-  row:           { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fffdf9', marginHorizontal: 16, marginBottom: 8, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#e1d7c8' },
-  rowIcon:       { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f5e8ce', alignItems: 'center', justifyContent: 'center' },
-  rowTitle:      { fontSize: 14, fontWeight: '600', color: '#181512', lineHeight: 20 },
-  rowDate:       { fontSize: 12, color: '#7f7565', marginTop: 2 },
+  summaryCount:  { fontSize: 12, color: '#6C6C70' },
+  listHeader:    { fontSize: 13, fontWeight: '700', color: '#6C6C70', textTransform: 'uppercase', letterSpacing: 0.6, paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4 },
+  row:           { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', marginHorizontal: 16, marginBottom: 8, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#E5E5EA' },
+  rowIcon:       { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FEF0DC', alignItems: 'center', justifyContent: 'center' },
+  rowTitle:      { fontSize: 14, fontWeight: '600', color: '#1C1C1E', lineHeight: 20 },
+  rowDate:       { fontSize: 12, color: '#6C6C70', marginTop: 2 },
   rowAmount:     { fontSize: 15, fontWeight: '800' },
 });
 
@@ -845,7 +845,7 @@ export function FinanceScreen() {
       <View style={styles.kpiGrid}>
         <KPICard delay={0}   title="Revenue (MTD)"  value={formatCurrency(revenueMTD,  currency)} accent={COLORS.income}  bg={COLORS.revenueBg} icon={<TrendUpIcon   size={15} color={COLORS.income}  />} />
         <KPICard delay={70}  title="Expenses (MTD)" value={formatCurrency(expensesMTD, currency)} accent={COLORS.expense} bg={COLORS.expenseBg} icon={<TrendDownIcon size={15} color={COLORS.expense} />} />
-        <KPICard delay={140} title="Net Profit"      value={formatCurrency(netProfitMTD, currency)} accent={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} bg={netProfitMTD >= 0 ? COLORS.revenueBg : '#f5e8ce'} icon={<TrendUpIcon size={15} color={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} />} />
+        <KPICard delay={140} title="Net Profit"      value={formatCurrency(netProfitMTD, currency)} accent={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} bg={netProfitMTD >= 0 ? COLORS.revenueBg : '#FDE8C0'} icon={<TrendUpIcon size={15} color={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} />} />
       </View>
 
       <View style={styles.searchRow}>
@@ -873,7 +873,7 @@ export function FinanceScreen() {
     <>
       {/* KPI row for CRs */}
       <View style={styles.kpiGrid}>
-        <KPICard delay={0}  title="Total CRs"    value={String(cashRequisitions.length)}  accent={COLORS.warning} bg="#fef3c7" icon={<FileIcon size={15} color={COLORS.warning} />} />
+        <KPICard delay={0}  title="Total CRs"    value={String(cashRequisitions.length)}  accent={COLORS.warning} bg="#FDE8C0" icon={<FileIcon size={15} color={COLORS.warning} />} />
         <KPICard delay={60} title="Pending"       value={String(pendingCount)}             accent={COLORS.warning} bg="#fff7e6" icon={<FileIcon size={15} color={COLORS.warning} />} />
         <KPICard delay={120} title="Completed"    value={String(cashRequisitions.filter(c => c.status === 'Completed' || c.status === 'Resolved').length)} accent={COLORS.success} bg={COLORS.revenueBg} icon={<TrendUpIcon size={15} color={COLORS.success} />} />
       </View>
@@ -980,7 +980,7 @@ export function FinanceScreen() {
               </Text>
             </View>
             {activeTab !== 'requisitions' ? (
-              <View style={[styles.heroBadge, { backgroundColor: netProfitMTD >= 0 ? '#3d8f6a' : '#c96d4d' }]}>
+              <View style={[styles.heroBadge, { backgroundColor: netProfitMTD >= 0 ? '#34A853' : '#FF3B30' }]}>
                 <Text style={styles.heroBadgeText}>{netProfitMTD >= 0 ? '▲' : '▼'} {formatCurrency(Math.abs(netProfitMTD), currency)}</Text>
               </View>
             ) : pendingCount > 0 ? (
@@ -1076,6 +1076,7 @@ export function FinanceScreen() {
         displayCurrency={currency}
         onRefetch={refetch}
         currentUserId={user?.id}
+        currentUserEmail={user?.email}
       />
 
       <AddExpenseModal
@@ -1100,19 +1101,19 @@ const styles = StyleSheet.create({
   },
 
   // Hero
-  hero:           { backgroundColor: '#171513', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 12 },
-  heroEyebrow:    { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#b8ab95' },
+  hero:           { backgroundColor: '#1C1611', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 12 },
+  heroEyebrow:    { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#C4A882' },
   heroRow:        { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   heroTitle:      { fontSize: 28, fontWeight: '800', letterSpacing: -1, color: '#fffaf3' },
-  heroSub:        { fontSize: 13, color: '#b8ab95', marginTop: 2 },
+  heroSub:        { fontSize: 13, color: '#C4A882', marginTop: 2 },
   heroBadge:      { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   heroBadgeText:  { color: '#fff', fontSize: 12, fontWeight: '800' },
   heroTabsScroll: { flexGrow: 0 },
   heroTabs:       { flexDirection: 'row', gap: 8, paddingRight: 4 },
   heroTab:        { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', gap: 6 },
-  heroTabActive:  { backgroundColor: '#fffdf9' },
-  heroTabText:    { fontSize: 13, fontWeight: '700', color: '#b8ab95' },
-  heroTabTextActive: { color: '#181512', fontWeight: '800' },
+  heroTabActive:  { backgroundColor: '#FFFFFF' },
+  heroTabText:    { fontSize: 13, fontWeight: '700', color: '#C4A882' },
+  heroTabTextActive: { color: '#1C1C1E', fontWeight: '800' },
   heroTabDot:     { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.warning },
 
   listContent: {

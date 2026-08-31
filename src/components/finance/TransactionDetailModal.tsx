@@ -15,7 +15,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Svg, Path, Circle } from 'react-native-svg';
+import { Svg, Path } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import { sendCRNotificationToUser } from '../../services/notificationService';
 import type { FinancialTransaction, CashRequisition } from '../../types/dashboard';
@@ -23,19 +23,19 @@ import { formatCurrency } from '../../lib/utils';
 
 // ─── Palette (matches app-wide branding) ─────────────────────────────────────
 const C = {
-  bg:       '#f6f2eb',
-  card:     '#fffdf9',
-  hero:     '#171513',
-  primary:  '#1f4d45',
-  success:  '#3d8f6a',
-  danger:   '#c96d4d',
-  warning:  '#b8883f',
-  text:     '#181512',
-  muted:    '#7f7565',
-  border:   '#e1d7c8',
-  input:    '#f0ebe2',
-  income:   '#3d8f6a',
-  expense:  '#c96d4d',
+  bg:       '#F2F2F7',
+  card:     '#FFFFFF',
+  hero:     '#1C1611',
+  primary:  '#8B6B3E',
+  success:  '#34A853',
+  danger:   '#FF3B30',
+  warning:  '#F5A623',
+  text:     '#1C1C1E',
+  muted:    '#6C6C70',
+  border:   '#E5E5EA',
+  input:    '#F2F2F7',
+  income:   '#34A853',
+  expense:  '#FF3B30',
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -87,13 +87,13 @@ function ArrowDownIcon({ color = C.expense }: { color?: string }) {
 
 // ─── Status badge helpers ─────────────────────────────────────────────────────
 const CR_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  Pending:   { bg: '#b8883f20', text: '#b8883f' },
-  Approved:  { bg: '#3d8f6a20', text: '#3d8f6a' },
-  Completed: { bg: '#1f4d4520', text: '#1f4d45' },
-  Resolved:  { bg: '#1f4d4520', text: '#1f4d45' },
-  Declined:  { bg: '#c96d4d20', text: '#c96d4d' },
-  Rejected:  { bg: '#c96d4d20', text: '#c96d4d' },
-  Cancelled: { bg: '#7f756520', text: '#7f7565' },
+  Pending:   { bg: '#FEF3DC', text: '#7a5000' },
+  Approved:  { bg: '#E8F7EE', text: '#1A6B3C' },
+  Completed: { bg: '#EDE8FE', text: '#5436CC' },
+  Resolved:  { bg: '#EDE8FE', text: '#5436CC' },
+  Declined:  { bg: '#FFEEED', text: '#CC1400' },
+  Rejected:  { bg: '#FFEEED', text: '#CC1400' },
+  Cancelled: { bg: '#F2F2F7', text: '#6C6C70' },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -120,7 +120,7 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 const infoStyles = StyleSheet.create({
-  row:   { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0ebe0' },
+  row:   { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F5ECD9' },
   label: { fontSize: 13, color: C.muted, fontWeight: '500', flex: 1 },
   value: { fontSize: 13, color: C.text, fontWeight: '700', textAlign: 'right', flex: 1.5 },
 });
@@ -137,6 +137,8 @@ interface TransactionDetailModalProps {
   onRefetch?: () => void;
   /** ID of the currently signed-in user — used to enforce approval rules */
   currentUserId?: string;
+  /** Email of the currently signed-in user — admins can approve any CR */
+  currentUserEmail?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -148,6 +150,7 @@ export function TransactionDetailModal({
   displayCurrency = 'USD',
   onRefetch,
   currentUserId,
+  currentUserEmail,
 }: TransactionDetailModalProps) {
   const [actioning, setActioning] = useState(false);
 
@@ -297,11 +300,15 @@ export function TransactionDetailModal({
 
   // A user may approve only when:
   //  1. The CR is still Pending
-  //  2. They are the designated approver for this CR
+  //  2. They are the designated approver for this CR (matched by UUID or email)
   //  3. They are NOT the person who submitted it (even admins cannot self-approve)
-  const isSubmitter   = !!currentUserId && currentUserId === requesterId;
-  const isApprover    = !!currentUserId && currentUserId === approverId;
-  const canApprove    = isPending && isApprover && !isSubmitter;
+  const approverEmail  = cr.approver?.email ?? null;
+  const isSubmitter    = !!currentUserId && currentUserId === requesterId;
+  const isApproverById = !!currentUserId && !!approverId && currentUserId === approverId;
+  const isApproverByEmail = !!currentUserEmail && !!approverEmail &&
+    currentUserEmail.toLowerCase() === approverEmail.toLowerCase();
+  const isApprover     = isApproverById || isApproverByEmail;
+  const canApprove     = isPending && isApprover && !isSubmitter;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -419,7 +426,7 @@ export function TransactionDetailModal({
 const styles = StyleSheet.create({
   safeArea:        { flex: 1, backgroundColor: C.bg },
   header:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  headerEyebrow:   { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  headerEyebrow:   { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   headerTitle:     { fontSize: 24, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.6 },
   closeBtn:        { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   body:            { padding: 20, gap: 14 },

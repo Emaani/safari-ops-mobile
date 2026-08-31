@@ -26,27 +26,27 @@ import type { Booking, BookingStatus, Vehicle } from '../../types/dashboard';
 
 // ─── Vehicle status colours ───────────────────────────────────────────────────
 const VEHICLE_STATUS_COLOR: Record<string, string> = {
-  available:      '#3d8f6a',
-  booked:         '#c96d4d',
-  rented:         '#8366d7',
-  maintenance:    '#b8883f',
-  out_of_service: '#6b7280',
+  available:      '#34A853',
+  booked:         '#FF3B30',
+  rented:         '#7A5AF8',
+  maintenance:    '#F5A623',
+  out_of_service: '#6C6C70',
 };
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#f6f2eb',
-  card:    '#fffdf9',
-  hero:    '#171513',
-  primary: '#1f4d45',
-  success: '#3d8f6a',
-  danger:  '#c96d4d',
-  warning: '#b8883f',
-  text:    '#181512',
-  muted:   '#7f7565',
-  border:  '#e1d7c8',
-  input:   '#f0ebe2',
-  lock:    '#f5f0e8',
+  bg:      '#F2F2F7',
+  card:    '#FFFFFF',
+  hero:    '#1C1611',
+  primary: '#8B6B3E',
+  success: '#34A853',
+  danger:  '#FF3B30',
+  warning: '#F5A623',
+  text:    '#1C1C1E',
+  muted:   '#6C6C70',
+  border:  '#E5E5EA',
+  input:   '#F2F2F7',
+  lock:    '#F9F9F9',
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -202,10 +202,11 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
   const [totalCost,    setTotalCost]    = useState('');
   const [amountPaid,   setAmountPaid]   = useState('');
   const [currency,     setCurrency]     = useState<'USD'|'UGX'|'KES'>('USD');
-  const [vehicleId,    setVehicleId]    = useState('');
-  const [notes,        setNotes]        = useState('');
-  const [contact,      setContact]      = useState('');
-  const [email,        setEmail]        = useState('');
+  const [vehicleId,      setVehicleId]      = useState('');
+  const [paymentMethod,  setPaymentMethod]  = useState('');
+  const [notes,          setNotes]          = useState('');
+  const [contact,        setContact]        = useState('');
+  const [email,          setEmail]          = useState('');
 
   // Vehicle picker
   const [vehicleSheetOpen,       setVehicleSheetOpen]       = useState(false);
@@ -226,6 +227,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
     setAmountPaid(String(booking.amount_paid ?? ''));
     setCurrency((booking.currency as 'USD'|'UGX'|'KES') ?? 'USD');
     setVehicleId(booking.assigned_vehicle_id ?? '');
+    setPaymentMethod(b.payment_method ?? '');
     setNotes(b.notes ?? '');
     setContact(b.contact ?? '');
     setEmail(b.email ?? '');
@@ -331,6 +333,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
           balance_due:         balanceDue,
           currency,
           assigned_vehicle_id: vehicleId || null,
+          payment_method:      paymentMethod || null,
           notes:               notes.trim() || null,
           contact:             contact.trim() || undefined,
           email:               email.trim() || undefined,
@@ -368,7 +371,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
     } finally {
       setSaving(false);
     }
-  }, [booking, status, startDate, endDate, packageType, dailyRate, totalCost, amountPaid, currency, vehicleId, notes, contact, email, validate, onSuccess, onClose]);
+  }, [booking, status, startDate, endDate, packageType, dailyRate, totalCost, amountPaid, currency, vehicleId, paymentMethod, notes, contact, email, validate, onSuccess, onClose]);
 
   if (!booking) return null;
 
@@ -380,10 +383,9 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
   const ref = booking.booking_reference || booking.booking_number || `#${booking.id.slice(0, 8).toUpperCase()}`;
 
   return (
-    <>
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={[s.container, { paddingTop: insets.top || 12 }]}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={[s.container, { paddingTop: insets.top || 12 }]}>
 
             {/* Header */}
             <View style={s.header}>
@@ -391,7 +393,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                 <Text style={s.headerEyebrow}>Edit Booking</Text>
                 <Text style={s.headerTitle} numberOfLines={1}>{ref} · {clientName}</Text>
               </View>
-              <TouchableOpacity onPress={onClose} style={s.closeBtn}><CloseIcon color="#b8ab95" /></TouchableOpacity>
+              <TouchableOpacity onPress={onClose} style={s.closeBtn}><CloseIcon color="#C4A882" /></TouchableOpacity>
             </View>
 
             {/* Current status banner */}
@@ -487,6 +489,21 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                 </View>
               </View>
 
+              <View style={fld.wrap}>
+                <Text style={fld.label}>Payment Method</Text>
+                <View style={st.segRow}>
+                  {(['Cash', 'Mobile Money', 'Bank Transfer', 'Card', 'Cheque', 'Online'] as const).map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[st.seg, paymentMethod === m && { backgroundColor: C.primary + '18', borderColor: C.primary }]}
+                      onPress={() => setPaymentMethod(paymentMethod === m ? '' : m)}
+                    >
+                      <Text style={[st.segTxt, paymentMethod === m && { color: C.primary, fontWeight: '800' }]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
               {/* Section 4: Vehicle */}
               <View style={s.gap} />
               <SectionHeader step="4" title="Vehicle Assignment" />
@@ -540,9 +557,8 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
 
-      {/* Vehicle picker sheet — full search + sort + conflict-aware */}
+      {/* Vehicle picker sheet — nested inside main modal so iOS presents from the correct VC */}
       <Modal
         visible={vehicleSheetOpen}
         animationType="slide"
@@ -557,7 +573,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
               <Text style={s.headerTitle}>Select Vehicle</Text>
             </View>
             <TouchableOpacity onPress={() => { setVehicleSheetOpen(false); setVehicleQuery(''); }} style={s.closeBtn}>
-              <CloseIcon color="#b8ab95" />
+              <CloseIcon color="#C4A882" />
             </TouchableOpacity>
           </View>
 
@@ -657,7 +673,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
           })()}
         </View>
       </Modal>
-    </>
+    </Modal>
   );
 }
 
@@ -665,7 +681,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 const s = StyleSheet.create({
   container:          { flex: 1, backgroundColor: C.bg },
   header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, backgroundColor: C.hero },
-  headerEyebrow:      { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#b8ab95', marginBottom: 2 },
+  headerEyebrow:      { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', color: '#C4A882', marginBottom: 2 },
   headerTitle:        { fontSize: 20, fontWeight: '800', color: '#fffaf3', letterSpacing: -0.5, maxWidth: 280 },
   closeBtn:           { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   statusBanner:       { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10 },

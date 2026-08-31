@@ -4,8 +4,8 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
+import { formatCurrency } from '../../lib/utils';
 
 interface ExpenseCategory {
   id?: string;
@@ -22,44 +22,32 @@ interface ExpenseCategoriesChartProps {
 }
 
 const CARD_COLORS = {
-  background: '#fffdf9',
-  text: '#181512',
-  textMuted: '#7f7565',
-  border: '#e1d7c8',
-  track: '#ede6d8',
+  background: '#FFFFFF',
+  text: '#1C1C1E',
+  textMuted: '#6C6C70',
+  border: '#E5E5EA',
+  track: '#F2F2F7',
 };
 
 const BAR_PALETTE = [
-  '#1f4d45', // deep green
-  '#b78a43', // gold
-  '#8366d7', // purple
-  '#c96d4d', // terracotta
-  '#3d8f6a', // emerald
-  '#b8883f', // amber
-  '#4a7fc1', // blue
-  '#d07070', // rose
-  '#5bab8a', // mint
-  '#c07a3a', // burnt orange
+  '#8B6B3E', // bronze
+  '#C6A563', // gold
+  '#7A5AF8', // indigo
+  '#FF3B30', // red
+  '#34A853', // green
+  '#F5A623', // amber
+  '#007AFF', // blue
+  '#FF6B9D', // pink
+  '#5AC8FA', // cyan
+  '#FF9500', // orange
 ];
 
-const formatCurrency = (value: number, currency: string = 'USD'): string => {
-  const absValue = Math.abs(value);
-  if (absValue >= 1_000_000)
-    return `${currency === 'USD' ? '$' : currency}${(value / 1_000_000).toFixed(1)}M`;
-  if (absValue >= 1_000)
-    return `${currency === 'USD' ? '$' : currency}${(value / 1_000).toFixed(1)}K`;
-  return `${currency === 'USD' ? '$' : currency}${value.toFixed(0)}`;
-};
 
 export function ExpenseCategoriesChart({
   data,
   loading = false,
   currency = 'USD',
 }: ExpenseCategoriesChartProps) {
-  const screenWidth = Dimensions.get('window').width;
-  // scrollContent paddingHorizontal:20 (×2=40) + card padding:18 (×2=36) = 76
-  const innerWidth = screenWidth - 76;
-
   const sorted = useMemo(() => {
     if (!data || data.length === 0) return [];
     return [...data]
@@ -118,10 +106,10 @@ export function ExpenseCategoriesChart({
                   {item.name}
                 </Text>
                 <Text style={[styles.amountText, { color: item.color }]}>
-                  {formatCurrency(item.amount, currency)}
+                  {formatCurrency(item.amount, currency as any)}
                 </Text>
               </View>
-              <View style={[styles.track, { width: innerWidth - 56 }]}>
+              <View style={styles.track}>
                 <View
                   style={[
                     styles.fill,
@@ -221,6 +209,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: CARD_COLORS.track,
     overflow: 'hidden',
+    alignSelf: 'stretch',
   },
   fill: {
     height: '100%',

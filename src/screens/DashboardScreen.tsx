@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,11 @@ import {
   Dimensions,
   TouchableOpacity,
   Alert,
+  Modal,
+  FlatList,
+  Animated,
 } from 'react-native';
+import { tapLight, selectionTick } from '../lib/haptics';
 import { useNavigation } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,6 +24,7 @@ import { useExchangeRate, getConversionRates } from '../hooks/useExchangeRate';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardRealtimeSync } from '../hooks/useDashboardRealtimeSync';
 import { useDashboardCalculations } from '../hooks/useDashboardCalculations';
+import type { OutstandingPaymentData } from '../hooks/useDashboardCalculations';
 
 // Components
 import { KPICard } from '../components/kpi/KPICard';
@@ -38,7 +43,7 @@ import {
 // Forms
 import { NewBookingModal, AddExpenseModal, CreateSafariModal } from '../components/forms';
 import { LoadingOverlay } from '../components/system/JackalLoader';
-import { KpiRowSkeleton } from '../components/ui';
+import { KpiRowSkeleton, FadeSlideIn } from '../components/ui';
 
 // Utils
 import { formatCurrency } from '../lib/utils';
@@ -90,22 +95,22 @@ const generateYears = (): { label: string; value: number }[] => {
 const YEARS = generateYears();
 
 const COLORS = {
-  primary: '#1f4d45',
-  primarySoft: '#dce8e3',
-  success: '#3d8f6a',
-  warning: '#b8883f',
-  danger: '#c96d4d',
-  purple: '#8366d7',
-  background: '#f6f2eb',
-  card: '#fffdf9',
-  cardAlt: '#efe6d8',
-  hero: '#171513',
-  heroMuted: '#b8ab95',
-  text: '#181512',
-  textMuted: '#7f7565',
-  border: '#e1d7c8',
-  gold: '#b78a43',
-  goldSoft: '#f2e5ca',
+  primary:     '#8B6B3E',
+  primarySoft: '#FEF0DC',
+  success:     '#34A853',
+  warning:     '#F5A623',
+  danger:      '#FF3B30',
+  purple:      '#7A5AF8',
+  background:  '#F2F2F7',
+  card:        '#FFFFFF',
+  cardAlt:     '#F9F9F9',
+  hero:        '#1C1611',
+  heroMuted:   '#C4A882',
+  text:        '#1C1C1E',
+  textMuted:   '#6C6C70',
+  border:      '#E5E5EA',
+  gold:        '#C6A563',
+  goldSoft:    '#FDE8C0',
 };
 
 // ============================================================================
@@ -227,7 +232,7 @@ interface FilterChipProps {
 function FilterChip({ label, selected, onPress }: FilterChipProps) {
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={() => { selectionTick(); onPress(); }}
       activeOpacity={0.85}
       style={[styles.filterChip, selected && styles.filterChipActive]}
     >
@@ -292,6 +297,17 @@ function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
 }
 
 // ============================================================================
+// HELPERS
+// ============================================================================
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good Morning';
+  if (h < 17) return 'Good Afternoon';
+  return 'Good Evening';
+}
+
+// ============================================================================
 // MAIN DASHBOARD SCREEN
 // ============================================================================
 
@@ -314,9 +330,10 @@ export function DashboardScreen() {
   });
   const [currency, setCurrency] = useState<Currency>('USD');
   const [refreshing, setRefreshing] = useState(false);
-  const [showNewBooking,    setShowNewBooking]    = useState(false);
-  const [showAddExpense,    setShowAddExpense]    = useState(false);
-  const [showCreateSafari,  setShowCreateSafari]  = useState(false);
+  const [showNewBooking,       setShowNewBooking]       = useState(false);
+  const [showAddExpense,       setShowAddExpense]       = useState(false);
+  const [showCreateSafari,     setShowCreateSafari]     = useState(false);
+  const [showOutstandingModal, setShowOutstandingModal] = useState(false);
 
   // ========================================================================
   // AUTH
@@ -336,6 +353,7 @@ export function DashboardScreen() {
   const {
     vehicles,
     bookings,
+    recentBookings: recentBookingsRaw,
     repairs,
     financialTransactions,
     cashRequisitions,
@@ -375,6 +393,18 @@ export function DashboardScreen() {
   });
 
   const loading = dataLoading || exchangeRateLoading;
+
+  const livePulse = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(livePulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(livePulse, { toValue: 0.4, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [livePulse]);
 
   // CRITICAL DEBUG: Log KPI values whenever they change
   React.useEffect(() => {
@@ -562,17 +592,19 @@ export function DashboardScreen() {
     };
   }, [calculations.capacityComparison]);
 
-  // Prepare recent bookings data for widget
+  // Prepare recent bookings data for widget — uses the unfiltered top-10 fetch
+  // so the list matches the web dashboard (most recently CREATED, not date-filtered).
   const recentBookingsData = useMemo(() => {
-    return calculations.recentBookings.map((booking) => ({
+    return recentBookingsRaw.map((booking) => ({
       id: booking.id,
-      booking_number: booking.booking_number || `#${booking.id.slice(0, 8)}`,
+      booking_number: booking.booking_number || booking.booking_reference || `#${booking.id.slice(0, 8)}`,
       start_date: booking.start_date,
+      end_date: booking.end_date,
       status: booking.status,
-      total_cost: booking.amount,
+      total_cost: booking.total_amount ?? booking.total_cost ?? 0,
       currency: currency,
     }));
-  }, [calculations.recentBookings, currency]);
+  }, [recentBookingsRaw, currency]);
 
   // ========================================================================
   // RENDER
@@ -615,10 +647,13 @@ export function DashboardScreen() {
           <View style={styles.headerLeft}>
             <View style={styles.headerTextContainer}>
               <Text style={styles.headerTitle}>
-                Welcome back,{' '}
+                {getGreeting()},{' '}
                 {user?.user_metadata?.full_name?.split(' ')[0] ||
-                  user?.email?.split('@')[0] ||
-                  'there'}!
+                  (() => {
+                    const local = user?.email?.split('@')[0] ?? '';
+                    const first = local.split(/[._+\-]/)[0];
+                    return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'there';
+                  })()}!
               </Text>
               <Text style={styles.headerSubtitle}>
                 {new Date().toLocaleDateString('en-US', {
@@ -631,14 +666,14 @@ export function DashboardScreen() {
           </View>
           <View style={styles.headerRight}>
             <View style={styles.livePill}>
-              <View style={styles.liveDot} />
+              <Animated.View style={[styles.liveDot, { opacity: livePulse }]} />
               <Text style={styles.livePillText}>Live</Text>
             </View>
             <TouchableOpacity
               style={styles.logoutButton}
               onPress={handleLogout}
             >
-              <LogoutIcon size={18} color="#b8ab95" />
+              <LogoutIcon size={18} color="#C4A882" />
             </TouchableOpacity>
           </View>
         </View>
@@ -691,7 +726,7 @@ export function DashboardScreen() {
             />
             <HeroStat
               label="Fleet"
-              value={`${kpiData.fleetUtilization}%`}
+              value={`${kpiData.vehiclesHired} Hired`}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             />
           </View>
@@ -699,23 +734,29 @@ export function DashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
-          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowNewBooking(true)}>
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); setShowNewBooking(true); }}>
             <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primarySoft }]}>
               <AddBookingIcon size={22} color={COLORS.primary} />
             </View>
             <Text style={styles.quickActionLabel}>New Booking</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowAddExpense(true)}>
-            <View style={[styles.quickActionIcon, { backgroundColor: '#f5e8ce' }]}>
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); navigation.navigate('MainTabs', { screen: 'Fleet' }); }}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FEF0DC' }]}>
+              <TruckIcon size={22} color={COLORS.primary} />
+            </View>
+            <Text style={styles.quickActionLabel}>Fleet</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); setShowAddExpense(true); }}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FDE8C0' }]}>
               <AddExpenseIcon size={22} color={COLORS.warning} />
             </View>
-            <Text style={styles.quickActionLabel}>Cash Requisition</Text>
+            <Text style={styles.quickActionLabel}>Cash Req.</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => setShowCreateSafari(true)}>
-            <View style={[styles.quickActionIcon, { backgroundColor: '#dce8e3' }]}>
-              <AddSafariIcon size={22} color={COLORS.success} />
+          <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); setShowCreateSafari(true); }}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FDE8C0' }]}>
+              <AddSafariIcon size={22} color={COLORS.gold} />
             </View>
-            <Text style={styles.quickActionLabel}>Create Safari</Text>
+            <Text style={styles.quickActionLabel}>New Safari</Text>
           </TouchableOpacity>
         </View>
 
@@ -785,56 +826,57 @@ export function DashboardScreen() {
             <View style={{ height: 12 }} />
             <KpiRowSkeleton />
           </>
-        ) : null}
-        <View style={[styles.kpiGrid, loading && !refreshing && { display: 'none' }]}>
-          <View style={styles.kpiRow}>
-            <KPICard
-              title="Total Revenue"
-              value={formatCurrency(kpiData.totalRevenue, currency)}
-              subtitle={revenueSubtitle}
-              icon={<DollarSignIcon size={20} color={COLORS.success} />}
-              iconColor={COLORS.success}
-              style={styles.kpiCard}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
-            />
-            <KPICard
-              title="Total Expenses"
-              value={formatCurrency(kpiData.totalExpenses, currency)}
-              subtitle={`${currency === 'USD' ? formatCurrency(kpiData.totalExpensesUGX, 'UGX') : formatCurrency(kpiData.totalExpensesUSD, 'USD')}`}
-              icon={<CreditCardIcon size={20} color={COLORS.danger} />}
-              iconColor={COLORS.danger}
-              style={styles.kpiCard}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
-            />
-          </View>
-          <View style={styles.kpiRow}>
-            <KPICard
-              title="Fleet Utilization"
-              value={`${kpiData.fleetUtilization}%`}
-              subtitle={fleetSubtitle}
-              icon={<TruckIcon size={20} color={COLORS.primary} />}
-              iconColor={COLORS.primary}
-              style={styles.kpiCard}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
-            />
-            <KPICard
-              title="Active Bookings"
-              value={String(kpiData.activeBookings)}
-              subtitle={`${kpiData.confirmedBookings} confirmed | ${kpiData.pendingBookings} pending`}
-              icon={<CalendarIcon size={20} color={COLORS.purple} />}
-              iconColor={COLORS.purple}
-              style={styles.kpiCard}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Bookings' })}
-            />
-          </View>
-        </View>
+        ) : (
+          <FadeSlideIn style={styles.kpiGrid}>
+            <View style={styles.kpiRow}>
+              <KPICard
+                title="Total Revenue"
+                value={formatCurrency(kpiData.totalRevenue, currency)}
+                subtitle={revenueSubtitle}
+                icon={<DollarSignIcon size={20} color={COLORS.success} />}
+                iconColor={COLORS.success}
+                style={styles.kpiCard}
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
+              />
+              <KPICard
+                title="Total Expenses"
+                value={formatCurrency(kpiData.totalExpenses, currency)}
+                subtitle={`${currency === 'USD' ? formatCurrency(kpiData.totalExpensesUGX, 'UGX') : formatCurrency(kpiData.totalExpensesUSD, 'USD')}`}
+                icon={<CreditCardIcon size={20} color={COLORS.danger} />}
+                iconColor={COLORS.danger}
+                style={styles.kpiCard}
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
+              />
+            </View>
+            <View style={styles.kpiRow}>
+              <KPICard
+                title="Fleet Utilization"
+                value={`${kpiData.fleetUtilization}%`}
+                subtitle={fleetSubtitle}
+                icon={<TruckIcon size={20} color={COLORS.primary} />}
+                iconColor={COLORS.primary}
+                style={styles.kpiCard}
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
+              />
+              <KPICard
+                title="Active Bookings"
+                value={String(kpiData.activeBookings)}
+                subtitle={`${kpiData.confirmedBookings} confirmed | ${kpiData.pendingBookings} pending`}
+                icon={<CalendarIcon size={20} color={COLORS.purple} />}
+                iconColor={COLORS.purple}
+                style={styles.kpiCard}
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Bookings' })}
+              />
+            </View>
+          </FadeSlideIn>
+        )}
 
         {/* Outstanding Payments Card */}
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Finance"
             title="Outstanding Payments"
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
+            onPress={() => setShowOutstandingModal(true)}
             actionLabel="View all"
           />
           <OutstandingPaymentsCard
@@ -842,6 +884,7 @@ export function DashboardScreen() {
             count={kpiData.outstandingPaymentsCount}
             currency={currency}
             loading={loading}
+            onPress={() => setShowOutstandingModal(true)}
           />
         </View>
 
@@ -962,6 +1005,79 @@ export function DashboardScreen() {
         vehicles={vehicles.map(v => ({ id: v.id, name: `${v.make} ${v.model}`, plate_number: v.license_plate, status: v.status }))}
         userId={user?.id}
       />
+
+      {/* Outstanding Payments Modal */}
+      <Modal
+        visible={showOutstandingModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowOutstandingModal(false)}
+      >
+        <SafeAreaView style={styles.opModal}>
+          {/* Header */}
+          <View style={styles.opHeader}>
+            <View>
+              <Text style={styles.opHeaderEyebrow}>FINANCE</Text>
+              <Text style={styles.opHeaderTitle}>Outstanding Payments</Text>
+            </View>
+            <TouchableOpacity style={styles.opCloseBtn} onPress={() => setShowOutstandingModal(false)}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#6C6C70" strokeWidth={2.5} strokeLinecap="round">
+                <Path d="M18 6L6 18" /><Path d="M6 6l12 12" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          {/* Summary bar */}
+          <View style={styles.opSummary}>
+            <View style={styles.opSummaryItem}>
+              <Text style={styles.opSummaryLabel}>Total Outstanding</Text>
+              <Text style={styles.opSummaryValue}>{formatCurrency(kpiData.outstandingPaymentsTotal, currency)}</Text>
+            </View>
+            <View style={styles.opSummaryDivider} />
+            <View style={styles.opSummaryItem}>
+              <Text style={styles.opSummaryLabel}>Bookings</Text>
+              <Text style={[styles.opSummaryValue, { color: COLORS.danger }]}>{kpiData.outstandingPaymentsCount}</Text>
+            </View>
+          </View>
+
+          {/* List */}
+          <FlatList<OutstandingPaymentData>
+            data={calculations.outstandingPayments}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.opList}
+            ListEmptyComponent={
+              <View style={styles.opEmpty}>
+                <Text style={styles.opEmptyText}>No outstanding payments</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const statusColors: Record<string, string> = {
+                'In-Progress': '#34A853',
+                'Confirmed':   '#8B6B3E',
+                'Pending':     '#F5A623',
+              };
+              const statusColor = statusColors[item.status || ''] || '#6C6C70';
+              return (
+                <View style={styles.opRow}>
+                  <View style={styles.opRowLeft}>
+                    <Text style={styles.opRowRef}>{item.booking_number || item.id.slice(0, 10).toUpperCase()}</Text>
+                    <Text style={styles.opRowClient} numberOfLines={1}>{item.client_name}</Text>
+                    <View style={[styles.opStatusPill, { backgroundColor: statusColor + '18', borderColor: statusColor + '55' }]}>
+                      <View style={[styles.opStatusDot, { backgroundColor: statusColor }]} />
+                      <Text style={[styles.opStatusText, { color: statusColor }]}>{item.status || 'Pending'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.opRowRight}>
+                    <Text style={styles.opRowBalance}>{formatCurrency(item.balance_due, item.currency)}</Text>
+                    <Text style={styles.opRowLabel}>Balance Due</Text>
+                    <Text style={styles.opRowPaid}>Paid: {formatCurrency(item.amount_paid, item.currency)}</Text>
+                  </View>
+                </View>
+              );
+            }}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -994,7 +1110,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#264a42',
+    backgroundColor: '#4A2E12',
     opacity: 0.32,
   },
   headerGlowRight: {
@@ -1051,16 +1167,16 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#d3c7b5',
+    color: '#D4B896',
     marginTop: 2,
   },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(31,77,69,0.55)',
+    backgroundColor: 'rgba(139,107,62,0.45)',
     borderWidth: 1,
-    borderColor: 'rgba(61,143,106,0.4)',
+    borderColor: 'rgba(198,165,99,0.4)',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1069,12 +1185,12 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#3d8f6a',
+    backgroundColor: '#C6A563',
   },
   livePillText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#a8d9bc',
+    color: '#E8CC9A',
     letterSpacing: 0.6,
   },
   logoutButton: {
@@ -1102,7 +1218,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 8,
-    shadowColor: '#201a13',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -1150,7 +1266,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#264a42',
+    backgroundColor: '#4A2E12',
     opacity: 0.36,
   },
   heroGlowRight: {
@@ -1192,7 +1308,7 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#d3c7b5',
+    color: '#D4B896',
   },
   heroBadge: {
     paddingHorizontal: 12,
@@ -1218,7 +1334,7 @@ const styles = StyleSheet.create({
   },
   heroCaption: {
     fontSize: 14,
-    color: '#cbbca7',
+    color: '#C8AD8A',
     marginBottom: 18,
   },
   heroStatsRow: {
@@ -1237,7 +1353,7 @@ const styles = StyleSheet.create({
   heroStatLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#b8ab95',
+    color: '#C4A882',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 6,
@@ -1249,7 +1365,7 @@ const styles = StyleSheet.create({
   },
   heroStatArrow: {
     fontSize: 11,
-    color: '#b8ab95',
+    color: '#C4A882',
     marginTop: 4,
   },
   controlsCard: {
@@ -1259,7 +1375,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 18,
-    shadowColor: '#201a13',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.05,
     shadowRadius: 18,
@@ -1324,7 +1440,7 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
   },
   filterChipTextActive: {
-    color: '#fffdf7',
+    color: '#FFFFFF',
   },
   filterStatusContainer: {
     marginTop: 8,
@@ -1438,6 +1554,154 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.primary,
     textDecorationLine: 'underline',
+  },
+  // Outstanding Payments Modal
+  opModal: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  opHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+  },
+  opHeaderEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primary,
+    letterSpacing: 1.2,
+    marginBottom: 2,
+  },
+  opHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
+  opCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  opSummary: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    overflow: 'hidden',
+  },
+  opSummaryItem: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  opSummaryDivider: {
+    width: 1,
+    backgroundColor: '#E5E5EA',
+  },
+  opSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  opSummaryValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
+  opList: {
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+  },
+  opRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5ECD9',
+  },
+  opRowLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  opRowRef: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  opRowClient: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textMuted,
+    marginBottom: 6,
+  },
+  opStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 4,
+  },
+  opStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  opStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  opRowRight: {
+    alignItems: 'flex-end',
+  },
+  opRowBalance: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.danger,
+    letterSpacing: -0.3,
+  },
+  opRowLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  opRowPaid: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.success,
+    marginTop: 4,
+  },
+  opEmpty: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  opEmptyText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.textMuted,
   },
 });
 
