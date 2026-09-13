@@ -298,17 +298,20 @@ export function TransactionDetailModal({
   const requesterId   = (cr as any).requester_id as string | undefined;
   const approverId    = (cr as any).approver_id  as string | undefined;
 
-  // A user may approve only when:
-  //  1. The CR is still Pending
-  //  2. They are the designated approver for this CR (matched by UUID or email)
-  //  3. They are NOT the person who submitted it (even admins cannot self-approve)
-  const approverEmail  = cr.approver?.email ?? null;
-  const isSubmitter    = !!currentUserId && currentUserId === requesterId;
-  const isApproverById = !!currentUserId && !!approverId && currentUserId === approverId;
+  // canApprove rules:
+  //  1. CR must still be Pending
+  //  2. The current user must NOT be the submitter (no self-approval)
+  //  3a. If a specific approver is designated (approver_id set): only that person sees buttons
+  //  3b. If no approver is designated (approver_id null): any non-submitter may approve
+  //      — prevents CRs from being permanently stuck with no actionable approver
+  const approverEmail     = cr.approver?.email ?? null;
+  const isSubmitter       = !!currentUserId && !!requesterId && currentUserId === requesterId;
+  const isApproverById    = !!currentUserId && !!approverId && currentUserId === approverId;
   const isApproverByEmail = !!currentUserEmail && !!approverEmail &&
     currentUserEmail.toLowerCase() === approverEmail.toLowerCase();
-  const isApprover     = isApproverById || isApproverByEmail;
-  const canApprove     = isPending && isApprover && !isSubmitter;
+  const isApprover            = isApproverById || isApproverByEmail;
+  const hasDesignatedApprover = !!approverId;
+  const canApprove = isPending && !isSubmitter && (!hasDesignatedApprover || isApprover);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -372,12 +375,14 @@ export function TransactionDetailModal({
             </View>
           )}
 
-          {/* Approve / Decline — only for the designated approver, never the submitter */}
+          {/* Approve / Decline — designated approver, or any non-submitter when no approver is set */}
           {isPending && canApprove && (
             <View style={styles.approvalCard}>
               <Text style={styles.approvalTitle}>Approval Action</Text>
               <Text style={styles.approvalSub}>
-                This requisition is awaiting your approval. You are the designated approver.
+                {hasDesignatedApprover
+                  ? 'This requisition is awaiting your approval. You are the designated approver.'
+                  : 'No specific approver was assigned. As a non-submitter, you can action this requisition.'}
               </Text>
               <View style={styles.approvalBtns}>
                 <TouchableOpacity
@@ -410,7 +415,9 @@ export function TransactionDetailModal({
           {isPending && isSubmitter && (
             <View style={styles.selfSubmitNotice}>
               <Text style={styles.selfSubmitText}>
-                You submitted this requisition and cannot approve it. The assigned approver will review it.
+                {hasDesignatedApprover
+                  ? 'You submitted this requisition and cannot approve it. The assigned approver will review it.'
+                  : 'You submitted this requisition and cannot approve it. Another team member will need to review it.'}
               </Text>
             </View>
           )}
