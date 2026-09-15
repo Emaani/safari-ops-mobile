@@ -978,7 +978,7 @@ function MarketingCommandCenterTab() {
       {/* ── SECTION 2: Traffic Channels ─────────────────────────────────────── */}
       {ch && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Source / Medium Breakdown  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <Text style={cc.sectTitle}>Channel Breakdown  <Text style={cc.sourceTagInline}>GA4</Text></Text>
           {(Object.entries(ch) as [string, number][])
             .filter(([, v]) => v > 0)
             .sort(([,a],[,b]) => b - a)
@@ -997,6 +997,29 @@ function MarketingCommandCenterTab() {
                 </View>
               );
             })}
+        </View>
+      )}
+
+      {/* Source / Medium detailed rows */}
+      {ga4 && ga4.sourceMedium.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Source / Medium  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          {ga4.sourceMedium.slice(0, 10).map((r, i) => {
+            const color = CHANNEL_COLORS[r.source] || C.textMuted;
+            return (
+              <View key={i} style={cc.funnelRow}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
+                <Text style={[cc.funnelLabel, { width: 90 }]} numberOfLines={1}>
+                  {r.source} / {r.medium}
+                </Text>
+                <View style={{ flex: 1, height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
+                  <View style={{ height: 5, width: `${r.pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
+                </View>
+                <Text style={[cc.funnelCount, { color, minWidth: 40, textAlign: 'right' }]}>{r.sessions.toLocaleString()}</Text>
+                <Text style={[cc.kpiSub, { minWidth: 28, textAlign: 'right' }]}>{r.pct}%</Text>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -1282,10 +1305,13 @@ function WebsiteAnalyticsTab() {
           {/* KPI strip */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             {[
-              { label: 'Sessions',   value: s.sessions.toLocaleString(),        color: C.primary },
-              { label: 'Users',      value: s.activeUsers.toLocaleString(),     color: C.gold    },
-              { label: 'New Users',  value: s.newUsers.toLocaleString(),        color: C.success },
-              { label: 'Page Views', value: s.screenPageViews.toLocaleString(), color: '#7c3aed' },
+              { label: 'Sessions',    value: s.sessions.toLocaleString(),        color: C.primary },
+              { label: 'Users',       value: s.activeUsers.toLocaleString(),     color: C.gold    },
+              { label: 'New Users',   value: s.newUsers.toLocaleString(),        color: C.success },
+              { label: 'Page Views',  value: s.screenPageViews.toLocaleString(), color: '#7c3aed' },
+              { label: 'Key Events',  value: s.keyEvents.toLocaleString(),       color: C.danger  },
+              { label: 'Engage Rate', value: `${s.sessions > 0 ? Math.round((s.engagedSessions / s.sessions) * 100) : 0}%`, color: '#0891b2' },
+              { label: 'Avg Engage',  value: `${Math.round(s.userEngagementDuration / Math.max(s.sessions, 1))}s`, color: '#d97706' },
             ].map(k => (
               <View key={k.label} style={cc.kpiCard}>
                 <Text style={cc.kpiLabel}>{k.label}</Text>
@@ -1314,6 +1340,47 @@ function WebsiteAnalyticsTab() {
                     </View>
                   );
                 })}
+            </View>
+          )}
+
+          {/* Source / Medium breakdown */}
+          {ga4!.sourceMedium.length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Source / Medium</Text>
+              {ga4!.sourceMedium.slice(0, 12).map((r, i) => {
+                const color = CHANNEL_COLORS[r.source] || C.textMuted;
+                return (
+                  <View key={i} style={cc.funnelRow}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
+                    <Text style={[cc.funnelLabel, { width: 90 }]} numberOfLines={1}>
+                      {r.source} / {r.medium}
+                    </Text>
+                    <View style={{ flex: 1, height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
+                      <View style={{ height: 5, width: `${r.pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
+                    </View>
+                    <Text style={[cc.funnelCount, { color, minWidth: 40, textAlign: 'right' }]}>{r.sessions.toLocaleString()}</Text>
+                    <Text style={[cc.kpiSub, { minWidth: 28, textAlign: 'right' }]}>{r.pct}%</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Social Traffic */}
+          {Object.keys(ga4!.socialTraffic).length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Social Traffic</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {Object.entries(ga4!.socialTraffic)
+                  .sort(([,a],[,b]) => (b as number) - (a as number))
+                  .map(([platform, sessions]) => (
+                    <View key={platform} style={cc.socialCard}>
+                      <Text style={cc.socialName}>{platform.charAt(0).toUpperCase() + platform.slice(1)}</Text>
+                      <Text style={cc.socialVal}>{(sessions as number).toLocaleString()}</Text>
+                      <Text style={cc.kpiSub}>sessions</Text>
+                    </View>
+                  ))}
+              </View>
             </View>
           )}
 
