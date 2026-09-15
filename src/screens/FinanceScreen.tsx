@@ -738,6 +738,16 @@ export function FinanceScreen() {
     [cashRequisitions]
   );
 
+  const RATES: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+  const toDisplayAmt = (amount: number, fromCurrency: string) =>
+    (amount / (RATES[fromCurrency] || 1)) * (RATES[currency] || 1);
+
+  const filteredTotals = useMemo(() => {
+    const totalIn  = filteredRevenue.reduce((s, i) => s + toDisplayAmt(i.amount, i.currency), 0);
+    const totalOut = filteredExpenses.reduce((s, i) => s + toDisplayAmt(i.amount, i.currency), 0);
+    return { totalIn, totalOut, net: totalIn - totalOut };
+  }, [filteredRevenue, filteredExpenses, currency]);
+
   // ── Callbacks ─────────────────────────────────────────────────────────────
 
   const handleRefresh = useCallback(async () => {
@@ -1018,6 +1028,28 @@ export function FinanceScreen() {
         </View>
       </FadeSlideIn>
 
+      {/* Totals bar — revenue & expenses tabs only */}
+      {(activeTab === 'revenue' || activeTab === 'expenses') && (
+        <View style={styles.totalsBar}>
+          <View style={styles.totalsItem}>
+            <Text style={styles.totalsLabel}>Total In</Text>
+            <Text style={[styles.totalsValue, { color: COLORS.income }]}>{formatCurrency(filteredTotals.totalIn, currency)}</Text>
+          </View>
+          <View style={styles.totalsDivider} />
+          <View style={styles.totalsItem}>
+            <Text style={styles.totalsLabel}>Total Out</Text>
+            <Text style={[styles.totalsValue, { color: COLORS.expense }]}>{formatCurrency(filteredTotals.totalOut, currency)}</Text>
+          </View>
+          <View style={styles.totalsDivider} />
+          <View style={styles.totalsItem}>
+            <Text style={styles.totalsLabel}>Net</Text>
+            <Text style={[styles.totalsValue, { color: filteredTotals.net >= 0 ? COLORS.income : COLORS.expense }]}>
+              {filteredTotals.net >= 0 ? '+' : ''}{formatCurrency(filteredTotals.net, currency)}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Content */}
       {activeTab === 'revenue' && (
         <FlatList
@@ -1202,6 +1234,37 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', paddingVertical: 48 },
   emptyTitle:     { fontSize: 16, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
   emptyMessage:   { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+
+  // Totals bar
+  totalsBar: {
+    flexDirection:   'row',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  totalsItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  totalsLabel: {
+    fontSize:      10,
+    fontWeight:    '600',
+    color:         COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom:  2,
+  },
+  totalsValue: {
+    fontSize:   14,
+    fontWeight: '700',
+  },
+  totalsDivider: {
+    width:           1,
+    backgroundColor: COLORS.border,
+    marginVertical:  2,
+  },
 });
 
 export default FinanceScreen;

@@ -195,6 +195,18 @@ export function FleetScreen() {
       );
     }
 
+    // Sort: booked/rented first (on safari), then available, then maintenance/out_of_service
+    const STATUS_PRIORITY: Record<string, number> = {
+      booked:          0,
+      rented:          0,
+      available:       1,
+      maintenance:     2,
+      out_of_service:  3,
+    };
+    result = [...result].sort(
+      (a, b) => (STATUS_PRIORITY[a.status] ?? 4) - (STATUS_PRIORITY[b.status] ?? 4)
+    );
+
     devLog(`[FleetScreen] Filtered ${result.length} vehicles from ${vehicles.length}`);
 
     return result;

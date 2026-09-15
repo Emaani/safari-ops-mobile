@@ -1,8 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Svg, Path, Rect } from 'react-native-svg';
+import { Svg, Path } from 'react-native-svg';
+import { formatDistanceToNow } from 'date-fns';
 import type { CashRequisition } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
+
+function crAge(createdAt: string): { label: string; warn: boolean } {
+  try {
+    const created = new Date(createdAt);
+    const diffDays = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+    const label = formatDistanceToNow(created, { addSuffix: true });
+    return { label, warn: diffDays > 5 };
+  } catch {
+    return { label: '', warn: false };
+  }
+}
 
 // ============================================================================
 // CONSTANTS
@@ -62,6 +74,7 @@ export function CRCard({ cr, onPress, displayCurrency = 'USD' }: CRCardProps) {
   const statusColors = STATUS_COLORS[cr.status] || STATUS_COLORS.Pending;
   const date = new Date(cr.created_at).toLocaleDateString();
   const dateNeeded = cr.date_needed ? new Date(cr.date_needed).toLocaleDateString() : 'N/A';
+  const age = crAge(cr.created_at);
 
   // Simple currency conversion
   const convertAmount = (amount: number, fromCurrency: string): number => {
@@ -114,6 +127,9 @@ export function CRCard({ cr, onPress, displayCurrency = 'USD' }: CRCardProps) {
         </View>
         <View style={styles.footer}>
           <Text style={styles.footerText}>Created: {date}</Text>
+          <Text style={[styles.footerAge, age.warn && styles.footerAgeWarn]}>
+            {age.label}{age.warn ? ' ⚠️' : ''}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -194,10 +210,21 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   footer: {
-    marginTop: 8,
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    alignItems:     'center',
+    marginTop:      8,
   },
   footerText: {
     fontSize: 11,
     color: COLORS.textMuted,
+  },
+  footerAge: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  footerAgeWarn: {
+    color: COLORS.warning,
+    fontWeight: '600',
   },
 });

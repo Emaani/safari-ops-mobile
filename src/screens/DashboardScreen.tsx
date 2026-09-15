@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Dimensions,
   TouchableOpacity,
-  Alert,
   Modal,
   FlatList,
   Animated,
@@ -17,7 +16,7 @@ import { tapLight, selectionTick } from '../lib/haptics';
 import { useNavigation } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
-import { devLog, devError } from '../lib/devLog';
+import { devLog } from '../lib/devLog';
 
 // Hooks
 import { useExchangeRate, getConversionRates } from '../hooks/useExchangeRate';
@@ -186,16 +185,6 @@ function AddSafariIcon({ size = 24, color = COLORS.success }: { size?: number; c
   );
 }
 
-function LogoutIcon({ size = 24, color = COLORS.danger }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <Path d="M16 17l5-5-5-5" />
-      <Path d="M21 12H9" />
-    </Svg>
-  );
-}
-
 // ============================================================================
 // SECTION HEADER COMPONENT
 // ============================================================================
@@ -339,7 +328,7 @@ export function DashboardScreen() {
   // AUTH
   // ========================================================================
 
-  const { signOut, user } = useAuth();
+  const { user } = useAuth();
   const navigation = useNavigation<any>();
 
   // ========================================================================
@@ -441,7 +430,7 @@ export function DashboardScreen() {
       calculations.kpis.totalExpenses === 0 &&
       calculations.kpis.activeBookings === 0
     ) {
-      devError('[Dashboard] WARNING: All KPIs are zero — data may not be loading correctly.',
+      devLog('[Dashboard] WARNING: All KPIs are zero — data may not be loading correctly.',
         'Vehicles:', vehicles.length,
         'Bookings:', bookings.length,
         'Transactions:', financialTransactions.length,
@@ -492,30 +481,6 @@ export function DashboardScreen() {
     setDashboardFilterYear(value);
   }, []);
 
-  const handleLogout = useCallback(async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              devError('[Dashboard] Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  }, [signOut]);
 
   // ========================================================================
   // PREPARED DATA
@@ -669,12 +634,6 @@ export function DashboardScreen() {
               <Animated.View style={[styles.liveDot, { opacity: livePulse }]} />
               <Text style={styles.livePillText}>Live</Text>
             </View>
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={handleLogout}
-            >
-              <LogoutIcon size={18} color="#C4A882" />
-            </TouchableOpacity>
           </View>
         </View>
       </View>
