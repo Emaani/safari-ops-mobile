@@ -753,14 +753,37 @@ const fabSt = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CHANNEL_COLORS: Record<string, string> = {
-  Organic:  C.success,
-  Direct:   C.primary,
-  Social:   '#7c3aed',
-  Paid:     C.gold,
-  Referral: '#0891b2',
-  Email:    '#d97706',
-  Other:    C.textMuted,
+  // Grouped channels (from ga4.channels)
+  Organic:   C.success,
+  Direct:    C.primary,
+  Social:    '#7c3aed',
+  Paid:      C.gold,
+  Referral:  '#0891b2',
+  Email:     '#d97706',
+  Other:     C.textMuted,
+  // Individual sources (from ga4.sourceMedium rows)
+  google:    C.success,
+  bing:      '#0078D4',
+  yahoo:     '#6001D2',
+  facebook:  '#1877F2',
+  instagram: '#E1306C',
+  tiktok:    '#010101',
+  twitter:   '#1DA1F2',
+  x:         '#1DA1F2',
+  linkedin:  '#0A66C2',
+  youtube:   '#FF0000',
+  pinterest: '#E60023',
+  '(direct)': C.primary,
+  '(none)':   C.textMuted,
 };
+
+function formatEngagement(totalSeconds: number, sessions: number): string {
+  const secs = Math.round(totalSeconds / Math.max(sessions, 1));
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
 
 const SOCIAL_ICONS: Record<string, string> = {
   facebook: 'fb', instagram: 'ig', tiktok: 'tt',
@@ -957,8 +980,8 @@ function MarketingCommandCenterTab() {
           { label: 'Users',      value: s.activeUsers.toLocaleString(),     color: C.gold     },
           { label: 'New Users',  value: s.newUsers.toLocaleString(),        color: C.success  },
           { label: 'Page Views', value: s.screenPageViews.toLocaleString(), color: '#7c3aed'  },
-          { label: 'Key Events', value: s.keyEvents.toLocaleString(),       color: C.danger   },
-          { label: 'Avg Engage', value: `${Math.round(s.userEngagementDuration / Math.max(s.sessions, 1))}s`, color: '#0891b2' },
+          { label: 'Key Events', value: s.keyEvents.toLocaleString(),                                  color: C.danger   },
+          { label: 'Avg Engage', value: formatEngagement(s.userEngagementDuration, s.sessions), color: '#0891b2' },
         ] : [
           // Supabase fallback — always populated from Jackal Dashboard data
           { label: 'Leads',          value: dbStats.leads.toLocaleString(),             color: C.primary  },
@@ -1311,7 +1334,7 @@ function WebsiteAnalyticsTab() {
               { label: 'Page Views',  value: s.screenPageViews.toLocaleString(), color: '#7c3aed' },
               { label: 'Key Events',  value: s.keyEvents.toLocaleString(),       color: C.danger  },
               { label: 'Engage Rate', value: `${s.sessions > 0 ? Math.round((s.engagedSessions / s.sessions) * 100) : 0}%`, color: '#0891b2' },
-              { label: 'Avg Engage',  value: `${Math.round(s.userEngagementDuration / Math.max(s.sessions, 1))}s`, color: '#d97706' },
+              { label: 'Avg Engage',  value: formatEngagement(s.userEngagementDuration, s.sessions), color: '#d97706' },
             ].map(k => (
               <View key={k.label} style={cc.kpiCard}>
                 <Text style={cc.kpiLabel}>{k.label}</Text>
