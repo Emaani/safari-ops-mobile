@@ -1292,15 +1292,23 @@ function WebsiteAnalyticsTab() {
 
   if (loading) return <LoadingView label="Loading analytics…" />;
 
-  const s  = ga4?.summary;
-  const ch = ga4?.channels;
+  const eng = ga4?.engagement;
+  const ch  = ga4?.channels;
   const totalCh = ch ? Object.values(ch).reduce((a, b) => a + b, 0) || 1 : 1;
+
+  const fmtSecs = (s: number) => {
+    if (!s || !isFinite(s)) return '0s';
+    const m = Math.floor(s / 60);
+    const sec = Math.round(s % 60);
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  };
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}>
 
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+      {/* Date range + Live GA4 badge */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         {(['7d','30d','90d'] as DatePreset[]).map(p => (
           <TouchableOpacity key={p} style={[cc.periodBtn, period === p && cc.periodBtnOn]} onPress={() => setPeriod(p)}>
             <Text style={[cc.periodT, period === p && cc.periodTOn]}>
@@ -1308,13 +1316,22 @@ function WebsiteAnalyticsTab() {
             </Text>
           </TouchableOpacity>
         ))}
-        {stale && <Text style={{ fontSize: 10, color: C.textMuted, alignSelf: 'center' }}>Cached</Text>}
+        <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4,
+          backgroundColor: ga4 && !stale ? '#d1fae5' : C.border,
+          borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+          <View style={{ width: 5, height: 5, borderRadius: 3,
+            backgroundColor: ga4 && !stale ? C.success : C.textMuted }} />
+          <Text style={{ fontSize: 10, fontWeight: '600',
+            color: ga4 && !stale ? C.success : C.textMuted }}>
+            {ga4 && !stale ? 'Live GA4' : stale ? 'Cached' : 'No Data'}
+          </Text>
+        </View>
       </View>
 
       {unavailable && (
         <View style={cc.warnBanner}>
           <Text style={cc.warnText}>GA4 Not Connected</Text>
-          <Text style={cc.warnSub}>Set GA4_SERVICE_ACCOUNT_JSON and GA4_PROPERTY_ID in Supabase Edge Function secrets to enable live analytics.</Text>
+          <Text style={cc.warnSub}>Set GA4_SERVICE_ACCOUNT_JSON and GA4_PROPERTY_ID in Supabase Edge Function secrets.</Text>
         </View>
       )}
       {error && !unavailable && (
@@ -1323,50 +1340,79 @@ function WebsiteAnalyticsTab() {
         </View>
       )}
 
-      {s && (
+      {eng ? (
         <>
-          {/* KPI strip */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-            {[
-              { label: 'Sessions',    value: s.sessions.toLocaleString(),        color: C.primary },
-              { label: 'Users',       value: s.activeUsers.toLocaleString(),     color: C.gold    },
-              { label: 'New Users',   value: s.newUsers.toLocaleString(),        color: C.success },
-              { label: 'Page Views',  value: s.screenPageViews.toLocaleString(), color: '#7c3aed' },
-              { label: 'Key Events',  value: s.keyEvents.toLocaleString(),       color: C.danger  },
-              { label: 'Engage Rate', value: `${s.sessions > 0 ? Math.round((s.engagedSessions / s.sessions) * 100) : 0}%`, color: '#0891b2' },
-              { label: 'Avg Engage',  value: formatEngagement(s.userEngagementDuration, s.sessions), color: '#d97706' },
-            ].map(k => (
-              <View key={k.label} style={cc.kpiCard}>
-                <Text style={cc.kpiLabel}>{k.label}</Text>
-                <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
+          {/* ── Engagement Metrics (8 KPIs matching web) ── */}
+          <View style={cc.sect}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Text style={cc.sectTitle}>Engagement Metrics</Text>
+              <View style={{ backgroundColor: C.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 9, color: C.textMuted, fontWeight: '600' }}>From Google Analytics</Text>
               </View>
-            ))}
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              {[
+                { label: 'Total Users',        value: eng.totalUsers.toLocaleString(),          color: C.primary },
+                { label: 'New Users',           value: eng.newUsers.toLocaleString(),            color: C.success },
+                { label: 'Returning Users',     value: eng.returningUsers.toLocaleString(),      color: C.gold    },
+                { label: 'Avg Engage / User',   value: fmtSecs(eng.avgEngagementTimePerUser),    color: '#0891b2' },
+                { label: 'Engaged Sess / User', value: eng.engagedSessionsPerUser.toFixed(2),    color: '#7c3aed' },
+                { label: 'Event Count',         value: eng.eventCount.toLocaleString(),          color: '#d97706' },
+                { label: 'Conversions',         value: eng.keyEvents.toLocaleString(),           color: C.danger  },
+                { label: 'Conversion Rate',     value: eng.userKeyEventRate.toFixed(2),          color: '#0891b2' },
+              ].map(k => (
+                <View key={k.label} style={cc.kpiCard}>
+                  <Text style={cc.kpiLabel}>{k.label}</Text>
+                  <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
+                </View>
+              ))}
+            </View>
           </View>
 
-          {/* Channels */}
+          {/* ── Top Conversions ── */}
+          {eng.keyEventsList.length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Top Conversions</Text>
+              {eng.keyEventsList.slice(0, 8).map((k, i) => (
+                <View key={i} style={[cc.funnelRow, {
+                  borderBottomWidth: i < eng.keyEventsList.length - 1 ? 1 : 0,
+                  borderBottomColor: C.border, paddingBottom: 7, marginBottom: 4,
+                }]}>
+                  <Text style={[cc.funnelLabel, { flex: 1 }]} numberOfLines={1}>{k.eventName}</Text>
+                  <Text style={[cc.kpiSub, { marginRight: 12 }]}>{k.eventCount.toLocaleString()} events</Text>
+                  <Text style={[cc.funnelCount, { color: C.primary, fontWeight: '700', minWidth: 60, textAlign: 'right' }]}>
+                    {k.keyEvents.toLocaleString()} conv
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* ── Traffic Sources (Channels) ── */}
           {ch && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Traffic by Channel</Text>
+              <Text style={cc.sectTitle}>Traffic Sources</Text>
               {(Object.entries(ch) as [string, number][])
                 .filter(([,v]) => v > 0).sort(([,a],[,b]) => b - a)
-                .map(([ch_, sessions]) => {
+                .map(([channel, sessions]) => {
                   const pct   = Math.round((sessions / totalCh) * 100);
-                  const color = CHANNEL_COLORS[ch_] || C.textMuted;
+                  const color = CHANNEL_COLORS[channel] || C.textMuted;
                   return (
-                    <View key={ch_} style={cc.funnelRow}>
+                    <View key={channel} style={cc.funnelRow}>
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
-                      <Text style={[cc.funnelLabel, { width: 68 }]}>{ch_}</Text>
+                      <Text style={[cc.funnelLabel, { width: 68 }]}>{channel}</Text>
                       <View style={{ flex: 1, height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
                         <View style={{ height: 5, width: `${pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
                       </View>
-                      <Text style={[cc.funnelCount, { color, minWidth: 46, textAlign: 'right' }]}>{sessions.toLocaleString()}</Text>
+                      <Text style={[cc.kpiSub, { minWidth: 30, textAlign: 'right', marginRight: 4 }]}>{pct}%</Text>
+                      <Text style={[cc.funnelCount, { color, minWidth: 44, textAlign: 'right' }]}>{sessions.toLocaleString()}</Text>
                     </View>
                   );
                 })}
             </View>
           )}
 
-          {/* Source / Medium breakdown */}
+          {/* ── Source / Medium detail ── */}
           {ga4!.sourceMedium.length > 0 && (
             <View style={cc.sect}>
               <Text style={cc.sectTitle}>Source / Medium</Text>
@@ -1375,24 +1421,80 @@ function WebsiteAnalyticsTab() {
                 return (
                   <View key={i} style={cc.funnelRow}>
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 6 }} />
-                    <Text style={[cc.funnelLabel, { width: 90 }]} numberOfLines={1}>
+                    <Text style={[cc.funnelLabel, { flex: 1 }]} numberOfLines={1}>
                       {r.source} / {r.medium}
                     </Text>
-                    <View style={{ flex: 1, height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginHorizontal: 8 }}>
-                      <View style={{ height: 5, width: `${r.pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
-                    </View>
-                    <Text style={[cc.funnelCount, { color, minWidth: 40, textAlign: 'right' }]}>{r.sessions.toLocaleString()}</Text>
-                    <Text style={[cc.kpiSub, { minWidth: 28, textAlign: 'right' }]}>{r.pct}%</Text>
+                    <Text style={[cc.kpiSub, { marginRight: 8 }]}>{r.pct}%</Text>
+                    <Text style={[cc.funnelCount, { color, minWidth: 44, textAlign: 'right' }]}>{r.sessions.toLocaleString()}</Text>
                   </View>
                 );
               })}
             </View>
           )}
 
-          {/* Social Traffic */}
+          {/* ── Device Distribution + Browser Breakdown ── */}
+          {ga4!.audience.devices.length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Device Distribution</Text>
+              {ga4!.audience.devices.map((d, i) => {
+                const color = [C.primary, C.success, C.gold][i] ?? C.textMuted;
+                return (
+                  <View key={i} style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <Text style={cc.pkgName}>{d.label.charAt(0).toUpperCase() + d.label.slice(1)}</Text>
+                      <Text style={cc.kpiSub}>{d.sessions.toLocaleString()} · {d.pct}%</Text>
+                    </View>
+                    <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3 }}>
+                      <View style={{ height: 5, width: `${d.pct}%` as any, backgroundColor: color, borderRadius: 3 }} />
+                    </View>
+                  </View>
+                );
+              })}
+              {ga4!.browserData && ga4!.browserData.length > 0 && (() => {
+                const total = ga4!.browserData!.reduce((s, b) => s + b.sessions, 0) || 1;
+                return (
+                  <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border }}>
+                    <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>Top Browsers</Text>
+                    {ga4!.browserData!.slice(0, 5).map((b, i) => {
+                      const pct = Math.round((b.sessions / total) * 100);
+                      return (
+                        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                          <Text style={[cc.funnelLabel, { width: 84 }]} numberOfLines={1}>{b.browser}</Text>
+                          <View style={{ flex: 1, height: 4, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden', marginHorizontal: 6 }}>
+                            <View style={{ height: 4, width: `${pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
+                          </View>
+                          <Text style={[cc.kpiSub, { minWidth: 32, textAlign: 'right' }]}>{pct}%</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })()}
+            </View>
+          )}
+
+          {/* ── Geographic Insights ── */}
+          {ga4!.audience.countries.length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Geographic Insights</Text>
+              {ga4!.audience.countries.slice(0, 8).map((c, i) => (
+                <View key={i} style={{ marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <Text style={cc.pkgName} numberOfLines={1}>{i + 1}. {c.label}</Text>
+                    <Text style={cc.kpiSub}>{c.sessions.toLocaleString()} sessions</Text>
+                  </View>
+                  <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2 }}>
+                    <View style={{ height: 4, width: `${c.pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* ── Social Media Traffic ── */}
           {Object.keys(ga4!.socialTraffic).length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Social Traffic</Text>
+              <Text style={cc.sectTitle}>Social Media Traffic</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                 {Object.entries(ga4!.socialTraffic)
                   .sort(([,a],[,b]) => (b as number) - (a as number))
@@ -1407,10 +1509,10 @@ function WebsiteAnalyticsTab() {
             </View>
           )}
 
-          {/* Top pages */}
+          {/* ── Top Performing Pages ── */}
           {ga4!.topPages.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Top Pages</Text>
+              <Text style={cc.sectTitle}>Top Performing Pages</Text>
               {ga4!.topPages.slice(0, 10).map((p, i) => (
                 <View key={i} style={cc.pkgRow}>
                   <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
@@ -1420,60 +1522,43 @@ function WebsiteAnalyticsTab() {
                       <View style={{ height: 3, width: `${p.pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
                     </View>
                   </View>
-                  <View style={{ alignItems: 'flex-end', minWidth: 52 }}>
+                  <View style={{ alignItems: 'flex-end', minWidth: 60 }}>
                     <Text style={cc.pkgBkgs}>{p.views.toLocaleString()}</Text>
-                    <Text style={cc.kpiSub}>{p.engagedSessions} eng</Text>
+                    <Text style={[cc.kpiSub, {
+                      color: (p.bounceRate ?? 0) > 70 ? C.danger : C.textMuted,
+                    }]}>
+                      {p.bounceRate !== undefined ? `${p.bounceRate}% bounce` : `${p.engagedSessions} eng`}
+                    </Text>
                   </View>
                 </View>
               ))}
             </View>
           )}
-
-          {/* Audience */}
-          {(ga4!.audience.countries.length > 0 || ga4!.audience.devices.length > 0) && (
-            <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Audience Insights</Text>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>Countries</Text>
-                  {ga4!.audience.countries.slice(0, 5).map((c, i) => (
-                    <View key={i} style={{ marginBottom: 6 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                        <Text style={cc.pkgName} numberOfLines={1}>{c.label}</Text>
-                        <Text style={cc.kpiSub}>{c.pct}%</Text>
-                      </View>
-                      <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
-                        <View style={{ height: 3, width: `${c.pct}%` as any, backgroundColor: C.primary, borderRadius: 2 }} />
-                      </View>
-                    </View>
-                  ))}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[cc.kpiLabel, { marginBottom: 8 }]}>Devices</Text>
-                  {ga4!.audience.devices.map((d, i) => (
-                    <View key={i} style={{ marginBottom: 6 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                        <Text style={cc.pkgName} numberOfLines={1}>{d.label}</Text>
-                        <Text style={cc.kpiSub}>{d.pct}%</Text>
-                      </View>
-                      <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
-                        <View style={{ height: 3, width: `${d.pct}%` as any, backgroundColor: C.gold, borderRadius: 2 }} />
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </View>
-          )}
         </>
-      )}
-
-      {!s && !unavailable && (
+      ) : ga4?.summary ? (
+        /* Fallback if engagement not yet populated (old edge function deployment) */
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+          {[
+            { label: 'Sessions',    value: ga4.summary.sessions.toLocaleString(),        color: C.primary },
+            { label: 'Users',       value: ga4.summary.activeUsers.toLocaleString(),     color: C.gold    },
+            { label: 'New Users',   value: ga4.summary.newUsers.toLocaleString(),        color: C.success },
+            { label: 'Page Views',  value: ga4.summary.screenPageViews.toLocaleString(), color: '#7c3aed' },
+            { label: 'Key Events',  value: ga4.summary.keyEvents.toLocaleString(),       color: C.danger  },
+            { label: 'Engage Rate', value: `${ga4.summary.sessions > 0 ? Math.round((ga4.summary.engagedSessions / ga4.summary.sessions) * 100) : 0}%`, color: '#0891b2' },
+            { label: 'Avg Engage',  value: formatEngagement(ga4.summary.userEngagementDuration, ga4.summary.sessions), color: '#d97706' },
+          ].map(k => (
+            <View key={k.label} style={cc.kpiCard}>
+              <Text style={cc.kpiLabel}>{k.label}</Text>
+              <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
+            </View>
+          ))}
+        </View>
+      ) : !unavailable ? (
         <View style={an.connectCard}>
           <Text style={an.connectTitle}>No Analytics Data</Text>
           <Text style={an.connectSub}>Pull down to refresh or check your GA4 configuration.</Text>
         </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 }

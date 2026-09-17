@@ -20,6 +20,7 @@ export interface GA4Summary {
   sessions: number;
   activeUsers: number;
   newUsers: number;
+  totalUsers: number;
   screenPageViews: number;
   userEngagementDuration: number;
   engagedSessions: number;
@@ -27,10 +28,24 @@ export interface GA4Summary {
   keyEvents: number;
 }
 
+export interface GA4Engagement {
+  totalUsers: number;
+  newUsers: number;
+  returningUsers: number;
+  avgEngagementTimePerUser: number; // seconds
+  engagedSessionsPerUser: number;
+  eventCount: number;
+  keyEvents: number;
+  userKeyEventRate: number;
+  keyEventsList: Array<{ eventName: string; keyEvents: number; eventCount: number }>;
+}
+
 export interface GA4DataPoint {
   date: string;      // YYYYMMDD
   sessions: number;
   activeUsers: number;
+  newUsers?: number;
+  pageviews?: number;
 }
 
 export interface GA4PageRow {
@@ -38,6 +53,7 @@ export interface GA4PageRow {
   views: number;
   sessions: number;
   engagedSessions: number;
+  bounceRate?: number;
   pct: number;
 }
 
@@ -80,6 +96,8 @@ export interface GA4Report {
     countries: GA4AudienceRow[];
     devices: GA4AudienceRow[];
   };
+  engagement?: GA4Engagement;
+  browserData?: Array<{ browser: string; sessions: number }>;
 }
 
 export type DatePreset = '7d' | '30d' | '90d';

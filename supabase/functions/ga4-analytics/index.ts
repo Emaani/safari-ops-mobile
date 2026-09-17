@@ -131,6 +131,7 @@ function buildSummary(report: any) {
     sessions:              get("sessions"),
     activeUsers:           get("activeUsers"),
     newUsers:              get("newUsers"),
+    totalUsers:            get("totalUsers"),
     screenPageViews:       get("screenPageViews"),
     userEngagementDuration: get("userEngagementDuration"),
     engagedSessions:       get("engagedSessions"),
@@ -146,10 +147,14 @@ function buildTimeSeries(report: any) {
     const dateIdx = dh.indexOf("date");
     const sessIdx = mh.indexOf("sessions");
     const usrIdx  = mh.indexOf("activeUsers");
+    const newIdx  = mh.indexOf("newUsers");
+    const pgIdx   = mh.indexOf("screenPageViews");
     return {
       date:        row.dimensionValues?.[dateIdx]?.value ?? "",
       sessions:    Number(row.metricValues?.[sessIdx]?.value ?? 0),
       activeUsers: Number(row.metricValues?.[usrIdx]?.value ?? 0),
+      newUsers:    newIdx >= 0 ? Number(row.metricValues?.[newIdx]?.value ?? 0) : 0,
+      pageviews:   pgIdx  >= 0 ? Number(row.metricValues?.[pgIdx]?.value  ?? 0) : 0,
     };
   });
 }
@@ -161,12 +166,19 @@ function buildTopPages(report: any) {
   const viewIdx  = mh.indexOf("screenPageViews");
   const sessIdx  = mh.indexOf("sessions");
   const engIdx   = mh.indexOf("engagedSessions");
-  const rows = (report.rows ?? []).map((row: any) => ({
-    path:           row.dimensionValues?.[pathIdx]?.value ?? "",
-    views:          Number(row.metricValues?.[viewIdx]?.value ?? 0),
-    sessions:       Number(row.metricValues?.[sessIdx]?.value ?? 0),
-    engagedSessions: Number(row.metricValues?.[engIdx]?.value ?? 0),
-  }));
+  const rows = (report.rows ?? []).map((row: any) => {
+    const views    = Number(row.metricValues?.[viewIdx]?.value ?? 0);
+    const sessions = Number(row.metricValues?.[sessIdx]?.value ?? 0);
+    const eng      = Number(row.metricValues?.[engIdx]?.value  ?? 0);
+    const bounceRate = sessions > 0 ? Math.round((1 - eng / sessions) * 100) : 0;
+    return {
+      path: row.dimensionValues?.[pathIdx]?.value ?? "",
+      views,
+      sessions,
+      engagedSessions: eng,
+      bounceRate,
+    };
+  });
   const totalViews = rows.reduce((s: number, r: any) => s + r.views, 0) || 1;
   return rows.map((r: any) => ({ ...r, pct: Math.round((r.views / totalViews) * 100) }));
 }
@@ -231,16 +243,17 @@ serve(async (req) => {
 
     const token = await getAccessToken(SA_JSON);
 
-    // Run all 5 reports in parallel
-    const [summaryRaw, timeSeriesRaw, pagesRaw, sourceRaw, countryRaw, deviceRaw] =
+    // Run all 8 reports in parallel
+    const [summaryRaw, timeSeriesRaw, pagesRaw, sourceRaw, countryRaw, deviceRaw, keyEventsRaw, browserRaw] =
       await Promise.all([
-        // 1. Summary totals
+        // 1. Summary totals (includes totalUsers for engagement object)
         runReport(PROPERTY_ID, token, {
           dateRanges,
           metrics: [
             { name: "sessions" },
             { name: "activeUsers" },
             { name: "newUsers" },
+            { name: "totalUsers" },
             { name: "screenPageViews" },
             { name: "userEngagementDuration" },
             { name: "engagedSessions" },
@@ -248,15 +261,20 @@ serve(async (req) => {
             { name: "keyEvents" },
           ],
         }),
-        // 2. Daily time series
+        // 2. Daily time series (includes newUsers + pageviews for charting)
         runReport(PROPERTY_ID, token, {
           dateRanges,
-          metrics: [{ name: "sessions" }, { name: "activeUsers" }],
+          metrics: [
+            { name: "sessions" },
+            { name: "activeUsers" },
+            { name: "newUsers" },
+            { name: "screenPageViews" },
+          ],
           dimensions: [{ name: "date" }],
           orderBys: [{ dimension: { dimensionName: "date" } }],
           limit: 90,
         }),
-        // 3. Top pages
+        // 3. Top pages (bounce rate derived from engagedSessions/sessions)
         runReport(PROPERTY_ID, token, {
           dateRanges,
           metrics: [
@@ -292,6 +310,22 @@ serve(async (req) => {
           orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
           limit: 5,
         }),
+        // 7. Key events breakdown by event name (Top Conversions table)
+        runReport(PROPERTY_ID, token, {
+          dateRanges,
+          metrics: [{ name: "keyEvents" }, { name: "eventCount" }],
+          dimensions: [{ name: "eventName" }],
+          orderBys: [{ metric: { metricName: "keyEvents" }, desc: true }],
+          limit: 10,
+        }),
+        // 8. Browser breakdown
+        runReport(PROPERTY_ID, token, {
+          dateRanges,
+          metrics: [{ name: "sessions" }],
+          dimensions: [{ name: "browser" }],
+          orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+          limit: 8,
+        }),
       ]);
 
     const summary    = buildSummary(summaryRaw);
@@ -299,6 +333,32 @@ serve(async (req) => {
     const topPages   = buildTopPages(pagesRaw);
     const sourceMedium = buildSourceMedium(sourceRaw);
     const audience   = buildAudience(countryRaw, deviceRaw);
+
+    // Build engagement object (matching web Marketing Console format)
+    const totalUsersVal = summary.totalUsers || summary.activeUsers;
+    const keyEventsList = ((keyEventsRaw as any).rows ?? []).map((row: any) => ({
+      eventName:  row.dimensionValues?.[0]?.value ?? "",
+      keyEvents:  Number(row.metricValues?.[0]?.value ?? 0),
+      eventCount: Number(row.metricValues?.[1]?.value ?? 0),
+    }));
+    const totalKeyEvents = keyEventsList.reduce((s: number, r: any) => s + r.keyEvents, 0);
+    const engagement = {
+      totalUsers:            totalUsersVal,
+      newUsers:              summary.newUsers,
+      returningUsers:        Math.max(0, totalUsersVal - summary.newUsers),
+      avgEngagementTimePerUser: totalUsersVal > 0 ? summary.userEngagementDuration / totalUsersVal : 0,
+      engagedSessionsPerUser:   totalUsersVal > 0 ? summary.engagedSessions / totalUsersVal : 0,
+      eventCount:            summary.eventCount,
+      keyEvents:             totalKeyEvents || summary.keyEvents,
+      userKeyEventRate:      totalUsersVal > 0 ? (totalKeyEvents || summary.keyEvents) / totalUsersVal : 0,
+      keyEventsList,
+    };
+
+    // Build browser data
+    const browserData = ((browserRaw as any).rows ?? []).map((row: any) => ({
+      browser:  row.dimensionValues?.[0]?.value ?? "Unknown",
+      sessions: Number(row.metricValues?.[0]?.value ?? 0),
+    }));
 
     // Derive social traffic channels
     const SOCIAL = ["facebook", "instagram", "tiktok", "twitter", "x", "linkedin", "youtube", "pinterest"];
@@ -336,6 +396,8 @@ serve(async (req) => {
         channels,
         socialTraffic,
         audience,
+        engagement,
+        browserData,
       }),
       { headers: CORS },
     );
