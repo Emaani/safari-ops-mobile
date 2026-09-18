@@ -1296,11 +1296,26 @@ function WebsiteAnalyticsTab() {
   const ch  = ga4?.channels;
   const totalCh = ch ? Object.values(ch).reduce((a, b) => a + b, 0) || 1 : 1;
 
-  const fmtSecs = (s: number) => {
-    if (!s || !isFinite(s)) return '0s';
-    const m = Math.floor(s / 60);
-    const sec = Math.round(s % 60);
-    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  // Derive engagement KPIs — prefer engagement object, fall back to summary
+  const s = ga4?.summary;
+  const totalUsers    = eng?.totalUsers    ?? s?.totalUsers ?? s?.activeUsers ?? 0;
+  const newUsers      = eng?.newUsers      ?? s?.newUsers ?? 0;
+  const returningUsers = eng?.returningUsers ?? Math.max(0, totalUsers - newUsers);
+  const avgEngTime    = eng?.avgEngagementTimePerUser
+    ?? (s && totalUsers > 0 ? s.userEngagementDuration / totalUsers : 0);
+  const engSessPerUser = eng?.engagedSessionsPerUser
+    ?? (s && totalUsers > 0 ? s.engagedSessions / totalUsers : 0);
+  const eventCount    = eng?.eventCount  ?? s?.eventCount ?? 0;
+  const keyEventsVal  = eng?.keyEvents   ?? s?.keyEvents  ?? 0;
+  const convRate      = eng?.userKeyEventRate
+    ?? (totalUsers > 0 ? keyEventsVal / totalUsers : 0);
+  const keyEventsList = eng?.keyEventsList ?? [];
+
+  const fmtSecs = (sec: number) => {
+    if (!sec || !isFinite(sec)) return '0s';
+    const m = Math.floor(sec / 60);
+    const r = Math.round(sec % 60);
+    return m > 0 ? `${m}m ${r}s` : `${r}s`;
   };
 
   return (
@@ -1328,19 +1343,7 @@ function WebsiteAnalyticsTab() {
         </View>
       </View>
 
-      {unavailable && (
-        <View style={cc.warnBanner}>
-          <Text style={cc.warnText}>GA4 Not Connected</Text>
-          <Text style={cc.warnSub}>Set GA4_SERVICE_ACCOUNT_JSON and GA4_PROPERTY_ID in Supabase Edge Function secrets.</Text>
-        </View>
-      )}
-      {error && !unavailable && (
-        <View style={[cc.warnBanner, { backgroundColor: '#FDE8C0' }]}>
-          <Text style={[cc.warnText, { color: '#7a5522' }]}>{error}</Text>
-        </View>
-      )}
-
-      {eng ? (
+      {ga4 && (
         <>
           {/* ── Engagement Metrics (8 KPIs matching web) ── */}
           <View style={cc.sect}>
@@ -1352,14 +1355,14 @@ function WebsiteAnalyticsTab() {
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               {[
-                { label: 'Total Users',        value: eng.totalUsers.toLocaleString(),          color: C.primary },
-                { label: 'New Users',           value: eng.newUsers.toLocaleString(),            color: C.success },
-                { label: 'Returning Users',     value: eng.returningUsers.toLocaleString(),      color: C.gold    },
-                { label: 'Avg Engage / User',   value: fmtSecs(eng.avgEngagementTimePerUser),    color: '#0891b2' },
-                { label: 'Engaged Sess / User', value: eng.engagedSessionsPerUser.toFixed(2),    color: '#7c3aed' },
-                { label: 'Event Count',         value: eng.eventCount.toLocaleString(),          color: '#d97706' },
-                { label: 'Conversions',         value: eng.keyEvents.toLocaleString(),           color: C.danger  },
-                { label: 'Conversion Rate',     value: eng.userKeyEventRate.toFixed(2),          color: '#0891b2' },
+                { label: 'Total Users',        value: totalUsers.toLocaleString(),          color: C.primary },
+                { label: 'New Users',           value: newUsers.toLocaleString(),            color: C.success },
+                { label: 'Returning Users',     value: returningUsers.toLocaleString(),      color: C.gold    },
+                { label: 'Avg Engage / User',   value: fmtSecs(avgEngTime),                  color: '#0891b2' },
+                { label: 'Engaged Sess / User', value: engSessPerUser.toFixed(2),            color: '#7c3aed' },
+                { label: 'Event Count',         value: eventCount.toLocaleString(),          color: '#d97706' },
+                { label: 'Conversions',         value: keyEventsVal.toLocaleString(),        color: C.danger  },
+                { label: 'Conversion Rate',     value: convRate.toFixed(2),                  color: '#0891b2' },
               ].map(k => (
                 <View key={k.label} style={cc.kpiCard}>
                   <Text style={cc.kpiLabel}>{k.label}</Text>
@@ -1370,12 +1373,12 @@ function WebsiteAnalyticsTab() {
           </View>
 
           {/* ── Top Conversions ── */}
-          {eng.keyEventsList.length > 0 && (
+          {keyEventsList.length > 0 && (
             <View style={cc.sect}>
               <Text style={cc.sectTitle}>Top Conversions</Text>
-              {eng.keyEventsList.slice(0, 8).map((k, i) => (
+              {keyEventsList.slice(0, 8).map((k, i) => (
                 <View key={i} style={[cc.funnelRow, {
-                  borderBottomWidth: i < eng.keyEventsList.length - 1 ? 1 : 0,
+                  borderBottomWidth: i < keyEventsList.length - 1 ? 1 : 0,
                   borderBottomColor: C.border, paddingBottom: 7, marginBottom: 4,
                 }]}>
                   <Text style={[cc.funnelLabel, { flex: 1 }]} numberOfLines={1}>{k.eventName}</Text>
@@ -1535,30 +1538,14 @@ function WebsiteAnalyticsTab() {
             </View>
           )}
         </>
-      ) : ga4?.summary ? (
-        /* Fallback if engagement not yet populated (old edge function deployment) */
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-          {[
-            { label: 'Sessions',    value: ga4.summary.sessions.toLocaleString(),        color: C.primary },
-            { label: 'Users',       value: ga4.summary.activeUsers.toLocaleString(),     color: C.gold    },
-            { label: 'New Users',   value: ga4.summary.newUsers.toLocaleString(),        color: C.success },
-            { label: 'Page Views',  value: ga4.summary.screenPageViews.toLocaleString(), color: '#7c3aed' },
-            { label: 'Key Events',  value: ga4.summary.keyEvents.toLocaleString(),       color: C.danger  },
-            { label: 'Engage Rate', value: `${ga4.summary.sessions > 0 ? Math.round((ga4.summary.engagedSessions / ga4.summary.sessions) * 100) : 0}%`, color: '#0891b2' },
-            { label: 'Avg Engage',  value: formatEngagement(ga4.summary.userEngagementDuration, ga4.summary.sessions), color: '#d97706' },
-          ].map(k => (
-            <View key={k.label} style={cc.kpiCard}>
-              <Text style={cc.kpiLabel}>{k.label}</Text>
-              <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
-            </View>
-          ))}
-        </View>
-      ) : !unavailable ? (
+      )}
+
+      {!ga4 && !loading && (
         <View style={an.connectCard}>
           <Text style={an.connectTitle}>No Analytics Data</Text>
-          <Text style={an.connectSub}>Pull down to refresh or check your GA4 configuration.</Text>
+          <Text style={an.connectSub}>Pull down to refresh.</Text>
         </View>
-      ) : null}
+      )}
     </ScrollView>
   );
 }

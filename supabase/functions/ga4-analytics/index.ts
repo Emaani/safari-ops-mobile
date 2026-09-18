@@ -243,9 +243,11 @@ serve(async (req) => {
 
     const token = await getAccessToken(SA_JSON);
 
-    // Run all 8 reports in parallel
-    const [summaryRaw, timeSeriesRaw, pagesRaw, sourceRaw, countryRaw, deviceRaw, keyEventsRaw, browserRaw] =
-      await Promise.all([
+    // Empty fallback for any report that fails individually
+    const emptyReport = { rows: [], totals: [], metricHeaders: [], dimensionHeaders: [] };
+
+    // Run all 8 reports in parallel — individual failures return empty data, never kill the whole response
+    const settled = await Promise.allSettled([
         // 1. Summary totals (includes totalUsers for engagement object)
         runReport(PROPERTY_ID, token, {
           dateRanges,
@@ -327,6 +329,9 @@ serve(async (req) => {
           limit: 8,
         }),
       ]);
+
+    const [summaryRaw, timeSeriesRaw, pagesRaw, sourceRaw, countryRaw, deviceRaw, keyEventsRaw, browserRaw] =
+      settled.map(r => r.status === 'fulfilled' ? r.value : emptyReport);
 
     const summary    = buildSummary(summaryRaw);
     const timeSeries = buildTimeSeries(timeSeriesRaw);
