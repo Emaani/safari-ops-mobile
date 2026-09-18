@@ -87,6 +87,7 @@ interface ReportRequest {
   dimensions?: { name: string }[];
   limit?: number;
   orderBys?: unknown[];
+  metricAggregations?: string[];
 }
 
 async function runReport(
@@ -121,11 +122,13 @@ function rowVal(row: any, headers: string[], name: string): string {
 
 function buildSummary(report: any) {
   const mh = (report.metricHeaders ?? []).map((h: any) => h.name);
-  const totals = report.totals?.[0] ?? {};
+  // Dimensionless reports: aggregate data is in rows[0], not totals[0]
+  // (totals[0] only populated when metricAggregations:["TOTAL"] is requested)
+  const row = report.rows?.[0] ?? report.totals?.[0] ?? {};
 
   const get = (name: string) => {
     const idx = mh.indexOf(name);
-    return idx >= 0 ? Number(totals.metricValues?.[idx]?.value ?? 0) : 0;
+    return idx >= 0 ? Number(row.metricValues?.[idx]?.value ?? 0) : 0;
   };
   return {
     sessions:              get("sessions"),
@@ -248,7 +251,7 @@ serve(async (req) => {
 
     // Run all 8 reports in parallel — individual failures return empty data, never kill the whole response
     const settled = await Promise.allSettled([
-        // 1. Summary totals (includes totalUsers for engagement object)
+        // 1. Summary totals (dimensionless — aggregate data in rows[0])
         runReport(PROPERTY_ID, token, {
           dateRanges,
           metrics: [
@@ -262,6 +265,7 @@ serve(async (req) => {
             { name: "eventCount" },
             { name: "keyEvents" },
           ],
+          metricAggregations: ["TOTAL"],
         }),
         // 2. Daily time series (includes newUsers + pageviews for charting)
         runReport(PROPERTY_ID, token, {
