@@ -139,6 +139,116 @@ export function presetToDateRange(preset: DatePreset): { startDate: string; endD
   return { startDate: map[preset], endDate: 'today' };
 }
 
+// ─── Web-format transformer ───────────────────────────────────────────────────
+// The shared Supabase edge function returns the web app's format.
+// Map it to GA4Report so the UI doesn't change.
+
+function transformWebResponse(d: any): GA4Report {
+  const eng  = d.engagement   ?? {};
+  const kpis = d.kpis         ?? {};
+  const totalUsers = eng.totalUsers ?? kpis.activeUsers ?? 0;
+  const newUsersVal = eng.newUsers ?? kpis.newUsers ?? 0;
+
+  const summary: GA4Summary = {
+    sessions:               kpis.sessions     ?? 0,
+    activeUsers:            kpis.activeUsers  ?? 0,
+    newUsers:               newUsersVal,
+    totalUsers:             totalUsers,
+    screenPageViews:        kpis.pageviews    ?? 0,
+    userEngagementDuration: Math.round((eng.avgEngagementTimePerUser ?? 0) * totalUsers),
+    engagedSessions:        Math.round((eng.engagedSessionsPerUser   ?? 0) * totalUsers),
+    eventCount:             eng.eventCount    ?? 0,
+    keyEvents:              eng.keyEvents     ?? 0,
+  };
+
+  const timeSeries: GA4DataPoint[] = (d.trafficData ?? []).map((r: any) => ({
+    date:        r.date      ?? '',
+    sessions:    r.sessions  ?? 0,
+    activeUsers: r.users     ?? 0,
+    newUsers:    r.newUsers  ?? 0,
+    pageviews:   r.pageviews ?? 0,
+  }));
+
+  const totalViews = (d.topPages ?? []).reduce((s: number, p: any) => s + (p.views ?? 0), 0) || 1;
+  const topPages: GA4PageRow[] = (d.topPages ?? []).map((p: any) => ({
+    path:            p.page ?? p.path ?? '',
+    views:           p.views    ?? 0,
+    sessions:        p.sessions ?? 0,
+    engagedSessions: p.engagedSessions ?? 0,
+    bounceRate:      p.bounceRate,
+    pct:             Math.round(((p.views ?? 0) / totalViews) * 100),
+  }));
+
+  // Web sourceData is [{name, value}] — map to sourceMedium rows
+  const totalSrc = (d.sourceData ?? []).reduce((s: number, r: any) => s + (r.value ?? 0), 0) || 1;
+  const sourceMedium: GA4SourceRow[] = (d.sourceData ?? []).map((r: any) => ({
+    source:      r.name  ?? '',
+    medium:      '',
+    sessions:    r.value ?? 0,
+    activeUsers: r.value ?? 0,
+    pct:         Math.round(((r.value ?? 0) / totalSrc) * 100),
+  }));
+
+  // Derive channel buckets from sourceData names
+  const channels: GA4Channels = { Organic: 0, Direct: 0, Social: 0, Paid: 0, Referral: 0, Email: 0, Other: 0 };
+  const SOCIAL_NAMES = ['facebook','instagram','ig','tiktok','twitter','x','linkedin','youtube','pinterest'];
+  const socialTraffic: Record<string, number> = {};
+  for (const r of (d.sourceData ?? [])) {
+    const name = (r.name ?? '').toLowerCase();
+    const val  = r.value ?? 0;
+    const socialKey = SOCIAL_NAMES.find(s => name.includes(s));
+    if (socialKey) {
+      const key = socialKey === 'ig' ? 'instagram' : socialKey;
+      socialTraffic[key] = (socialTraffic[key] ?? 0) + val;
+      channels.Social += val;
+    } else if (name.includes('organic')) channels.Organic += val;
+    else if (name.includes('direct'))   channels.Direct   += val;
+    else if (name.includes('paid') || name.includes('cpc')) channels.Paid += val;
+    else if (name.includes('email'))    channels.Email    += val;
+    else if (name.includes('referral')) channels.Referral += val;
+    else                                channels.Other    += val;
+  }
+
+  const totalCU = (d.countryData ?? []).reduce((s: number, c: any) => s + (c.users ?? 0), 0) || 1;
+  const countries: GA4AudienceRow[] = (d.countryData ?? []).map((c: any) => ({
+    label: c.country ?? '', activeUsers: c.users ?? 0, sessions: c.sessions ?? 0,
+    pct: Math.round(((c.users ?? 0) / totalCU) * 100),
+  }));
+
+  const totalDU = (d.deviceData ?? []).reduce((s: number, v: any) => s + (v.users ?? 0), 0) || 1;
+  const devices: GA4AudienceRow[] = (d.deviceData ?? []).map((v: any) => ({
+    label: v.device ?? '', activeUsers: v.users ?? 0, sessions: v.sessions ?? 0,
+    pct: Math.round(((v.users ?? 0) / totalDU) * 100),
+  }));
+
+  const engagement: GA4Engagement = {
+    totalUsers,
+    newUsers:                  newUsersVal,
+    returningUsers:            eng.returningUsers  ?? Math.max(0, totalUsers - newUsersVal),
+    avgEngagementTimePerUser:  eng.avgEngagementTimePerUser ?? 0,
+    engagedSessionsPerUser:    eng.engagedSessionsPerUser   ?? 0,
+    eventCount:                eng.eventCount      ?? 0,
+    keyEvents:                 eng.keyEvents       ?? 0,
+    userKeyEventRate:          eng.userKeyEventRate ?? 0,
+    keyEventsList:             eng.keyEventsList   ?? [],
+  };
+
+  return {
+    ok: true,
+    dateRange:    { startDate: '30daysAgo', endDate: 'today' },
+    fetchedAt:    new Date().toISOString(),
+    summary,
+    timeSeries,
+    topPages,
+    sourceMedium,
+    channels,
+    socialTraffic,
+    audience:     { countries, devices },
+    engagement,
+    browserData:  d.browserData ?? [],
+  };
+}
+
 // ─── Fetch with retry ─────────────────────────────────────────────────────────
 
 async function fetchGA4(
@@ -154,13 +264,19 @@ async function fetchGA4(
     });
 
     if (error) throw new Error(error.message ?? 'Edge function error');
-    if (!data?.ok) throw new Error(data?.error ?? 'GA4 returned non-ok response');
 
-    return data as GA4Report;
+    // Accept web format (kpis/trafficData) or legacy mobile format (ok: true)
+    const isWebFormat = data?.kpis || data?.trafficData || data?.engagement;
+    if (!isWebFormat && !data?.ok) {
+      throw new Error(data?.error ?? 'GA4 returned non-ok response');
+    }
+    if (data?.error && !isWebFormat) throw new Error(data.error);
+
+    return isWebFormat ? transformWebResponse(data) : (data as GA4Report);
   } catch (err: any) {
     if (signal.aborted) throw err;
     if (attempt < MAX_RETRIES) {
-      const delay = Math.pow(2, attempt) * 2000; // 2s, 4s
+      const delay = Math.pow(2, attempt) * 2000;
       await new Promise(res => setTimeout(res, delay));
       if (signal.aborted) throw err;
       return fetchGA4(startDate, endDate, signal, attempt + 1);
