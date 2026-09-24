@@ -1,0 +1,690 @@
+<title>Jackal Adventures — UX Review & Recommendations</title>
+<style>
+  :root {
+    --hero:    #1C1611;
+    --bronze:  #8B6B3E;
+    --gold:    #C6A563;
+    --cream:   #FDF8F2;
+    --sand:    #F5ECD9;
+    --bg:      #F2F0EB;
+    --card:    #FFFFFF;
+    --text:    #1C1C1E;
+    --muted:   #6C6C70;
+    --border:  #E5DDD0;
+    --success: #34A853;
+    --warn:    #F5A623;
+    --danger:  #FF3B30;
+    --purple:  #7A5AF8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:     #111009;
+      --card:   #1C1611;
+      --text:   #F5ECD9;
+      --muted:  #9a8f7e;
+      --border: #2e2822;
+      --sand:   #231B12;
+      --cream:  #1C1611;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:     #111009;
+    --card:   #1C1611;
+    --text:   #F5ECD9;
+    --muted:  #9a8f7e;
+    --border: #2e2822;
+    --sand:   #231B12;
+    --cream:  #1C1611;
+  }
+  :root[data-theme="light"] {
+    --hero:    #1C1611;
+    --bronze:  #8B6B3E;
+    --gold:    #C6A563;
+    --cream:   #FDF8F2;
+    --sand:    #F5ECD9;
+    --bg:      #F2F0EB;
+    --card:    #FFFFFF;
+    --text:    #1C1C1E;
+    --muted:   #6C6C70;
+    --border:  #E5DDD0;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Brand header ────────────────────────────────────────── */
+  .brand-bar {
+    background: var(--hero);
+    padding: 32px 24px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .brand-bar::before {
+    content: '';
+    position: absolute;
+    top: -40px; left: -30px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: #4A2E12;
+    opacity: 0.4;
+  }
+  .brand-bar::after {
+    content: '';
+    position: absolute;
+    bottom: -50px; right: -40px;
+    width: 240px; height: 240px;
+    border-radius: 50%;
+    background: #6c5228;
+    opacity: 0.22;
+  }
+  .brand-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .brand-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+  .brand-title {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(26px, 5vw, 40px);
+    font-weight: 700;
+    color: #FDF8F2;
+    letter-spacing: -0.8px;
+    line-height: 1.1;
+    margin-bottom: 10px;
+  }
+  .brand-sub {
+    font-size: 14px;
+    color: #C4A882;
+    max-width: 540px;
+  }
+
+  /* ── Fixed chip ─── */
+  .fixed-chips {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  .fixed-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(52,168,83,0.15);
+    border: 1px solid rgba(52,168,83,0.35);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #34A853;
+  }
+  .fixed-chip::before { content: '✓'; font-weight: 800; }
+
+  /* ── Main content ────────────────────────────────────────── */
+  .content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(20px, 3.5vw, 28px);
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+  .section-sub {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+
+  /* ── Filter tabs ─────────────────────────────────────────── */
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .filter-btn {
+    border: none;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    background: var(--card);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .filter-btn.active,
+  .filter-btn:hover {
+    background: var(--hero);
+    color: #FDF8F2;
+    border-color: var(--hero);
+  }
+
+  /* ── Recommendation grid ─────────────────────────────────── */
+  .rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .rec-card {
+    background: var(--card);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 2px 12px rgba(28,22,17,0.05);
+  }
+  .rec-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(28,22,17,0.10);
+  }
+
+  .rec-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .rec-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .tag-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .tag {
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .tag-wow      { background: linear-gradient(135deg,#8B6B3E,#C6A563); color: #fff; }
+  .tag-high     { background: rgba(139,107,62,0.15); color: var(--bronze); border: 1px solid rgba(139,107,62,0.3); }
+  .tag-medium   { background: rgba(245,166,35,0.12); color: #7a5000; border: 1px solid rgba(245,166,35,0.3); }
+  .tag-low      { background: rgba(108,108,112,0.10); color: var(--muted); border: 1px solid var(--border); }
+  .tag-quick    { background: rgba(52,168,83,0.12); color: #1A6B3C; border: 1px solid rgba(52,168,83,0.3); }
+  .tag-effort   { background: rgba(122,90,248,0.12); color: var(--purple); border: 1px solid rgba(122,90,248,0.3); }
+
+  .rec-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.2px;
+    line-height: 1.3;
+  }
+  .rec-body {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .rec-file {
+    font-size: 11px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Mono', monospace;
+    color: var(--bronze);
+    background: rgba(139,107,62,0.10);
+    border-radius: 6px;
+    padding: 4px 8px;
+    word-break: break-all;
+    border: 1px solid rgba(139,107,62,0.18);
+  }
+
+  /* ── Divider ─────────────────────────────────────────────── */
+  .divider { height: 1px; background: var(--border); margin: 36px 0; }
+
+  /* ── Impact matrix ───────────────────────────────────────── */
+  .matrix {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .matrix-cell {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+  }
+  .matrix-cell h4 {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .matrix-cell ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .matrix-cell li {
+    font-size: 12px;
+    color: var(--muted);
+    padding-left: 14px;
+    position: relative;
+  }
+  .matrix-cell li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--gold);
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 540px) {
+    .matrix { grid-template-columns: 1fr; }
+    .rec-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="brand-bar">
+  <div class="brand-inner">
+    <p class="brand-eyebrow">Jackal Adventures · Safari Ops Mobile</p>
+    <h1 class="brand-title">UX Review &<br>Recommendations</h1>
+    <p class="brand-sub">Analysis of the current app experience with prioritised improvements to add a wow effect while keeping the app functional and accurate.</p>
+
+    <div class="fixed-chips" style="margin-top:20px;">
+      <span class="fixed-chip">Status badges — In Progress &amp; Pending now clear on all handsets</span>
+      <span class="fixed-chip">Revenue vs Expenses chart — SVG overflow fixed, labels no longer overlap</span>
+      <span class="fixed-chip">Expense Categories bar track — fills correctly on all screen sizes</span>
+      <span class="fixed-chip">Recent Bookings — end_date now passed for accurate status display</span>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+
+  <p class="section-label">Improvements</p>
+  <h2 class="section-title">20 ways to elevate the experience</h2>
+  <p class="section-sub">Ranked by impact × effort. "Quick win" tags = implementable in under 2 hours.</p>
+
+  <div class="filter-row" id="filterRow">
+    <button class="filter-btn active" onclick="filterCards('all', this)">All</button>
+    <button class="filter-btn" onclick="filterCards('wow', this)">✨ Wow Factor</button>
+    <button class="filter-btn" onclick="filterCards('high', this)">High Impact</button>
+    <button class="filter-btn" onclick="filterCards('quick', this)">⚡ Quick Wins</button>
+    <button class="filter-btn" onclick="filterCards('medium', this)">Medium</button>
+  </div>
+
+  <div class="rec-grid" id="recGrid">
+
+    <!-- 1 -->
+    <div class="rec-card" data-priority="wow high">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(139,107,62,0.12);">🔢</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Animated count-up on KPI cards</div>
+      <div class="rec-body">Numbers count from 0 to their real value with a short spring when data loads. Makes revenue and fleet figures feel live and significant — users notice the update instantly instead of a flat swap.</div>
+      <div class="rec-file">KPICard.tsx + react-native-reanimated (already installed)</div>
+    </div>
+
+    <!-- 2 -->
+    <div class="rec-card" data-priority="wow high">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(198,165,99,0.12);">🟡</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Pulsing "Live" indicator in dashboard header</div>
+      <div class="rec-body">The static gold dot on the Live pill should pulse (scale + opacity loop) using Reanimated withRepeat. One small detail that immediately signals real-time data without any copy change.</div>
+      <div class="rec-file">DashboardScreen.tsx → liveDot style</div>
+    </div>
+
+    <!-- 3 -->
+    <div class="rec-card" data-priority="high quick">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(122,90,248,0.12);">🎯</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Haptic feedback on every interactive element</div>
+      <div class="rec-body">tapLight and selectionTick are already defined in lib/haptics and wired in FinanceScreen. The Dashboard quick-action buttons, filter chips, and booking card presses have no haptics — adding them takes 1 line per touch handler and dramatically improves perceived quality on iPhone.</div>
+      <div class="rec-file">DashboardScreen.tsx, BookingsScreen.tsx — import tapLight</div>
+    </div>
+
+    <!-- 4 -->
+    <div class="rec-card" data-priority="high quick">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(52,168,83,0.12);">🌊</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Skeleton → content fade transition</div>
+      <div class="rec-body">The dashboard currently uses display:'none' to swap the skeleton out for real KPI cards — an instant jump. Replacing this with FadeSlideIn (already in ui/) gives a smooth 250ms fade that feels intentional rather than a content pop-in.</div>
+      <div class="rec-file">DashboardScreen.tsx → kpiGrid section, FadeSlideIn.tsx</div>
+    </div>
+
+    <!-- 5 -->
+    <div class="rec-card" data-priority="wow high">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(139,107,62,0.12);">💰</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+        </div>
+      </div>
+      <div class="rec-title">Hero revenue figure counts up on first load</div>
+      <div class="rec-body">The large 42px revenue number in the hero card is the first thing seen after login. Animating it from 0 to the actual value using withTiming (800ms, ease-out) makes every dashboard open feel like a reveal — especially impactful when the number is large.</div>
+      <div class="rec-file">DashboardScreen.tsx → heroValue, useDashboardCalculations</div>
+    </div>
+
+    <!-- 6 -->
+    <div class="rec-card" data-priority="high">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(245,166,35,0.12);">🟠</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+        </div>
+      </div>
+      <div class="rec-title">Pulse animation on In-Progress booking badges</div>
+      <div class="rec-body">Active trips should feel alive. A subtle dot-pulse (the badge's status dot scales 1→1.3→1 on a 2s loop) draws the eye to bookings that need attention without changing any layout. Uses withRepeat + withSequence.</div>
+      <div class="rec-file">RecentBookingsWidget.tsx → StatusBadge, BookingCard.tsx</div>
+    </div>
+
+    <!-- 7 -->
+    <div class="rec-card" data-priority="wow medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(122,90,248,0.12);">📊</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+        </div>
+      </div>
+      <div class="rec-title">Chart line draw animation on mount</div>
+      <div class="rec-body">Revenue vs Expenses lines currently appear instantly. Animating the SVG path strokeDashoffset from the path length to 0 (750ms, ease-in-out) creates a satisfying draw-in effect. Combined with the area fills fading in at 400ms, the chart feels crafted rather than rendered.</div>
+      <div class="rec-file">RevenueVsExpensesChart.tsx</div>
+    </div>
+
+    <!-- 8 -->
+    <div class="rec-card" data-priority="wow medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(139,107,62,0.12);">📋</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+        </div>
+      </div>
+      <div class="rec-title">Swipe-to-reveal actions on booking rows</div>
+      <div class="rec-body">Swipe left on a booking to reveal Edit and Cancel actions (the standard iOS gesture). Swipe right to mark as confirmed. Eliminates the modal tap → edit flow for common actions and gives a distinctly native, high-quality feel that competitors rarely implement.</div>
+      <div class="rec-file">BookingsScreen.tsx — react-native-gesture-handler Swipeable</div>
+    </div>
+
+    <!-- 9 -->
+    <div class="rec-card" data-priority="high medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(52,168,83,0.12);">🔔</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+        </div>
+      </div>
+      <div class="rec-title">Active bookings badge on tab bar icon</div>
+      <div class="rec-body">Show the count of active (In-Progress + Confirmed) bookings as a badge on the Bookings tab icon. This is the most used screen and a count badge is the first thing power users scan on app open. Wired through React Navigation's tabBarBadge.</div>
+      <div class="rec-file">App.tsx (tab navigator) → tabBarBadge prop</div>
+    </div>
+
+    <!-- 10 -->
+    <div class="rec-card" data-priority="high quick">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(255,59,48,0.10);">📅</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Show trip duration in booking rows</div>
+      <div class="rec-body">Recent Bookings currently shows only start_date. Displaying "14 Jun – 19 Jun (5 nights)" in the date area gives dispatch managers instant context without opening the detail modal. The end_date field is now correctly passed to the widget.</div>
+      <div class="rec-file">RecentBookingsWidget.tsx → BookingListItem, lib/utils.ts</div>
+    </div>
+
+    <!-- 11 -->
+    <div class="rec-card" data-priority="wow medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(139,107,62,0.12);">↕️</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+        </div>
+      </div>
+      <div class="rec-title">Bottom sheet for quick-action modals</div>
+      <div class="rec-body">New Booking, Add Expense, and New Safari open as full-page modals. Replacing them with bottom sheets (slide up from bottom, drag to dismiss) matches the native iOS pattern users expect for quick forms, reduces visual interruption, and feels significantly more premium.</div>
+      <div class="rec-file">NewBookingModal, AddExpenseModal, CreateSafariModal — @gorhom/bottom-sheet</div>
+    </div>
+
+    <!-- 12 -->
+    <div class="rec-card" data-priority="high medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(28,22,17,0.08);">🌙</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+        </div>
+      </div>
+      <div class="rec-title">Full dark mode support</div>
+      <div class="rec-body">userInterfaceStyle is set to 'automatic' but all components use hardcoded light colours. The app appears broken in dark mode on iPhones with system dark mode. Adding a ThemeContext that switches all colour tokens is the single largest perceived quality improvement for end-users.</div>
+      <div class="rec-file">src/lib/theme.ts + src/constants/colors.ts — useColorScheme hook</div>
+    </div>
+
+    <!-- 13 -->
+    <div class="rec-card" data-priority="medium quick">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(245,166,35,0.12);">🔍</div>
+        <div class="tag-row">
+          <span class="tag tag-medium">Medium</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Long-press on KPI cards for detail breakdown</div>
+      <div class="rec-body">Long-pressing Total Revenue could show a quick popover: MTD vs YTD, top source, vs last month. Same for Fleet Utilization. No new screen needed — a simple Alert or small overlay. Rewards power users who want more detail instantly.</div>
+      <div class="rec-file">KPICard.tsx → onLongPress prop, DashboardScreen.tsx</div>
+    </div>
+
+    <!-- 14 -->
+    <div class="rec-card" data-priority="wow medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(52,168,83,0.12);">🚗</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+        </div>
+      </div>
+      <div class="rec-title">Vehicle photos in Fleet screen</div>
+      <div class="rec-body">The Fleet screen shows vehicle cards with text metadata. Adding a hero image (the safari vehicle photo assets are already in assets/safari/) transforms this from a data list to a visual fleet gallery that makes the premium brand tangible. Use ImageBackground with a gradient overlay for the card.</div>
+      <div class="rec-file">VehicleCard.tsx — assets/safari/jackal-land-cruiser.jpg available</div>
+    </div>
+
+    <!-- 15 -->
+    <div class="rec-card" data-priority="high medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(255,59,48,0.10);">📡</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+        </div>
+      </div>
+      <div class="rec-title">Offline / connectivity banner</div>
+      <div class="rec-body">When the device loses connectivity, data silently stops updating. A non-blocking banner at the top ("No connection — showing last sync") prevents user confusion and tells them why numbers look stale. NetInfo + InAppNotificationBanner (already exists) makes this a small addition.</div>
+      <div class="rec-file">App.tsx or DashboardScreen.tsx — @react-native-community/netinfo</div>
+    </div>
+
+    <!-- 16 -->
+    <div class="rec-card" data-priority="medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(122,90,248,0.12);">📈</div>
+        <div class="tag-row">
+          <span class="tag tag-medium">Medium</span>
+        </div>
+      </div>
+      <div class="rec-title">Chart tooltip entrance animation</div>
+      <div class="rec-body">When a month chip is tapped and the detail card appears in RevenueVsExpensesChart, it snaps in instantly. Wrapping it in a scale(0.95→1) + opacity(0→1) animation over 200ms with withSpring makes the interaction feel immediate and tactile rather than a layout jump.</div>
+      <div class="rec-file">RevenueVsExpensesChart.tsx → detailCard</div>
+    </div>
+
+    <!-- 17 -->
+    <div class="rec-card" data-priority="medium quick">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(139,107,62,0.12);">🧩</div>
+        <div class="tag-row">
+          <span class="tag tag-medium">Medium</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Consolidate formatCurrency to a single utility</div>
+      <div class="rec-body">TopVehiclesChart and ExpenseCategoriesChart each define their own formatCurrency function with slightly different formatting rules, which will eventually drift. Importing from lib/utils.ts everywhere ensures consistency in how K/M abbreviations and currency prefixes render across every screen.</div>
+      <div class="rec-file">TopVehiclesChart.tsx, ExpenseCategoriesChart.tsx — remove local fn</div>
+    </div>
+
+    <!-- 18 -->
+    <div class="rec-card" data-priority="wow medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(198,165,99,0.12);">🏕️</div>
+        <div class="tag-row">
+          <span class="tag tag-wow">Wow</span>
+        </div>
+      </div>
+      <div class="rec-title">Safari-themed illustrated empty states</div>
+      <div class="rec-body">Empty states currently use generic emoji + text. Replacing with on-brand SVG illustrations (a Land Cruiser on a horizon, a compass, binoculars) turns dead ends into moments of delight. One reusable IllustratedEmptyState component, four illustrations, covers the whole app.</div>
+      <div class="rec-file">src/components/ui/EmptyState.tsx — EmptyState component</div>
+    </div>
+
+    <!-- 19 -->
+    <div class="rec-card" data-priority="high medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(52,168,83,0.12);">✅</div>
+        <div class="tag-row">
+          <span class="tag tag-high">High</span>
+          <span class="tag tag-quick">Quick Win</span>
+        </div>
+      </div>
+      <div class="rec-title">Success feedback after form submissions</div>
+      <div class="rec-body">New Booking and Add Expense modals close on success with no acknowledgement. A brief success animation (green checkmark + "Booking created" toast via InAppNotificationBanner) confirms the action was saved. Eliminates the user anxiety of "did that actually save?".</div>
+      <div class="rec-file">NewBookingModal.tsx, AddExpenseModal.tsx, InAppNotificationBanner.tsx</div>
+    </div>
+
+    <!-- 20 -->
+    <div class="rec-card" data-priority="medium">
+      <div class="rec-card-top">
+        <div class="rec-icon" style="background:rgba(28,22,17,0.08);">🔗</div>
+        <div class="tag-row">
+          <span class="tag tag-medium">Medium</span>
+        </div>
+      </div>
+      <div class="rec-title">Deep links from notifications to bookings</div>
+      <div class="rec-body">Tapping a push notification about a booking status change should open that specific booking's detail modal directly, not just the Bookings list. Expo Linking + React Navigation's navigate('Bookings', { openBookingId }) routes the user to exactly the right record in one tap.</div>
+      <div class="rec-file">NotificationsScreen.tsx, App.tsx — Expo Linking config</div>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <p class="section-label">Roadmap</p>
+  <h2 class="section-title">Impact × Effort matrix</h2>
+  <p class="section-sub">Where to start for the fastest visible improvement.</p>
+
+  <div class="matrix">
+    <div class="matrix-cell" style="border-color:rgba(139,107,62,0.4); background: rgba(139,107,62,0.06);">
+      <h4 style="color:var(--bronze);">⚡ Do first — High impact, low effort</h4>
+      <ul>
+        <li>Haptic feedback (1 line per button)</li>
+        <li>Pulsing Live indicator</li>
+        <li>Skeleton → FadeSlideIn</li>
+        <li>Trip duration in booking rows</li>
+        <li>Success toast after form save</li>
+        <li>Consolidate formatCurrency</li>
+      </ul>
+    </div>
+    <div class="matrix-cell" style="border-color:rgba(198,165,99,0.4); background: rgba(198,165,99,0.06);">
+      <h4 style="color:var(--gold);">✨ Next sprint — High impact, medium effort</h4>
+      <ul>
+        <li>Count-up animation on KPI + hero</li>
+        <li>Dark mode support</li>
+        <li>Active bookings tab badge</li>
+        <li>Offline connectivity banner</li>
+        <li>Pulse on In-Progress badges</li>
+      </ul>
+    </div>
+    <div class="matrix-cell" style="border-color:rgba(122,90,248,0.4); background: rgba(122,90,248,0.06);">
+      <h4 style="color:var(--purple);">🚀 Wow releases — High impact, higher effort</h4>
+      <ul>
+        <li>Swipe-to-reveal booking actions</li>
+        <li>Bottom sheet modals</li>
+        <li>Vehicle photos in Fleet cards</li>
+        <li>Safari-themed empty states</li>
+        <li>Chart line draw animation</li>
+      </ul>
+    </div>
+    <div class="matrix-cell">
+      <h4 style="color:var(--muted);">🔭 Backlog — Medium impact</h4>
+      <ul>
+        <li>Chart tooltip spring animation</li>
+        <li>Long-press KPI card breakdown</li>
+        <li>Deep links from notifications</li>
+        <li>Hero revenue count-up</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function filterCards(priority, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.rec-card').forEach(card => {
+    if (priority === 'all') {
+      card.style.display = '';
+    } else {
+      const p = card.dataset.priority || '';
+      card.style.display = p.includes(priority) ? '' : 'none';
+    }
+  });
+}
+</script>

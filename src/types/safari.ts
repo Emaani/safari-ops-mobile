@@ -113,6 +113,27 @@ export interface PortalVehicle {
   daily_rate_usd?: number;
 }
 
+// ─── Safari Field Reports ─────────────────────────────────────────────────────
+
+export interface SafariFieldReport {
+  id: string;
+  booking_id: string;
+  file_name: string;
+  file_url: string;
+  file_size?: number;
+  file_type?: string;
+  notes?: string;
+  uploaded_by?: string;
+  created_at?: string;
+  safari_bookings?: {
+    booking_reference: string;
+    customer_name?: string;
+    start_date?: string;
+    end_date?: string;
+    clients?: { company_name: string } | null;
+  } | null;
+}
+
 export interface Promotion {
   id: string;
   title: string;

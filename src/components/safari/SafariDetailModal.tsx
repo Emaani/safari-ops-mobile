@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,17 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
+  Alert,
+  Linking,
 } from 'react-native';
 import { Svg, Path, Circle, Line } from 'react-native-svg';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
+import { supabase } from '../../lib/supabase';
 import type { Booking } from '../../types/dashboard';
+import type { SafariFieldReport } from '../../types/safari';
 import { formatCurrency } from '../../lib/utils';
 
 // ============================================================================
@@ -29,6 +37,8 @@ const COLORS = {
   text:       '#1C1C1E',
   textMuted:  '#6C6C70',
   border:     '#E5E5EA',
+  input:      '#F2F2F7',
+  primarySoft:'#FEF0DC',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -59,6 +69,185 @@ function CompassIcon({ size = 24, color = COLORS.safari }: { size?: number; colo
   );
 }
 
+function FileTextIcon({ size = 22, color = COLORS.primary }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+    </Svg>
+  );
+}
+
+function EyeIcon({ size = 16, color = COLORS.primary }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><Circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
+
+function DownloadIcon({ size = 16, color = '#fff' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M7 10l5 5 5-5" /><Path d="M12 15V3" />
+    </Svg>
+  );
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function fmtDate(d?: string) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch { return d; }
+}
+
+function fmtBytes(n?: number) {
+  if (!n) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1048576).toFixed(1)} MB`;
+}
+
+// ============================================================================
+// DOCUMENTS TAB
+// ============================================================================
+
+function DocumentsTab({ bookingId }: { bookingId: string }) {
+  const [reports, setReports] = useState<SafariFieldReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!bookingId) return;
+    setLoading(true);
+    supabase.from('safari_field_reports')
+      .select('id, booking_id, file_name, file_url, file_size, file_type, notes, created_at')
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setReports((data || []) as SafariFieldReport[]);
+        setLoading(false);
+      });
+  }, [bookingId]);
+
+  const openPreview = useCallback(async (report: SafariFieldReport) => {
+    if (!report.file_url) return;
+    const isPdf = report.file_type?.includes('pdf') || report.file_name?.toLowerCase().endsWith('.pdf');
+    const viewerUrl = isPdf
+      ? `https://docs.google.com/viewer?url=${encodeURIComponent(report.file_url)}&embedded=true`
+      : report.file_url;
+    await WebBrowser.openBrowserAsync(viewerUrl, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    });
+  }, []);
+
+  const downloadReport = useCallback(async (report: SafariFieldReport) => {
+    if (!report.file_url) return;
+    setDownloading(report.id);
+    try {
+      const ext = report.file_name.includes('.') ? report.file_name.split('.').pop() : 'pdf';
+      const localUri = FileSystem.documentDirectory + `field_report_${report.id.slice(0, 8)}.${ext}`;
+      const { uri } = await FileSystem.downloadAsync(report.file_url, localUri);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: report.file_type || 'application/pdf',
+          dialogTitle: report.file_name,
+          UTI: report.file_type?.includes('pdf') ? 'com.adobe.pdf' : undefined,
+        });
+      } else {
+        await Linking.openURL(report.file_url);
+      }
+    } catch (e: any) {
+      Alert.alert('Download Failed', e?.message || 'Could not download the file.');
+    } finally { setDownloading(null); }
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+        <ActivityIndicator size="small" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <View style={{ alignItems: 'center', paddingVertical: 52, paddingHorizontal: 32 }}>
+        <View style={ds.emptyIcon}><FileTextIcon size={26} color={COLORS.textMuted} /></View>
+        <Text style={ds.emptyTitle}>No Field Reports</Text>
+        <Text style={ds.emptySub}>
+          Upload post-safari field reports from the Operations tab in Safari Management.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ paddingTop: 4 }}>
+      {reports.map(r => {
+        const isPdf = r.file_type?.includes('pdf') || r.file_name?.toLowerCase().endsWith('.pdf');
+        const isLoading = downloading === r.id;
+        return (
+          <View key={r.id} style={ds.reportCard}>
+            <View style={ds.reportIcon}><FileTextIcon size={20} color={COLORS.primary} /></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={ds.reportName} numberOfLines={2}>{r.file_name}</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                {r.file_size ? <Text style={ds.reportMeta}>{fmtBytes(r.file_size)}</Text> : null}
+                <View style={[ds.typePill, { backgroundColor: isPdf ? '#FFF0E0' : '#EEEEFF' }]}>
+                  <Text style={[ds.typePillT, { color: isPdf ? '#8B4513' : '#3B5BDB' }]}>
+                    {isPdf ? 'PDF' : (r.file_type?.split('/')[1]?.toUpperCase() || 'DOC')}
+                  </Text>
+                </View>
+                {r.created_at ? <Text style={ds.reportMeta}>{fmtDate(r.created_at)}</Text> : null}
+              </View>
+              {r.notes ? <Text style={ds.reportNotes} numberOfLines={2}>{r.notes}</Text> : null}
+            </View>
+            <View style={{ gap: 8, flexShrink: 0 }}>
+              <TouchableOpacity style={ds.actionBtn} onPress={() => openPreview(r)}>
+                <EyeIcon size={13} color={COLORS.primary} />
+                <Text style={ds.actionBtnT}>View</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[ds.actionBtn, ds.downloadBtn, isLoading && { opacity: 0.6 }]}
+                onPress={() => downloadReport(r)} disabled={isLoading}>
+                {isLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : (
+                    <>
+                      <DownloadIcon size={13} color="#fff" />
+                      <Text style={[ds.actionBtnT, { color: '#fff' }]}>Save</Text>
+                    </>
+                  )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const ds = StyleSheet.create({
+  emptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 18 },
+  reportCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: COLORS.border, gap: 12 },
+  reportIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: COLORS.primarySoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  reportName: { fontSize: 13, fontWeight: '700', color: COLORS.text, lineHeight: 17 },
+  reportMeta: { fontSize: 11, color: COLORS.textMuted },
+  reportNotes: { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic', marginTop: 4, lineHeight: 16 },
+  typePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
+  typePillT: { fontSize: 9, fontWeight: '700' },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: COLORS.primary, minWidth: 60, justifyContent: 'center' },
+  actionBtnT: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  downloadBtn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+});
+
 // ============================================================================
 // COMPONENT
 // ============================================================================
@@ -69,7 +258,14 @@ interface SafariDetailModalProps {
   onClose: () => void;
 }
 
+type DetailTab = 'overview' | 'documents';
+
 export function SafariDetailModal({ safari, visible, onClose }: SafariDetailModalProps) {
+  const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+
+  // Reset to overview when a new safari opens
+  useEffect(() => { if (visible) setActiveTab('overview'); }, [visible]);
+
   if (!safari) return null;
 
   const statusColors = STATUS_COLORS[safari.status] || STATUS_COLORS.Confirmed;
@@ -82,7 +278,6 @@ export function SafariDetailModal({ safari, visible, onClose }: SafariDetailModa
   const balance = totalCost - amountPaid;
   const currency = safari.currency || 'USD';
 
-  // Calculate duration
   const start = new Date(safari.start_date);
   const end = new Date(safari.end_date);
   const durationDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -97,6 +292,7 @@ export function SafariDetailModal({ safari, visible, onClose }: SafariDetailModa
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.iconContainer}>
@@ -112,97 +308,118 @@ export function SafariDetailModal({ safari, visible, onClose }: SafariDetailModa
           </TouchableOpacity>
         </View>
 
+        {/* Tab bar */}
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'overview' && styles.tabBtnOn]}
+            onPress={() => setActiveTab('overview')}
+          >
+            <Text style={[styles.tabBtnT, activeTab === 'overview' && styles.tabBtnTOn]}>Overview</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'documents' && styles.tabBtnOn]}
+            onPress={() => setActiveTab('documents')}
+          >
+            <Text style={[styles.tabBtnT, activeTab === 'documents' && styles.tabBtnTOn]}>Documents</Text>
+          </TouchableOpacity>
+        </View>
+
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Status Badge */}
-          <View style={styles.statusSection}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
-              <Text style={[styles.statusText, { color: statusColors.text }]}>
-                {safari.status}
-              </Text>
-            </View>
-            <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{durationDays} Days</Text>
-            </View>
-          </View>
 
-          {/* Trip Overview */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Trip Overview</Text>
-            <View style={styles.infoGrid}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Start Date</Text>
-                <Text style={styles.infoValue}>{startDate}</Text>
+          {/* ── OVERVIEW ── */}
+          {activeTab === 'overview' && (
+            <>
+              {/* Status Badge */}
+              <View style={styles.statusSection}>
+                <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+                  <Text style={[styles.statusText, { color: statusColors.text }]}>{safari.status}</Text>
+                </View>
+                <View style={styles.durationBadge}>
+                  <Text style={styles.durationText}>{durationDays} Days</Text>
+                </View>
               </View>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>End Date</Text>
-                <Text style={styles.infoValue}>{endDate}</Text>
+
+              {/* Trip Overview */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Trip Overview</Text>
+                <View style={styles.infoGrid}>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Start Date</Text>
+                    <Text style={styles.infoValue}>{startDate}</Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>End Date</Text>
+                    <Text style={styles.infoValue}>{endDate}</Text>
+                  </View>
+                  {extSafari.destination && (
+                    <View style={[styles.infoItem, { width: '100%' }]}>
+                      <Text style={styles.infoLabel}>Destination</Text>
+                      <Text style={styles.infoValue}>{extSafari.destination}</Text>
+                    </View>
+                  )}
+                  {extSafari.pax_count && (
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Passengers</Text>
+                      <Text style={styles.infoValue}>{extSafari.pax_count} pax</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-              {extSafari.destination && (
-                <View style={[styles.infoItem, { width: '100%' }]}>
-                  <Text style={styles.infoLabel}>Destination</Text>
-                  <Text style={styles.infoValue}>{extSafari.destination}</Text>
+
+              {/* Client & Assignment */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Assignment</Text>
+                <View style={styles.infoGrid}>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Client</Text>
+                    <Text style={styles.infoValue}>{clientName}</Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Driver/Guide</Text>
+                    <Text style={styles.infoValue}>{assignedUser}</Text>
+                  </View>
+                  {safari.vehicle && (
+                    <View style={[styles.infoItem, { width: '100%' }]}>
+                      <Text style={styles.infoLabel}>Vehicle</Text>
+                      <Text style={styles.infoValue}>{safari.vehicle.name}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Payment Information */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Payment Information</Text>
+                <View style={styles.paymentGrid}>
+                  <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
+                    <Text style={styles.paymentLabel}>Total Cost</Text>
+                    <Text style={styles.paymentValue}>{formatCurrency(totalCost, currency)}</Text>
+                  </View>
+                  <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
+                    <Text style={styles.paymentLabel}>Amount Paid</Text>
+                    <Text style={[styles.paymentValue, { color: COLORS.success }]}>{formatCurrency(amountPaid, currency)}</Text>
+                  </View>
+                  <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#FDE8C0' : '#D8F0E4' }]}>
+                    <Text style={styles.paymentLabel}>Balance</Text>
+                    <Text style={[styles.paymentValue, { color: balance > 0 ? COLORS.warning : COLORS.success }]}>{formatCurrency(balance, currency)}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Notes */}
+              {extSafari.notes && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Notes</Text>
+                  <Text style={styles.notesText}>{extSafari.notes}</Text>
                 </View>
               )}
-              {extSafari.pax_count && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Passengers</Text>
-                  <Text style={styles.infoValue}>{extSafari.pax_count} pax</Text>
-                </View>
-              )}
-            </View>
-          </View>
+            </>
+          )}
 
-          {/* Client & Assignment */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Assignment</Text>
-            <View style={styles.infoGrid}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Client</Text>
-                <Text style={styles.infoValue}>{clientName}</Text>
-              </View>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Driver/Guide</Text>
-                <Text style={styles.infoValue}>{assignedUser}</Text>
-              </View>
-              {safari.vehicle && (
-                <View style={[styles.infoItem, { width: '100%' }]}>
-                  <Text style={styles.infoLabel}>Vehicle</Text>
-                  <Text style={styles.infoValue}>{safari.vehicle.name}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Payment Information */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Information</Text>
-            <View style={styles.paymentGrid}>
-              <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
-                <Text style={styles.paymentLabel}>Total Cost</Text>
-                <Text style={styles.paymentValue}>
-                  {formatCurrency(totalCost, currency)}
-                </Text>
-              </View>
-              <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
-                <Text style={styles.paymentLabel}>Amount Paid</Text>
-                <Text style={[styles.paymentValue, { color: COLORS.success }]}>
-                  {formatCurrency(amountPaid, currency)}
-                </Text>
-              </View>
-              <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#FDE8C0' : '#D8F0E4' }]}>
-                <Text style={styles.paymentLabel}>Balance</Text>
-                <Text style={[styles.paymentValue, { color: balance > 0 ? COLORS.warning : COLORS.success }]}>
-                  {formatCurrency(balance, currency)}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Notes */}
-          {extSafari.notes && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notes</Text>
-              <Text style={styles.notesText}>{extSafari.notes}</Text>
+          {/* ── DOCUMENTS ── */}
+          {activeTab === 'documents' && (
+            <View style={{ paddingTop: 12 }}>
+              <DocumentsTab bookingId={safari.id} />
             </View>
           )}
 
@@ -257,6 +474,32 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 8,
+  },
+  // Tab bar
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingHorizontal: 16,
+  },
+  tabBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    marginBottom: -1,
+  },
+  tabBtnOn: {
+    borderBottomColor: COLORS.primary,
+  },
+  tabBtnT: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  tabBtnTOn: {
+    color: COLORS.primary,
   },
   content: {
     flex: 1,

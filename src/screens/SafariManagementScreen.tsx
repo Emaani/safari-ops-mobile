@@ -17,15 +17,20 @@ import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, FlatList,
   TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert,
   Switch, KeyboardAvoidingView, Platform, Pressable, RefreshControl,
-  Dimensions,
+  Dimensions, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../lib/supabase';
 import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
 import type {
   SafariBooking, SafariGuide, PermitCatalog, SafariPackage, SafariBookingPermit,
+  SafariFieldReport,
 } from '../types/safari';
 
 const { width: SW } = Dimensions.get('window');
@@ -119,6 +124,35 @@ const Ico = {
   Filter: ({ s = 16, c = C.primary }) => (
     <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
       <Path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+    </Svg>
+  ),
+  Upload: ({ s = 20, c = '#fff' }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M17 8l-5-5-5 5" /><Path d="M12 3v12" />
+    </Svg>
+  ),
+  FileText: ({ s = 20, c = C.primary }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+    </Svg>
+  ),
+  Eye: ({ s = 16, c = C.primary }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><Circle cx="12" cy="12" r="3" />
+    </Svg>
+  ),
+  Download: ({ s = 16, c = C.primary }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M7 10l5 5 5-5" /><Path d="M12 15V3" />
+    </Svg>
+  ),
+  ClipboardCheck: ({ s = 28, c = C.primary }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
+      <Path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+      <Rect x="9" y="3" width="6" height="4" rx="1" /><Path d="M9 12l2 2 4-4" />
     </Svg>
   ),
 };
@@ -933,6 +967,433 @@ const ts = StyleSheet.create({
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FIELD REPORTS — upload, list, preview & download
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const REPORT_BUCKET = 'safari-field-reports';
+
+function fmtBytes(n?: number) {
+  if (!n) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1048576).toFixed(1)} MB`;
+}
+
+// ── Upload modal ──────────────────────────────────────────────────────────────
+function UploadReportModal({ visible, onClose, onUploaded }: {
+  visible: boolean; onClose: () => void; onUploaded: () => void;
+}) {
+  const [bookings, setBookings] = useState<SafariBooking[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<SafariBooking | null>(null);
+  const [notes, setNotes] = useState('');
+  const [pickedFile, setPickedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [showBookingPicker, setShowBookingPicker] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    supabase.from('safari_bookings')
+      .select('id, booking_reference, customer_name, start_date, end_date, status, clients(company_name)')
+      .in('status', ['completed', 'active'])
+      .order('end_date', { ascending: false })
+      .limit(80)
+      .then(({ data }) => setBookings((data || []) as unknown as SafariBooking[]));
+  }, [visible]);
+
+  const reset = useCallback(() => {
+    setSelectedBooking(null); setPickedFile(null); setNotes('');
+  }, []);
+
+  const pickFile = useCallback(async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'text/plain', 'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (!res.canceled && res.assets?.[0]) setPickedFile(res.assets[0]);
+    } catch { Alert.alert('Error', 'Failed to open file picker.'); }
+  }, []);
+
+  const upload = useCallback(async () => {
+    if (!selectedBooking) { Alert.alert('Required', 'Select a safari booking.'); return; }
+    if (!pickedFile) { Alert.alert('Required', 'Choose a document to upload.'); return; }
+    setUploading(true);
+    try {
+      const resp = await fetch(pickedFile.uri);
+      const blob = await resp.blob();
+      const storagePath = `${selectedBooking.id}/${Date.now()}_${pickedFile.name.replace(/\s+/g, '_')}`;
+      const { error: storageErr } = await supabase.storage
+        .from(REPORT_BUCKET)
+        .upload(storagePath, blob, {
+          contentType: pickedFile.mimeType || 'application/octet-stream',
+          upsert: false,
+        });
+      if (storageErr) throw storageErr;
+      const { data: { publicUrl } } = supabase.storage.from(REPORT_BUCKET).getPublicUrl(storagePath);
+      const { error: dbErr } = await supabase.from('safari_field_reports').insert({
+        booking_id: selectedBooking.id,
+        file_name: pickedFile.name,
+        file_url: publicUrl,
+        file_size: pickedFile.size ?? null,
+        file_type: pickedFile.mimeType || 'application/pdf',
+        notes: notes.trim() || null,
+      });
+      if (dbErr) throw dbErr;
+      Alert.alert('Uploaded', 'Field report saved successfully.');
+      onUploaded(); onClose(); reset();
+    } catch (e: any) {
+      Alert.alert('Upload Failed', e?.message || 'Could not upload the report. Ensure the storage bucket "safari-field-reports" exists in your project.');
+    } finally { setUploading(false); }
+  }, [selectedBooking, pickedFile, notes, onUploaded, onClose, reset]);
+
+  const bookingLabel = selectedBooking
+    ? `${selectedBooking.booking_reference || selectedBooking.id.slice(0, 8)} — ${(selectedBooking as any).clients?.company_name || selectedBooking.customer_name || 'Client'}`
+    : 'Select completed safari…';
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={gm.header}>
+            <Text style={gm.title}>Upload Field Report</Text>
+            <TouchableOpacity onPress={() => { onClose(); reset(); }} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+
+            {/* Booking selector */}
+            <FieldLabel label="Safari Booking *" />
+            <TouchableOpacity style={gm.selector} onPress={() => setShowBookingPicker(true)}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, color: selectedBooking ? C.text : C.textMuted }} numberOfLines={1}>{bookingLabel}</Text>
+              </View>
+              <Ico.ChevDown s={16} c={C.textMuted} />
+            </TouchableOpacity>
+
+            {/* File picker */}
+            <FieldLabel label="Document *" />
+            <TouchableOpacity style={[gm.selector, { justifyContent: 'space-between' }]} onPress={pickFile}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                {pickedFile ? (
+                  <Text style={{ fontSize: 13, color: C.text, fontWeight: '600' }} numberOfLines={2}>{pickedFile.name}</Text>
+                ) : (
+                  <Text style={{ fontSize: 14, color: C.textMuted }}>Tap to choose PDF / Word / Excel…</Text>
+                )}
+                {pickedFile?.size ? <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{fmtBytes(pickedFile.size)}</Text> : null}
+              </View>
+              <Ico.FileText s={18} c={C.primary} />
+            </TouchableOpacity>
+
+            {/* Notes */}
+            <FieldLabel label="Notes (optional)" />
+            <TextF value={notes} onChange={setNotes} placeholder="Summary observations, incidents, highlights…" multiline />
+
+            <TouchableOpacity style={[gm.saveBtn, uploading && { opacity: 0.6 }]} onPress={upload} disabled={uploading}>
+              {uploading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ico.Upload s={18} c="#fff" />
+                    <Text style={gm.saveBtnT}>Upload Report</Text>
+                  </View>
+                )}
+            </TouchableOpacity>
+          </ScrollView>
+
+          <PickerModal
+            visible={showBookingPicker}
+            title="Select Safari Booking"
+            options={bookings.map(b => ({
+              value: b.id,
+              label: `${b.booking_reference || b.id.slice(0, 8)} · ${(b as any).clients?.company_name || b.customer_name || 'Client'}`,
+              sub: `${fmtDate(b.start_date)} → ${fmtDate(b.end_date)} (${b.status})`,
+            }))}
+            selected={selectedBooking?.id}
+            onSelect={o => setSelectedBooking(bookings.find(b => b.id === o.value) || null)}
+            onClose={() => setShowBookingPicker(false)}
+          />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ── Preview & download modal ──────────────────────────────────────────────────
+function ReportPreviewModal({ report, visible, onClose }: {
+  report: SafariFieldReport | null; visible: boolean; onClose: () => void;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  if (!report) return null;
+
+  const isPdf = report.file_type?.includes('pdf') || report.file_name?.toLowerCase().endsWith('.pdf');
+
+  const openPreview = useCallback(async () => {
+    if (!report.file_url) return;
+    // For PDFs, open via Google Docs viewer so it renders inline on mobile
+    const viewerUrl = isPdf
+      ? `https://docs.google.com/viewer?url=${encodeURIComponent(report.file_url)}&embedded=true`
+      : report.file_url;
+    await WebBrowser.openBrowserAsync(viewerUrl, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    });
+  }, [report.file_url, isPdf]);
+
+  const download = useCallback(async () => {
+    if (!report.file_url) return;
+    setDownloading(true);
+    try {
+      const ext = report.file_name.includes('.') ? report.file_name.split('.').pop() : 'pdf';
+      const localUri = FileSystem.documentDirectory + `field_report_${report.id.slice(0, 8)}.${ext}`;
+      const { uri } = await FileSystem.downloadAsync(report.file_url, localUri);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: report.file_type || 'application/pdf',
+          dialogTitle: report.file_name,
+          UTI: isPdf ? 'com.adobe.pdf' : undefined,
+        });
+      } else {
+        await Linking.openURL(report.file_url);
+      }
+    } catch (e: any) {
+      Alert.alert('Download Failed', e?.message || 'Could not download the file.');
+    } finally { setDownloading(false); }
+  }, [report, isPdf]);
+
+  const booking = report.safari_bookings;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+        {/* Header */}
+        <View style={gm.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={[gm.title, { fontSize: 16 }]} numberOfLines={2}>{report.file_name}</Text>
+            {booking ? (
+              <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                {booking.booking_reference} · {booking.clients?.company_name || booking.customer_name || ''}
+              </Text>
+            ) : null}
+          </View>
+          <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          {/* File info card */}
+          <View style={rp.infoCard}>
+            <View style={rp.iconWrap}><Ico.FileText s={32} c={C.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={rp.fileName} numberOfLines={3}>{report.file_name}</Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                {report.file_size ? <Text style={rp.meta}>{fmtBytes(report.file_size)}</Text> : null}
+                {report.file_type ? <Text style={rp.meta}>{report.file_type.split('/')[1]?.toUpperCase() || report.file_type}</Text> : null}
+                {report.created_at ? <Text style={rp.meta}>{fmtDate(report.created_at)}</Text> : null}
+              </View>
+            </View>
+          </View>
+
+          {/* Safari context */}
+          {booking && (
+            <View style={rp.contextCard}>
+              <Text style={rp.contextLabel}>SAFARI</Text>
+              <Text style={rp.contextVal}>{booking.booking_reference}</Text>
+              {(booking.clients?.company_name || booking.customer_name) && (
+                <Text style={rp.contextSub}>{booking.clients?.company_name || booking.customer_name}</Text>
+              )}
+              {(booking.start_date || booking.end_date) && (
+                <Text style={rp.contextSub}>{fmtDate(booking.start_date)} → {fmtDate(booking.end_date)}</Text>
+              )}
+            </View>
+          )}
+
+          {/* Notes */}
+          {report.notes ? (
+            <View style={rp.contextCard}>
+              <Text style={rp.contextLabel}>NOTES</Text>
+              <Text style={{ fontSize: 14, color: C.text, lineHeight: 20, marginTop: 4 }}>{report.notes}</Text>
+            </View>
+          ) : null}
+
+          {/* Action buttons */}
+          <View style={{ gap: 12, marginTop: 8 }}>
+            <TouchableOpacity style={rp.previewBtn} onPress={openPreview}>
+              <Ico.Eye s={18} c={C.primary} />
+              <Text style={rp.previewBtnT}>Preview Document</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[rp.downloadBtn, downloading && { opacity: 0.6 }]} onPress={download} disabled={downloading}>
+              {downloading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : (
+                  <>
+                    <Ico.Download s={18} c="#fff" />
+                    <Text style={rp.downloadBtnT}>Download & Share</Text>
+                  </>
+                )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const rp = StyleSheet.create({
+  infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  iconWrap: { width: 56, height: 56, borderRadius: 12, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  fileName: { fontSize: 15, fontWeight: '700', color: C.text, lineHeight: 20 },
+  meta: { fontSize: 11, color: C.textMuted, backgroundColor: C.input, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  contextCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  contextLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1, color: C.textMuted, textTransform: 'uppercase', marginBottom: 4 },
+  contextVal: { fontSize: 15, fontWeight: '700', color: C.text },
+  contextSub: { fontSize: 13, color: C.textMuted, marginTop: 2 },
+  previewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: C.primary, backgroundColor: C.primarySoft },
+  previewBtnT: { fontSize: 15, fontWeight: '700', color: C.primary },
+  downloadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, backgroundColor: C.primary },
+  downloadBtnT: { fontSize: 15, fontWeight: '700', color: '#fff' },
+});
+
+// ── Field Reports list sub-tab ────────────────────────────────────────────────
+function FieldReportsSubTab() {
+  const [reports, setReports] = useState<SafariFieldReport[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const [previewReport, setPreviewReport] = useState<SafariFieldReport | null>(null);
+  const [search, setSearch] = useState('');
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('safari_field_reports')
+      .select('*, safari_bookings(booking_reference, customer_name, start_date, end_date, clients(company_name))')
+      .order('created_at', { ascending: false });
+    setReports((data || []) as SafariFieldReport[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchReports(); }, [fetchReports]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return reports;
+    const q = search.toLowerCase();
+    return reports.filter(r =>
+      r.file_name?.toLowerCase().includes(q) ||
+      r.safari_bookings?.booking_reference?.toLowerCase().includes(q) ||
+      r.safari_bookings?.customer_name?.toLowerCase().includes(q) ||
+      (r.safari_bookings as any)?.clients?.company_name?.toLowerCase().includes(q) ||
+      r.notes?.toLowerCase().includes(q)
+    );
+  }, [reports, search]);
+
+  const deleteReport = useCallback((r: SafariFieldReport) => {
+    Alert.alert('Delete Report', `Remove "${r.file_name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        // Delete from storage
+        const path = r.file_url.split(`/${REPORT_BUCKET}/`)[1];
+        if (path) await supabase.storage.from(REPORT_BUCKET).remove([path]);
+        await supabase.from('safari_field_reports').delete().eq('id', r.id);
+        fetchReports();
+      }},
+    ]);
+  }, [fetchReports]);
+
+  if (loading) return <LoadingView label="Loading reports…" />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Search */}
+      <View style={ts.searchWrap}>
+        <View style={ts.searchBox}>
+          <Ico.Search s={15} c={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
+            placeholder="Search by booking, client, file…" placeholderTextColor={C.textMuted} />
+        </View>
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={i => i.id}
+        renderItem={({ item: r }) => {
+          const booking = r.safari_bookings;
+          const clientName = (booking as any)?.clients?.company_name || booking?.customer_name || '—';
+          const isPdf = r.file_type?.includes('pdf') || r.file_name?.toLowerCase().endsWith('.pdf');
+          return (
+            <TouchableOpacity style={fr.card} onPress={() => setPreviewReport(r)} activeOpacity={0.78}>
+              <View style={fr.iconWrap}>
+                <Ico.FileText s={22} c={C.primary} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={fr.fileName} numberOfLines={2}>{r.file_name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                  {booking?.booking_reference ? (
+                    <View style={fr.refPill}><Text style={fr.refPillT}>{booking.booking_reference}</Text></View>
+                  ) : null}
+                  <Text style={fr.client} numberOfLines={1}>{clientName}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+                  {r.file_size ? <Text style={fr.meta}>{fmtBytes(r.file_size)}</Text> : null}
+                  {r.created_at ? <Text style={fr.meta}>{fmtDate(r.created_at)}</Text> : null}
+                  <View style={[fr.typePill, { backgroundColor: isPdf ? '#FFEEDD' : '#EEF0FF' }]}>
+                    <Text style={[fr.typePillT, { color: isPdf ? '#8B4513' : '#3B5BDB' }]}>
+                      {isPdf ? 'PDF' : (r.file_type?.split('/')[1]?.toUpperCase() || 'DOC')}
+                    </Text>
+                  </View>
+                </View>
+                {r.notes ? <Text style={fr.notes} numberOfLines={1}>{r.notes}</Text> : null}
+              </View>
+              <View style={{ gap: 8, alignItems: 'flex-end' }}>
+                <TouchableOpacity style={op.iconBtn} onPress={() => setPreviewReport(r)}>
+                  <Ico.Eye s={14} c={C.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[op.iconBtn, { backgroundColor: '#FFEEED' }]} onPress={() => deleteReport(r)}>
+                  <Ico.Trash s={14} c={C.danger} />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+              <Ico.ClipboardCheck s={28} c={C.textMuted} />
+            </View>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 6 }}>No Field Reports</Text>
+            <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingHorizontal: 32, lineHeight: 18 }}>
+              Upload post-safari field reports using the + button. Reports are linked to completed bookings.
+            </Text>
+          </View>
+        }
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchReports} tintColor={C.primary} />}
+      />
+
+      {/* FAB */}
+      <TouchableOpacity style={fabStyle.fab} onPress={() => setShowUpload(true)}>
+        <Ico.Upload s={20} c="#fff" />
+      </TouchableOpacity>
+
+      <UploadReportModal visible={showUpload} onClose={() => setShowUpload(false)} onUploaded={fetchReports} />
+      <ReportPreviewModal report={previewReport} visible={previewReport != null} onClose={() => setPreviewReport(null)} />
+    </View>
+  );
+}
+
+const fr = StyleSheet.create({
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border, gap: 12 },
+  iconWrap: { width: 44, height: 44, borderRadius: 10, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  fileName: { fontSize: 14, fontWeight: '700', color: C.text, lineHeight: 18 },
+  refPill: { backgroundColor: '#E5EDFF', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  refPillT: { fontSize: 10, fontWeight: '700', color: '#1a5a8f' },
+  client: { fontSize: 12, color: C.textMuted, flex: 1 },
+  meta: { fontSize: 11, color: C.textMuted },
+  typePill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  typePillT: { fontSize: 10, fontWeight: '700' },
+  notes: { fontSize: 12, color: C.textMuted, fontStyle: 'italic', marginTop: 4 },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // OPERATIONS TAB — Guides + Permits Catalog
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1093,7 +1554,7 @@ function AddEditPermitModal({ visible, permit, onClose, onSaved }: {
 }
 
 function OperationsTab() {
-  const [subTab, setSubTab] = useState<'guides' | 'permits'>('guides');
+  const [subTab, setSubTab] = useState<'guides' | 'permits' | 'reports'>('guides');
   const [guides, setGuides] = useState<SafariGuide[]>([]);
   const [permits, setPermits] = useState<PermitCatalog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1145,23 +1606,33 @@ function OperationsTab() {
   return (
     <View style={{ flex: 1 }}>
       {/* Sub-tab toggle */}
-      <View style={op.subBar}>
-        <TouchableOpacity style={[op.subBtn, subTab === 'guides' && op.subBtnOn]} onPress={() => { setSubTab('guides'); setSearch(''); }}>
-          <Text style={[op.subBtnT, subTab === 'guides' && op.subBtnTOn]}>Guides ({guides.length})</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[op.subBtn, subTab === 'permits' && op.subBtnOn]} onPress={() => { setSubTab('permits'); setSearch(''); }}>
-          <Text style={[op.subBtnT, subTab === 'permits' && op.subBtnTOn]}>Permit Catalog ({permits.length})</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Search */}
-      <View style={ts.searchWrap}>
-        <View style={ts.searchBox}>
-          <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-            placeholder={subTab === 'guides' ? 'Search guides…' : 'Search permits…'} placeholderTextColor={C.textMuted} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+        <View style={op.subBar}>
+          <TouchableOpacity style={[op.subBtn, subTab === 'guides' && op.subBtnOn]} onPress={() => { setSubTab('guides'); setSearch(''); }}>
+            <Text style={[op.subBtnT, subTab === 'guides' && op.subBtnTOn]}>Guides ({guides.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[op.subBtn, subTab === 'permits' && op.subBtnOn]} onPress={() => { setSubTab('permits'); setSearch(''); }}>
+            <Text style={[op.subBtnT, subTab === 'permits' && op.subBtnTOn]}>Permit Catalog ({permits.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[op.subBtn, subTab === 'reports' && op.subBtnOn]} onPress={() => { setSubTab('reports'); setSearch(''); }}>
+            <Text style={[op.subBtnT, subTab === 'reports' && op.subBtnTOn]}>Field Reports</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
+
+      {/* Field Reports sub-tab renders its own search & list */}
+      {subTab === 'reports' && <FieldReportsSubTab />}
+
+      {/* Search — only for Guides / Permits */}
+      {subTab !== 'reports' && (
+        <View style={ts.searchWrap}>
+          <View style={ts.searchBox}>
+            <Ico.Search s={15} c={C.textMuted} />
+            <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
+              placeholder={subTab === 'guides' ? 'Search guides…' : 'Search permits…'} placeholderTextColor={C.textMuted} />
+          </View>
+        </View>
+      )}
 
       {subTab === 'guides' && (
         <FlatList
@@ -1229,13 +1700,15 @@ function OperationsTab() {
         />
       )}
 
-      {/* FAB */}
-      <TouchableOpacity style={fabStyle.fab} onPress={() => {
-        if (subTab === 'guides') { setEditGuide(null); setShowGuideModal(true); }
-        else { setEditPermit(null); setShowPermitModal(true); }
-      }}>
-        <Ico.Plus s={22} c="#fff" />
-      </TouchableOpacity>
+      {/* FAB — guides & permits only; Field Reports tab has its own */}
+      {subTab !== 'reports' && (
+        <TouchableOpacity style={fabStyle.fab} onPress={() => {
+          if (subTab === 'guides') { setEditGuide(null); setShowGuideModal(true); }
+          else { setEditPermit(null); setShowPermitModal(true); }
+        }}>
+          <Ico.Plus s={22} c="#fff" />
+        </TouchableOpacity>
+      )}
 
       <AddEditGuideModal visible={showGuideModal} guide={editGuide} onClose={() => setShowGuideModal(false)} onSaved={fetchGuides} />
       <AddEditPermitModal visible={showPermitModal} permit={editPermit} onClose={() => setShowPermitModal(false)} onSaved={fetchPermits} />
@@ -1244,7 +1717,7 @@ function OperationsTab() {
 }
 
 const op = StyleSheet.create({
-  subBar: { flexDirection: 'row', backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, paddingHorizontal: 14 },
+  subBar: { flexDirection: 'row', backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, paddingHorizontal: 14, minWidth: '100%' },
   subBtn: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
   subBtnOn: { borderBottomColor: C.primary },
   subBtnT: { fontSize: 13, fontWeight: '600', color: C.textMuted },
