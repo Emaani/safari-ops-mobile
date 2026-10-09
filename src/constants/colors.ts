@@ -4,10 +4,12 @@
  */
 
 export const COLORS = {
-  // Primary brand colors
-  primary: '#3b82f6',
-  primaryLight: '#60a5fa',
-  primaryDark: '#2563eb',
+  // Primary brand colors — luxury bronze/gold palette (matches every screen's local theme)
+  primary: '#8B6B3E',
+  primaryLight: '#C6A563',
+  primaryDark: '#6E5430',
+  gold: '#C6A563',
+  hero: '#1C1611',
 
   // Semantic colors
   success: '#34A853',

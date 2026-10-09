@@ -5,7 +5,7 @@ import type {
   Repair,
   FinancialTransaction,
   CashRequisition,
-  SafariBooking,
+  SafariBookingSummary,
   Currency,
   TimeFilter,
   MonthlyData,
@@ -36,7 +36,7 @@ export interface DashboardCalculationsProps {
   repairs: Repair[];
   financialTransactions: FinancialTransaction[];
   cashRequisitions: CashRequisition[];
-  safariBookings: SafariBooking[];
+  safariBookings: SafariBookingSummary[];
 
   // Exchange rates from useExchangeRate
   conversionRates: Record<Currency, number>;

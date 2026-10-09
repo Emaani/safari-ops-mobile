@@ -25,7 +25,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
-import { useNotifications } from '../hooks/useNotifications';
+import { useNotificationsContext } from '../contexts/NotificationsContext';
 import { useMessages } from '../hooks/useMessages';
 import { useAppPreferences } from '../contexts/AppPreferencesContext';
 import { supabase } from '../lib/supabase';
@@ -438,6 +438,8 @@ function StaffPickerModal({
             onChangeText={setSearch}
             autoCapitalize="none"
             autoCorrect={false}
+            blurOnSubmit={false}
+            returnKeyType="search"
           />
         </View>
         {loading ? (
@@ -448,6 +450,7 @@ function StaffPickerModal({
           </View>
         ) : (
           <FlatList
+            keyboardShouldPersistTaps="handled"
             data={filtered}
             keyExtractor={(s) => s.id}
             renderItem={({ item }) => (
@@ -632,6 +635,7 @@ function ChatThread({
         </View>
       ) : (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           ref={flatListRef}
           data={itemsWithSeparators}
           keyExtractor={(item, index) => (item.type === 'msg' ? item.data.id : `sep-${index}`)}
@@ -779,6 +783,7 @@ function ConversationList({
         </View>
       ) : (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           data={threads}
           keyExtractor={(t) => t.partnerId}
           renderItem={({ item }) => (
@@ -1050,7 +1055,7 @@ export default function NotificationsScreen({ navigation, route }: any) {
     markAllAsRead,
     deleteNotification,
     setFilters,
-  } = useNotifications(userId);
+  } = useNotificationsContext();
 
   const displayedNotifications = useMemo(() => {
     if (filterTab === 'all' || filterTab === 'messages') return allNotifications;
@@ -1196,6 +1201,7 @@ export default function NotificationsScreen({ navigation, route }: any) {
             </View>
           ) : (
             <FlatList
+              keyboardShouldPersistTaps="handled"
               data={displayedNotifications}
               renderItem={renderItem}
               keyExtractor={(item) => item.id}

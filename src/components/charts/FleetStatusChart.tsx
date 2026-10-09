@@ -122,20 +122,17 @@ export function FleetStatusChart({ data, loading = false }: FleetStatusChartProp
 
         {/* Legend */}
         <View style={styles.legend}>
-          {chartData.map((item, index) => {
-            const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
-            return (
-              <View key={`${item.label}-${index}`} style={styles.legendRow}>
-                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                <View style={styles.legendInfo}>
-                  <Text style={styles.legendName}>{item.label}</Text>
-                  <Text style={[styles.legendCount, { color: item.color }]}>
-                    {item.value} · {pct}%
-                  </Text>
-                </View>
+          {chartData.map((item, index) => (
+            <View key={`${item.label}-${index}`} style={styles.legendRow}>
+              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+              <View style={styles.legendInfo}>
+                <Text style={styles.legendName}>{item.label}</Text>
+                <Text style={[styles.legendCount, { color: item.color }]}>
+                  {item.value}
+                </Text>
               </View>
-            );
-          })}
+            </View>
+          ))}
         </View>
       </View>
 

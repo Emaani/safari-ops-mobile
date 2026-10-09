@@ -23,11 +23,15 @@ import {
   useInAppNotification,
   type InAppNotifType,
 } from './src/components/system/InAppNotificationBanner';
-import { useNotifications } from './src/hooks/useNotifications';
+import { NotificationsProvider, useNotificationsContext } from './src/contexts/NotificationsContext';
 import { useBookingNotifications } from './src/hooks/useBookingNotifications';
 import { useCRNotifications } from './src/hooks/useCRNotifications';
 import { useVehicleNotifications } from './src/hooks/useVehicleNotifications';
 import { useNetworkStatus } from './src/hooks/useNetworkStatus';
+import { usePaymentQueueSync, type PaymentQueueDrainResult } from './src/hooks/usePaymentQueueSync';
+import { useCrQueueSync, type CrQueueDrainResult } from './src/hooks/useCrQueueSync';
+import { getQueueLength } from './src/lib/paymentQueue';
+import { getCrQueueLength } from './src/lib/crStatusQueue';
 import DashboardScreen from './src/screens/DashboardScreen';
 import BookingsScreen from './src/screens/BookingsScreen';
 import FleetScreen from './src/screens/FleetScreen';
@@ -117,6 +121,68 @@ export default function App() {
 function AppShell() {
   const { theme } = useAppPreferences();
   const { isOnline } = useNetworkStatus();
+  const { showNotification } = useInAppNotification();
+  const [pendingPayments, setPendingPayments] = useState(0);
+  const [pendingCrActions, setPendingCrActions] = useState(0);
+
+  // Keep the offline banner's pending count current while offline, so a saved
+  // payment or CR action isn't silently invisible until it eventually syncs.
+  // Polls rather than reacting to a write event since both queues are written
+  // to from a completely different part of the tree (RecordPaymentSheet /
+  // TransactionDetailModal).
+  useEffect(() => {
+    if (!isOnline) {
+      const refresh = () => {
+        getQueueLength().then(setPendingPayments);
+        getCrQueueLength().then(setPendingCrActions);
+      };
+      refresh();
+      const interval = setInterval(refresh, 4000);
+      return () => clearInterval(interval);
+    }
+    setPendingPayments(0);
+    setPendingCrActions(0);
+  }, [isOnline]);
+
+  // Drains any payments that were saved offline the moment connectivity returns.
+  usePaymentQueueSync(useCallback((result: PaymentQueueDrainResult) => {
+    if (result.succeeded > 0) {
+      showNotification({
+        type: 'payment',
+        title: 'Offline Payments Submitted',
+        body: `${result.succeeded} payment${result.succeeded === 1 ? '' : 's'} saved while offline ${result.succeeded === 1 ? 'has' : 'have'} now been recorded.`,
+        screen: 'Dashboard',
+      });
+    }
+    result.failed.forEach((f) => {
+      showNotification({
+        type: 'info',
+        title: 'Offline Payment Needs Attention',
+        body: `${f.subjectLabel}: ${f.error}`,
+        screen: 'Dashboard',
+      });
+    });
+  }, [showNotification]));
+
+  // Drains any CR approve/decline/cancel actions saved offline.
+  useCrQueueSync(useCallback((result: CrQueueDrainResult) => {
+    if (result.succeeded > 0) {
+      showNotification({
+        type: 'cr_approved',
+        title: 'Offline Requisition Actions Submitted',
+        body: `${result.succeeded} cash requisition action${result.succeeded === 1 ? '' : 's'} saved while offline ${result.succeeded === 1 ? 'has' : 'have'} now gone through.`,
+        screen: 'Finance',
+      });
+    }
+    result.failed.forEach((f) => {
+      showNotification({
+        type: 'info',
+        title: 'Offline Requisition Action Needs Attention',
+        body: `${f.crNumber}: ${f.error}`,
+        screen: 'Finance',
+      });
+    });
+  }, [showNotification]));
 
   return (
     // Root View picks up theme.colors.background — this cascades to every screen
@@ -126,7 +192,11 @@ function AppShell() {
       {/* Offline banner — shown below status bar, above all content */}
       {!isOnline && (
         <View style={shellStyles.offlineBanner}>
-          <Text style={shellStyles.offlineText}>⚡ No internet connection — data may be outdated</Text>
+          <Text style={shellStyles.offlineText}>
+            ⚡ No internet connection — data may be outdated
+            {pendingPayments > 0 ? ` · ${pendingPayments} payment${pendingPayments === 1 ? '' : 's'} waiting to sync` : ''}
+            {pendingCrActions > 0 ? ` · ${pendingCrActions} requisition action${pendingCrActions === 1 ? '' : 's'} waiting` : ''}
+          </Text>
         </View>
       )}
       <AppNavigator />
@@ -202,10 +272,7 @@ function AppNavigator() {
     });
   }, [showNotification]);
 
-  useNotifications(
-    isAuthenticated && user ? user.id : '',
-    handleRealtimeNotification,
-  );
+  const notificationsUserId = isAuthenticated && user ? user.id : '';
 
   // Reset lock state on auth change
   useEffect(() => {
@@ -316,42 +383,44 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
-      <Stack.Navigator
-        screenOptions={{
-          headerStyle:      { backgroundColor: theme.colors.surface, elevation: 0, shadowOpacity: 0 },
-          headerShadowVisible: false,
-          headerTintColor:  theme.colors.text,
-          headerTitleStyle: { fontWeight: '700', fontSize: 22, letterSpacing: -0.6 },
-          headerTitleAlign: 'center',
-          cardStyle:        { backgroundColor: theme.colors.background },
-        }}
-      >
-        <Stack.Screen
-          name="MainTabs"
-          component={MainTabNavigator}
-          options={({ navigation }) => ({
-            headerTitle: () => (
-              <Image
-                source={require('./assets/jackal-header-logo.png')}
-                style={{ width: 42, height: 42, resizeMode: 'contain' }}
-              />
-            ),
-            headerRight: isRTL
-              ? undefined
-              : () => <NotificationBell navigation={navigation} userId={user?.id || ''} />,
-            headerLeft: isRTL
-              ? () => <NotificationBell navigation={navigation} userId={user?.id || ''} />
-              : undefined,
-          })}
-        />
-        <Stack.Screen
-          name="Notifications"
-          component={NotificationsScreen}
-          options={{ title: t('common.notifications') }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <NotificationsProvider userId={notificationsUserId} onNotificationInsert={handleRealtimeNotification}>
+      <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+        <Stack.Navigator
+          screenOptions={{
+            headerStyle:      { backgroundColor: theme.colors.surface, elevation: 0, shadowOpacity: 0 },
+            headerShadowVisible: false,
+            headerTintColor:  theme.colors.text,
+            headerTitleStyle: { fontWeight: '700', fontSize: 22, letterSpacing: -0.6 },
+            headerTitleAlign: 'center',
+            cardStyle:        { backgroundColor: theme.colors.background },
+          }}
+        >
+          <Stack.Screen
+            name="MainTabs"
+            component={MainTabNavigator}
+            options={({ navigation }) => ({
+              headerTitle: () => (
+                <Image
+                  source={require('./assets/jackal-header-logo.png')}
+                  style={{ width: 42, height: 42, resizeMode: 'contain' }}
+                />
+              ),
+              headerRight: isRTL
+                ? undefined
+                : () => <NotificationBell navigation={navigation} />,
+              headerLeft: isRTL
+                ? () => <NotificationBell navigation={navigation} />
+                : undefined,
+            })}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{ title: t('common.notifications') }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </NotificationsProvider>
   );
 }
 
@@ -424,8 +493,8 @@ function MainTabNavigator() {
 
 // ─── Notification Bell ────────────────────────────────────────────────────────
 
-function NotificationBell({ navigation, userId }: { navigation: any; userId: string }) {
-  const { summary }     = useNotifications(userId);
+function NotificationBell({ navigation }: { navigation: any }) {
+  const { summary }     = useNotificationsContext();
   const { theme }       = useAppPreferences();
   const pulseAnim       = useRef(new Animated.Value(1)).current;
   const pulseOpacity    = useRef(new Animated.Value(0)).current;

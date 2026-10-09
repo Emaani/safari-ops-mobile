@@ -98,6 +98,19 @@ export function formatDateDMY(dateString: string): string {
 }
 
 /**
+ * Format a date as DD/MM/YY with NO timezone conversion — reads the year/month/day
+ * digits directly out of the ISO string instead of constructing a `Date` and reading
+ * local components (which can shift the displayed day by ±1 depending on device
+ * timezone). Use this for payment/transaction dates to match the web dashboard exactly.
+ */
+export function formatDateDDMMYY(dateString: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateString);
+  if (!match) return dateString;
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year.slice(2)}`;
+}
+
+/**
  * Normalize vehicle capacity to standard categories
  */
 export function normalizeVehicleCapacity(capacity: string): '7 Seater' | '5 Seater' | 'Other' {

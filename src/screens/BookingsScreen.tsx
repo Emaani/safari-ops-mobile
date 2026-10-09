@@ -176,6 +176,98 @@ function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
 }
 
 // ============================================================================
+// MONTH CALENDAR — lightweight month grid with per-day booking counts
+// ============================================================================
+
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function toDateKey(y: number, m: number, d: number) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function MonthCalendar({ month, onMonthChange, countByDate, selectedDate, onSelectDate }: {
+  month: Date;
+  onMonthChange: (d: Date) => void;
+  countByDate: Record<string, number>;
+  selectedDate: string | null;
+  onSelectDate: (dateKey: string) => void;
+}) {
+  const year = month.getFullYear();
+  const monthIdx = month.getMonth();
+  const firstWeekday = new Date(year, monthIdx, 1).getDay();
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  const todayKey = toDateKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
+  const cells: (number | null)[] = [
+    ...Array(firstWeekday).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const goPrev = () => { const d = new Date(year, monthIdx - 1, 1); onMonthChange(d); };
+  const goNext = () => { const d = new Date(year, monthIdx + 1, 1); onMonthChange(d); };
+
+  return (
+    <View style={calStyles.card}>
+      <View style={calStyles.navRow}>
+        <TouchableOpacity onPress={goPrev} style={calStyles.navBtn}>
+          <View style={{ transform: [{ rotate: '90deg' }] }}><ChevronDownIcon size={16} color={COLORS.primary} /></View>
+        </TouchableOpacity>
+        <Text style={calStyles.monthLabel}>{month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</Text>
+        <TouchableOpacity onPress={goNext} style={calStyles.navBtn}>
+          <View style={{ transform: [{ rotate: '-90deg' }] }}><ChevronDownIcon size={16} color={COLORS.primary} /></View>
+        </TouchableOpacity>
+      </View>
+      <View style={calStyles.weekRow}>
+        {WEEKDAY_LABELS.map((w, i) => (
+          <Text key={i} style={calStyles.weekLabel}>{w}</Text>
+        ))}
+      </View>
+      <View style={calStyles.grid}>
+        {cells.map((day, idx) => {
+          if (day == null) return <View key={idx} style={calStyles.cell} />;
+          const key = toDateKey(year, monthIdx, day);
+          const count = countByDate[key] || 0;
+          const isSelected = selectedDate === key;
+          const isToday = key === todayKey;
+          return (
+            <TouchableOpacity
+              key={idx}
+              style={[calStyles.cell, isSelected && calStyles.cellSelected]}
+              onPress={() => onSelectDate(key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                calStyles.cellText,
+                isToday && !isSelected && calStyles.cellTextToday,
+                isSelected && calStyles.cellTextSelected,
+              ]}>{day}</Text>
+              {count > 0 && <View style={[calStyles.dot, isSelected && { backgroundColor: '#fff' }]} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const calStyles = StyleSheet.create({
+  card: { backgroundColor: COLORS.card, borderRadius: 16, padding: 14, marginHorizontal: 16, marginBottom: 14, borderWidth: 1, borderColor: COLORS.border },
+  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  navBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#F5E8D0', alignItems: 'center', justifyContent: 'center' },
+  monthLabel: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  weekRow: { flexDirection: 'row', marginBottom: 4 },
+  weekLabel: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '700', color: COLORS.textMuted },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+  cellSelected: { backgroundColor: COLORS.primary },
+  cellText: { fontSize: 13, color: COLORS.text, fontWeight: '600' },
+  cellTextToday: { color: COLORS.primary, fontWeight: '800' },
+  cellTextSelected: { color: '#fff', fontWeight: '800' },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.primary, marginTop: 2 },
+});
+
+// ============================================================================
 // MAIN BOOKINGS SCREEN
 // ============================================================================
 
@@ -196,6 +288,9 @@ export function BookingsScreen() {
   const [editBooking,     setEditBooking]       = useState<Booking | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [showNewBooking,  setShowNewBooking]    = useState(false);
+  const [viewMode,        setViewMode]          = useState<'list' | 'calendar'>('list');
+  const [calMonth,        setCalMonth]          = useState(() => { const d = new Date(); d.setDate(1); return d; });
+  const [selectedDate,    setSelectedDate]      = useState<string | null>(null);
 
   // ========================================================================
   // HOOKS
@@ -223,12 +318,26 @@ export function BookingsScreen() {
     return { total, active, confirmed, pending };
   }, [bookings]);
 
+  const bookingCountByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    bookings.forEach((b) => {
+      const key = (b.start_date || '').slice(0, 10);
+      if (key) map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [bookings]);
+
   const filteredBookings = useMemo(() => {
     let result = [...bookings];
 
     // Apply status filter
     if (statusFilter !== 'all') {
       result = result.filter((b) => b.status === statusFilter);
+    }
+
+    // Apply calendar date filter
+    if (selectedDate) {
+      result = result.filter((b) => (b.start_date || '').slice(0, 10) === selectedDate);
     }
 
     // Apply search filter
@@ -265,7 +374,7 @@ export function BookingsScreen() {
     });
 
     return result;
-  }, [bookings, statusFilter, searchQuery, sortOption]);
+  }, [bookings, statusFilter, searchQuery, sortOption, selectedDate]);
 
   // ========================================================================
   // CALLBACKS
@@ -340,37 +449,76 @@ export function BookingsScreen() {
             placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
           />
         </View>
       </View>
 
-      {/* Status Filter Pills */}
-      <View style={styles.filterContainer}>
-        <FlatList
-          data={STATUS_FILTERS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.value}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.filterPill,
-                statusFilter === item.value && styles.filterPillActive,
-              ]}
-              onPress={() => setStatusFilter(item.value)}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  statusFilter === item.value && styles.filterPillTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
+      {/* List / Calendar toggle */}
+      <View style={styles.viewToggleRow}>
+        <TouchableOpacity
+          style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnOn]}
+          onPress={() => setViewMode('list')}
+        >
+          <Text style={[styles.viewToggleT, viewMode === 'list' && styles.viewToggleTOn]}>List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewToggleBtn, viewMode === 'calendar' && styles.viewToggleBtnOn]}
+          onPress={() => setViewMode('calendar')}
+        >
+          <Text style={[styles.viewToggleT, viewMode === 'calendar' && styles.viewToggleTOn]}>Calendar</Text>
+        </TouchableOpacity>
       </View>
+
+      {viewMode === 'calendar' ? (
+        <MonthCalendar
+          month={calMonth}
+          onMonthChange={setCalMonth}
+          countByDate={bookingCountByDate}
+          selectedDate={selectedDate}
+          onSelectDate={(d) => setSelectedDate(prev => prev === d ? null : d)}
+        />
+      ) : (
+        /* Status Filter Pills */
+        <View style={styles.filterContainer}>
+          <FlatList
+            keyboardShouldPersistTaps="handled"
+            data={STATUS_FILTERS}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.value}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.filterPill,
+                  statusFilter === item.value && styles.filterPillActive,
+                ]}
+                onPress={() => setStatusFilter(item.value)}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    statusFilter === item.value && styles.filterPillTextActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
+
+      {selectedDate && (
+        <TouchableOpacity style={styles.dateFilterChip} onPress={() => setSelectedDate(null)}>
+          <Text style={styles.dateFilterChipT}>
+            {new Date(selectedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} · Clear ✕
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Bookings List Header with Sort */}
       <View style={styles.listHeaderRow}>
@@ -501,6 +649,7 @@ export function BookingsScreen() {
 
       {/* Main Content */}
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filteredBookings}
         keyExtractor={(item) => item.id}
         renderItem={renderBooking}
@@ -527,6 +676,7 @@ export function BookingsScreen() {
           setEditBooking(booking);
           setEditModalVisible(true);
         }}
+        onPaymentRecorded={refetch}
       />
 
       {/* Edit Booking Modal — Pending / Confirmed / In-Progress only */}
@@ -701,6 +851,46 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     marginBottom: 16,
+  },
+  viewToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  viewToggleBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  viewToggleBtnOn: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  viewToggleT: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  viewToggleTOn: {
+    color: '#fff',
+  },
+  dateFilterChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F5E8D0',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  dateFilterChipT: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   filterPill: {
     paddingHorizontal: 14,

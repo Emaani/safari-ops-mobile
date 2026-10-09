@@ -6,7 +6,7 @@ import type {
   Repair,
   FinancialTransaction,
   CashRequisition,
-  SafariBooking,
+  SafariBookingSummary,
 } from '../types/dashboard';
 
 interface DashboardDataState {
@@ -16,7 +16,7 @@ interface DashboardDataState {
   repairs: Repair[];
   financialTransactions: FinancialTransaction[];
   cashRequisitions: CashRequisition[];
-  safariBookings: SafariBooking[];
+  safariBookings: SafariBookingSummary[];
   profiles: Record<string, string>; // user_id -> full_name
   clients: Record<string, string>; // client_id -> company_name
   loading: boolean;
@@ -175,9 +175,9 @@ export function useDashboardData({
 
     if (error) {
       console.warn('[DashboardData] safari_bookings not available:', error.message);
-      return [] as SafariBooking[];
+      return [] as SafariBookingSummary[];
     }
-    return (safariBookings || []) as SafariBooking[];
+    return (safariBookings || []) as SafariBookingSummary[];
   }, [dashboardFilterYear]);
 
   // Fetch Recent Bookings — NOT date-filtered, always top 10 by created_at DESC

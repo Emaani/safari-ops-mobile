@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,12 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Svg, Path, Circle, Line } from 'react-native-svg';
+import { supabase } from '../../lib/supabase';
 import type { Vehicle } from '../../types/dashboard';
 
 // ============================================================================
@@ -77,10 +81,43 @@ interface VehicleDetailModalProps {
   vehicle: Vehicle | null;
   visible: boolean;
   onClose: () => void;
+  onUpdated?: () => void;
 }
 
-export function VehicleDetailModal({ vehicle, visible, onClose }: VehicleDetailModalProps) {
+export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: VehicleDetailModalProps) {
+  const [editingOdo, setEditingOdo] = useState(false);
+  const [odoInput,   setOdoInput]   = useState('');
+  const [saving,     setSaving]     = useState(false);
+
   if (!vehicle) return null;
+
+  const openOdoEditor = () => {
+    const current = (vehicle as any).odometer;
+    setOdoInput(current != null ? String(current) : '');
+    setEditingOdo(true);
+  };
+
+  const saveOdometer = async () => {
+    const value = parseInt(odoInput.replace(/[^\d]/g, ''), 10);
+    if (isNaN(value) || value < 0) {
+      Alert.alert('Invalid reading', 'Enter a valid odometer value in km.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('vehicles')
+        .update({ odometer: value, odometer_updated_at: new Date().toISOString() })
+        .eq('id', vehicle.id);
+      if (error) throw error;
+      setEditingOdo(false);
+      onUpdated?.();
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.message || 'Could not update odometer reading.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const statusColors = STATUS_COLORS[vehicle.status] || STATUS_COLORS.available;
   const vehicleName = `${vehicle.make} ${vehicle.model}`;
@@ -97,6 +134,12 @@ export function VehicleDetailModal({ vehicle, visible, onClose }: VehicleDetailM
   const formatCurrency = (amount?: number) => {
     if (!amount) return 'N/A';
     return `$${amount.toLocaleString()}`;
+  };
+
+  const isOverdueOrSoon = (dateStr?: string) => {
+    if (!dateStr) return false;
+    const days = (new Date(dateStr).getTime() - Date.now()) / 86400000;
+    return days <= 30;
   };
 
   return (
@@ -203,9 +246,32 @@ export function VehicleDetailModal({ vehicle, visible, onClose }: VehicleDetailM
             <View style={styles.infoGrid}>
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>Odometer</Text>
-                <Text style={styles.infoValue}>
-                  {extVehicle.odometer ? `${extVehicle.odometer.toLocaleString()} km` : 'N/A'}
-                </Text>
+                {editingOdo ? (
+                  <View style={styles.odoEditRow}>
+                    <TextInput
+                      style={styles.odoInput}
+                      value={odoInput}
+                      onChangeText={setOdoInput}
+                      keyboardType="number-pad"
+                      autoFocus
+                      placeholder="km"
+                      placeholderTextColor={COLORS.textMuted}
+                    />
+                    <TouchableOpacity style={styles.odoSaveBtn} onPress={saveOdometer} disabled={saving}>
+                      {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.odoSaveBtnT}>Save</Text>}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.odoCancelBtn} onPress={() => setEditingOdo(false)}>
+                      <CloseIcon size={16} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={openOdoEditor} style={styles.odoTapRow}>
+                    <Text style={styles.infoValue}>
+                      {extVehicle.odometer ? `${extVehicle.odometer.toLocaleString()} km` : 'N/A'}
+                    </Text>
+                    <Text style={styles.odoEditLabel}>Update</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>Last Service</Text>
@@ -213,11 +279,17 @@ export function VehicleDetailModal({ vehicle, visible, onClose }: VehicleDetailM
               </View>
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>Next Service</Text>
-                <Text style={styles.infoValue}>{formatDate(extVehicle.next_service_date)}</Text>
+                <Text style={[styles.infoValue, isOverdueOrSoon(extVehicle.next_service_date) && styles.infoValueWarn]}>
+                  {formatDate(extVehicle.next_service_date)}
+                  {isOverdueOrSoon(extVehicle.next_service_date) ? '  ⚠' : ''}
+                </Text>
               </View>
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>Insurance Expiry</Text>
-                <Text style={styles.infoValue}>{formatDate(extVehicle.insurance_expiry)}</Text>
+                <Text style={[styles.infoValue, isOverdueOrSoon(extVehicle.insurance_expiry) && styles.infoValueWarn]}>
+                  {formatDate(extVehicle.insurance_expiry)}
+                  {isOverdueOrSoon(extVehicle.insurance_expiry) ? '  ⚠' : ''}
+                </Text>
               </View>
             </View>
           </View>
@@ -361,5 +433,51 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 32,
+  },
+  infoValueWarn: {
+    color: COLORS.danger,
+    fontWeight: '700',
+  },
+  odoTapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  odoEditLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  odoEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  odoInput: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  odoSaveBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    minWidth: 48,
+    alignItems: 'center',
+  },
+  odoSaveBtnT: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  odoCancelBtn: {
+    padding: 6,
   },
 });

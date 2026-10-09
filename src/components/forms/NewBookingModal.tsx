@@ -25,6 +25,8 @@ import { supabase } from '../../lib/supabase';
 import type { Vehicle } from '../../types/dashboard';
 import { useInAppNotification } from '../system/InAppNotificationBanner';
 import { notifySuccess } from '../../lib/haptics';
+import { usePaymentRecording, generateRequestId } from '../../hooks/usePaymentRecording';
+import type { PaymentDetails, PaymentMethod as RecordPaymentMethod } from '../../lib/paymentMethods';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -114,6 +116,17 @@ function normalizePhone(phone?: string | null): string { return (phone || '').tr
 function escapePostgrestSearch(v: string): string { return v.trim().replace(/[%,]/g, ''); }
 function calculateBalance(total: string, paid: string): number {
   return Math.max(0, (parseFloat(total) || 0) - (parseFloat(paid) || 0));
+}
+/** Maps this form's legacy payment method options onto the shared record_payment method + details shape. */
+function mapLegacyPaymentMethod(method: PaymentMethod, bankName: string): { method: RecordPaymentMethod; paymentDetails: PaymentDetails } {
+  switch (method) {
+    case 'mtn_uganda':    return { method: 'mobile_money', paymentDetails: { provider: 'MTN' } };
+    case 'airtel_uganda': return { method: 'mobile_money', paymentDetails: { provider: 'Airtel' } };
+    case 'mpesa_kenya':   return { method: 'mobile_money', paymentDetails: { provider: 'M-Pesa' } };
+    case 'bank_transfer': return { method: 'bank_transfer', paymentDetails: { bank_name: bankName.trim() } };
+    case 'cash':
+    default:              return { method: 'cash', paymentDetails: {} };
+  }
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -703,6 +716,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   const insets = useSafeAreaInsets();
   const { showNotification } = useInAppNotification();
   const [submitting, setSubmitting] = useState(false);
+  const { recordPayment } = usePaymentRecording();
 
   // Client
   const [selectedClient, setSelectedClient] = useState<ClientResult | null>(null);
@@ -876,9 +890,12 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
       const totalAmount  = parseFloat(totalCost);
       const paidAmount   = parseFloat(amountPaid || '0');
-      const balanceDue   = totalAmount - paidAmount;
       const numberOfDays = countDays(startDate, endDate);
 
+      // Booking is always created with amount_paid: 0 — any deposit captured on this
+      // form is recorded immediately after via record_payment, the ONLY path that may
+      // ever write amount_paid / balance_due / financial_transactions, so mobile stays
+      // in sync with the web dashboard's payment system.
       const { data: bookingData, error } = await supabase.from('bookings').insert({
         booking_reference:   null,
         client_id:           clientId,
@@ -893,12 +910,9 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         daily_rate:          parseFloat(dailyRate),
         number_of_days:      numberOfDays,
         total_amount:        totalAmount,
-        amount_paid:         paidAmount,
-        balance_due:         balanceDue,
+        amount_paid:         0,
+        balance_due:         totalAmount,
         currency,
-        payment_method:      paymentMethod || null,
-        transaction_id:      transactionId.trim() || null,
-        bank_name:           bankName.trim() || null,
         status,
         contract_status:     'Pending',
         booking_type:        bookingType,
@@ -914,22 +928,33 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
       }).select('id, booking_reference').single();
 
       if (error) throw error;
-      if (vehicleId) await supabase.from('vehicles').update({ status: 'booked' }).eq('id', vehicleId);
-      if (paidAmount > 0) {
-        await supabase.from('financial_transactions').insert({
-          transaction_type: 'income',
-          category:         'Booking Revenue',
-          amount:           paidAmount,
-          currency,
-          description:      `Payment for booking ${bookingData?.booking_reference || 'new booking'} - ${clientName.trim()}`,
-          reference_number: transactionId.trim() || bookingData?.booking_reference || null,
-          booking_id:       bookingData?.id,
-          payment_method:   paymentMethod || 'cash',
-          payment_details:  { method: paymentMethod || 'cash', transaction_id: transactionId.trim() || null },
-          status:           'completed',
-          transaction_date: new Date().toISOString(),
-          created_by:       user?.id || userId || null,
+      // Vehicle availability is computed entirely server-side (database
+      // triggers on bookings react to assigned_vehicle_id/status, including
+      // a backfilled Completed/Cancelled booking correctly leaving the
+      // vehicle available) — mobile only ever saves the assignment.
+
+      if (paidAmount > 0 && bookingData?.id) {
+        const { method, paymentDetails } = mapLegacyPaymentMethod(paymentMethod, bankName);
+        const payResult = await recordPayment({
+          source: 'booking',
+          sourceId: bookingData.id,
+          amount: paidAmount,
+          method,
+          reference: transactionId.trim() || null,
+          paymentDetails,
+          transactionDate: new Date().toISOString().slice(0, 10),
+          description: `Deposit at booking creation — ${clientName.trim()}`,
+          requestId: generateRequestId(),
         });
+        if (!payResult.ok) {
+          // Booking exists but the deposit didn't record — surface this clearly rather
+          // than silently losing the payment; the booking itself is NOT rolled back
+          // since it's a valid record on its own (balance_due stays at the full amount).
+          Alert.alert(
+            'Booking Created — Deposit Not Recorded',
+            `${bookingData.booking_reference || 'The booking'} was created, but the deposit payment failed: ${payResult.error || 'Unknown error'}. Record it from the booking detail screen.`,
+          );
+        }
       }
       reset();
       notifySuccess();
@@ -945,7 +970,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     } finally {
       setSubmitting(false);
     }
-  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess]);
+  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess, recordPayment]);
 
   const selectedVehicle = vehicles.find(v => v.id === vehicleId);
   const selectedGuide   = guides.find(g => g.id === driverId);

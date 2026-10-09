@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import { Svg, Path, Rect, Line } from 'react-native-svg';
 import type { Booking } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
 import { getBookingStatusConfig } from '../../constants/bookingStatus';
+import { RecordPaymentSheet } from '../payments/RecordPaymentSheet';
+import { PaymentHistoryList } from '../payments/PaymentHistoryList';
 
 // ============================================================================
 // CONSTANTS
@@ -67,9 +69,13 @@ interface BookingDetailModalProps {
   onClose: () => void;
   /** Called when the user taps Edit — parent opens EditBookingModal */
   onEdit?: (booking: Booking) => void;
+  /** Called after a payment is successfully recorded, so the parent can refetch */
+  onPaymentRecorded?: () => void;
 }
 
-export function BookingDetailModal({ booking, visible, onClose, onEdit }: BookingDetailModalProps) {
+export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymentRecorded }: BookingDetailModalProps) {
+  const [showRecordPayment, setShowRecordPayment] = useState(false);
+
   if (!booking) return null;
 
   const statusCfg    = getBookingStatusConfig(booking.status);
@@ -206,6 +212,18 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit }: Bookin
                 {totalCost > 0 ? Math.round((amountPaid / totalCost) * 100) : 0}% paid
               </Text>
             </View>
+
+            {balance > 0 && (
+              <TouchableOpacity style={styles.recordPayBtn} onPress={() => setShowRecordPayment(true)}>
+                <Text style={styles.recordPayBtnText}>Record Payment</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Payment History */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Payment History</Text>
+            <PaymentHistoryList sourceId={booking.id} />
           </View>
 
           {/* Notes Section */}
@@ -237,6 +255,16 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit }: Bookin
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </SafeAreaView>
+
+      <RecordPaymentSheet
+        visible={showRecordPayment}
+        onClose={() => { setShowRecordPayment(false); onPaymentRecorded?.(); }}
+        source="booking"
+        sourceId={booking.id}
+        balanceDue={balance}
+        currency={currency}
+        subjectLabel={`${booking.booking_number || `#${booking.id.slice(0, 8)}`} · ${clientName}`}
+      />
     </Modal>
   );
 }
@@ -379,6 +407,18 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: 4,
     textAlign: 'right',
+  },
+  recordPayBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  recordPayBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   notesText: {
     fontSize: 14,

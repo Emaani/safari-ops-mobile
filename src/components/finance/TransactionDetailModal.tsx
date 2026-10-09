@@ -14,10 +14,14 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
-import { supabase } from '../../lib/supabase';
 import { sendCRNotificationToUser } from '../../services/notificationService';
+import { useCashRequisitionStatus, type CrStatusAction } from '../../hooks/useCashRequisitionStatus';
+import { useUserRole } from '../../hooks/useUserRole';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { enqueueCrAction } from '../../lib/crStatusQueue';
 import type { FinancialTransaction, CashRequisition } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
 
@@ -153,6 +157,11 @@ export function TransactionDetailModal({
   currentUserEmail,
 }: TransactionDetailModalProps) {
   const [actioning, setActioning] = useState(false);
+  const [declinePromptOpen, setDeclinePromptOpen] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const { updateStatus } = useCashRequisitionStatus();
+  const { isAdminOrFleetManager } = useUserRole();
+  const { isOnline } = useNetworkStatus();
 
   if (!item) return null;
 
@@ -161,69 +170,79 @@ export function TransactionDetailModal({
     return (amount / (rates[fromCurrency] || 1)) * (rates[displayCurrency] || 1);
   };
 
-  // ── CR Approval action ────────────────────────────────────────────────────
-  const handleCRAction = async (newStatus: 'Approved' | 'Declined') => {
+  // ── CR status action (Approve / Decline / Cancel) ─────────────────────────
+  const runCRAction = async (newStatus: CrStatusAction, reason: string | null) => {
     if (!item) return;
     const cr = item as CashRequisition;
-    const verb = newStatus === 'Approved' ? 'Approve' : 'Decline';
+    setActioning(true);
+    try {
+      // No signal right now — queue it instead of attempting the RPC, same
+      // pattern as RecordPaymentSheet. The server's "finished CR cannot
+      // change again" rule makes a later replay safe even if this had
+      // actually gone through moments before the device dropped signal.
+      if (!isOnline) {
+        await enqueueCrAction({ crId: cr.id, crNumber: cr.cr_number, action: newStatus, notes: null, reason });
+        onClose();
+        Alert.alert(
+          'Saved — Will Submit When Online',
+          `${cr.cr_number} is saved on your device and will be ${newStatus.toLowerCase()} automatically once you're back online.`,
+        );
+        return;
+      }
 
+      const result = await updateStatus(cr.id, newStatus, { reason });
+      if (!result.ok) throw new Error(result.error);
+
+      // Notify the requester on their device
+      const requesterId = (cr as any).requester_id as string | null | undefined;
+      if (requesterId && newStatus !== 'Cancelled') {
+        const title = newStatus === 'Approved' ? '✅ Cash Requisition Approved' : '❌ Cash Requisition Declined';
+        const body = newStatus === 'Approved'
+          ? `Your requisition ${cr.cr_number} has been approved and is ready for disbursement.`
+          : `Your requisition ${cr.cr_number} has been declined. Please contact your approver for details.`;
+        sendCRNotificationToUser(
+          requesterId, title, body,
+          { cr_id: cr.id, cr_number: cr.cr_number, screen: 'Finance' },
+          newStatus === 'Approved' ? 'cr_approved' : 'cr_rejected',
+        ).catch(console.error);
+      }
+
+      onRefetch?.();
+      onClose();
+      Alert.alert(
+        newStatus === 'Approved' ? '✅ Requisition Approved' : newStatus === 'Declined' ? 'Requisition Declined' : 'Requisition Cancelled',
+        `${cr.cr_number} has been ${newStatus.toLowerCase()}.`
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || `Failed to update requisition.`);
+    } finally {
+      setActioning(false);
+    }
+  };
+
+  const handleCRAction = (newStatus: 'Approved' | 'Cancelled') => {
+    if (!item) return;
+    const cr = item as CashRequisition;
+    const verb = newStatus === 'Approved' ? 'Approve' : 'Cancel';
     Alert.alert(
       `${verb} Requisition`,
       `Are you sure you want to ${verb.toLowerCase()} ${cr.cr_number}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: verb,
-          style: newStatus === 'Declined' ? 'destructive' : 'default',
-          onPress: async () => {
-            setActioning(true);
-            try {
-              // Note: only `approved_at` exists in the DB schema — there is no `declined_at` column.
-              const updatePayload: Record<string, unknown> = { status: newStatus };
-              if (newStatus === 'Approved') {
-                updatePayload.approved_at = new Date().toISOString();
-              }
-
-              const { error } = await supabase
-                .from('cash_requisitions')
-                .update(updatePayload)
-                .eq('id', cr.id);
-
-              if (error) throw error;
-
-              // Notify the requester on their device
-              const requesterId = (cr as any).requester_id as string | null | undefined;
-              if (requesterId) {
-                const approvedTitle = newStatus === 'Approved'
-                  ? '✅ Cash Requisition Approved'
-                  : '❌ Cash Requisition Declined';
-                const approvedBody = newStatus === 'Approved'
-                  ? `Your requisition ${cr.cr_number} has been approved and is ready for disbursement.`
-                  : `Your requisition ${cr.cr_number} has been declined. Please contact your approver for details.`;
-                sendCRNotificationToUser(
-                  requesterId,
-                  approvedTitle,
-                  approvedBody,
-                  { cr_id: cr.id, cr_number: cr.cr_number, screen: 'Finance' },
-                  newStatus === 'Approved' ? 'cr_approved' : 'cr_rejected',
-                ).catch(console.error);
-              }
-
-              onRefetch?.();
-              onClose();
-              Alert.alert(
-                newStatus === 'Approved' ? '✅ Requisition Approved' : 'Requisition Declined',
-                `${cr.cr_number} has been ${newStatus.toLowerCase()}.`
-              );
-            } catch (e: any) {
-              Alert.alert('Error', e?.message || `Failed to ${verb.toLowerCase()} requisition.`);
-            } finally {
-              setActioning(false);
-            }
-          },
-        },
+        { text: 'Back', style: 'cancel' },
+        { text: verb, style: newStatus === 'Cancelled' ? 'destructive' : 'default', onPress: () => runCRAction(newStatus, null) },
       ]
     );
+  };
+
+  const confirmDecline = () => {
+    if (!declineReason.trim()) {
+      Alert.alert('Reason Required', 'Enter a reason for declining this requisition.');
+      return;
+    }
+    setDeclinePromptOpen(false);
+    const reason = declineReason.trim();
+    setDeclineReason('');
+    runCRAction('Declined', reason);
   };
 
   // ── Transaction view ──────────────────────────────────────────────────────
@@ -384,30 +403,85 @@ export function TransactionDetailModal({
                   ? 'This requisition is awaiting your approval. You are the designated approver.'
                   : 'No specific approver was assigned. As a non-submitter, you can action this requisition.'}
               </Text>
-              <View style={styles.approvalBtns}>
-                <TouchableOpacity
-                  style={[styles.approveBtn, actioning && { opacity: 0.6 }]}
-                  onPress={() => handleCRAction('Approved')}
-                  disabled={actioning}
-                  activeOpacity={0.85}
-                >
-                  {actioning
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <><CheckIcon color="#fff" /><Text style={styles.approveBtnText}>Approve</Text></>
-                  }
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.declineBtn, actioning && { opacity: 0.6 }]}
-                  onPress={() => handleCRAction('Declined')}
-                  disabled={actioning}
-                  activeOpacity={0.85}
-                >
-                  {actioning
-                    ? <ActivityIndicator color={C.danger} size="small" />
-                    : <><XIcon color={C.danger} /><Text style={styles.declineBtnText}>Decline</Text></>
-                  }
-                </TouchableOpacity>
-              </View>
+
+              {!isOnline && (
+                <Text style={styles.offlineHint}>📡 No signal — this will be saved on your device and submitted automatically once you're back online.</Text>
+              )}
+
+              {declinePromptOpen ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.declineLabel}>Reason for declining *</Text>
+                  <TextInput
+                    style={styles.declineInput}
+                    value={declineReason}
+                    onChangeText={setDeclineReason}
+                    placeholder="Required — explain why this is being declined"
+                    placeholderTextColor={C.muted}
+                    multiline
+                    autoFocus
+                  />
+                  <View style={styles.approvalBtns}>
+                    <TouchableOpacity
+                      style={[styles.declineBtn, actioning && { opacity: 0.6 }]}
+                      onPress={confirmDecline}
+                      disabled={actioning}
+                      activeOpacity={0.85}
+                    >
+                      {actioning
+                        ? <ActivityIndicator color={C.danger} size="small" />
+                        : <Text style={styles.declineBtnText}>Confirm Decline</Text>
+                      }
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.cancelPromptBtn}
+                      onPress={() => { setDeclinePromptOpen(false); setDeclineReason(''); }}
+                      disabled={actioning}
+                    >
+                      <Text style={styles.cancelPromptBtnText}>Back</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.approvalBtns}>
+                  <TouchableOpacity
+                    style={[styles.approveBtn, actioning && { opacity: 0.6 }]}
+                    onPress={() => handleCRAction('Approved')}
+                    disabled={actioning}
+                    activeOpacity={0.85}
+                  >
+                    {actioning
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <><CheckIcon color="#fff" /><Text style={styles.approveBtnText}>Approve</Text></>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.declineBtn, actioning && { opacity: 0.6 }]}
+                    onPress={() => setDeclinePromptOpen(true)}
+                    disabled={actioning}
+                    activeOpacity={0.85}
+                  >
+                    <XIcon color={C.danger} /><Text style={styles.declineBtnText}>Decline</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Cancel — the requester can withdraw their own pending requisition, admin/fleet_manager can cancel any */}
+          {isPending && (isSubmitter || isAdminOrFleetManager) && (
+            <View style={styles.cancelCard}>
+              <Text style={styles.cancelCardTitle}>Need to withdraw this requisition?</Text>
+              <Text style={styles.cancelCardSub}>
+                {isSubmitter ? 'You submitted this requisition and can cancel it if it\'s no longer needed.' : 'As an admin, you can cancel this requisition on the requester\'s behalf.'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.cancelReqBtn, actioning && { opacity: 0.6 }]}
+                onPress={() => handleCRAction('Cancelled')}
+                disabled={actioning}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.cancelReqBtnText}>Cancel Requisition</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -461,4 +535,14 @@ const styles = StyleSheet.create({
   declineBtnText:    { fontSize: 15, fontWeight: '800', color: C.danger },
   selfSubmitNotice:  { backgroundColor: C.warning + '15', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.warning + '40' },
   selfSubmitText:    { fontSize: 13, color: C.warning, lineHeight: 19, fontWeight: '600', textAlign: 'center' },
+  offlineHint:       { fontSize: 11.5, color: C.primary, backgroundColor: C.primary + '15', borderRadius: 10, padding: 10, marginBottom: 14, lineHeight: 16 },
+  declineLabel:      { fontSize: 11, fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  declineInput:      { backgroundColor: C.bg, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: C.text, minHeight: 70, textAlignVertical: 'top', marginBottom: 14 },
+  cancelPromptBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  cancelPromptBtnText: { fontSize: 14, fontWeight: '600', color: C.muted },
+  cancelCard:        { backgroundColor: C.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.border, marginTop: 14 },
+  cancelCardTitle:   { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 6 },
+  cancelCardSub:     { fontSize: 12.5, color: C.muted, lineHeight: 18, marginBottom: 14 },
+  cancelReqBtn:      { backgroundColor: C.bg, borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  cancelReqBtnText:  { fontSize: 14, fontWeight: '700', color: C.danger },
 });

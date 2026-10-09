@@ -24,11 +24,18 @@ export interface SafariBooking {
   client_id?: string;
   package_id?: string;
   created_at?: string;
+  itinerary_days?: SafariItineraryDay[] | null;
   // Joined relations
   clients?: { company_name: string; contact_person?: string } | null;
   safari_packages?: { name: string; category?: string } | null;
   vehicles?: { license_plate: string; make?: string; model?: string } | null;
   safari_guides?: { full_name: string } | null;
+}
+
+export interface SafariItineraryDay {
+  day: number;
+  title: string;
+  description?: string;
 }
 
 // ─── Safari Packages ──────────────────────────────────────────────────────────
@@ -90,6 +97,8 @@ export interface SafariBookingPermit {
   cost_per_permit?: number;
   total_cost?: number;
   currency?: string;
+  external_reference?: string | null;
+  authority_confirmed?: boolean;
   safari_permits?: {
     permit_name: string;
     permit_type?: string;

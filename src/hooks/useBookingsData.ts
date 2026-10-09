@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { devLog, devError } from '../lib/devLog';
 import type { Booking, BookingStatus } from '../types/dashboard';
 
 interface BookingsDataState {
@@ -31,14 +32,15 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
 
   // Fetch Bookings
   const fetchBookings = useCallback(async (fetchId: number) => {
-    console.log(`[BookingsData #${fetchId}] Fetching bookings...`);
+    devLog(`[BookingsData #${fetchId}] Fetching bookings...`);
 
     let query = supabase
       .from('bookings')
       .select(
         'id, booking_reference, start_date, end_date, status, amount_paid, total_amount, currency, assigned_vehicle_id, assigned_to, client_id, client_name, contact, email, notes, package_type, daily_rate, number_of_days, balance_due'
       )
-      .order('start_date', { ascending: false });
+      .order('start_date', { ascending: false })
+      .limit(500);
 
     // Apply status filter if not 'all'
     if (statusFilter !== 'all') {
@@ -48,7 +50,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
     const { data: bookings, error } = await query;
 
     if (error) {
-      console.error(`[BookingsData #${fetchId}] ERROR fetching bookings:`, error.message, error.details, error.hint);
+      devError(`[BookingsData #${fetchId}] ERROR fetching bookings:`, error.message, error.details, error.hint);
       throw error;
     }
 
@@ -59,7 +61,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
       total_cost: b.total_amount, // Alias for backwards compatibility
     })) as Booking[];
 
-    console.log(`[BookingsData #${fetchId}] Fetched ${result.length} bookings`);
+    devLog(`[BookingsData #${fetchId}] Fetched ${result.length} bookings`);
 
     if (result.length > 0) {
       // Log booking statuses breakdown
@@ -67,7 +69,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
         acc[b.status] = (acc[b.status] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
-      console.log(`[BookingsData #${fetchId}] Booking statuses:`, statusBreakdown);
+      devLog(`[BookingsData #${fetchId}] Booking statuses:`, statusBreakdown);
     }
 
     return result;
@@ -75,13 +77,13 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
 
   // Fetch Profiles
   const fetchProfiles = useCallback(async (fetchId: number) => {
-    console.log(`[BookingsData #${fetchId}] Fetching profiles...`);
+    devLog(`[BookingsData #${fetchId}] Fetching profiles...`);
     const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, full_name');
 
     if (error) {
-      console.error(`[BookingsData #${fetchId}] ERROR fetching profiles:`, error.message);
+      devError(`[BookingsData #${fetchId}] ERROR fetching profiles:`, error.message);
       throw error;
     }
 
@@ -90,19 +92,19 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
       profileMap[p.id] = p.full_name;
     });
 
-    console.log(`[BookingsData #${fetchId}] Fetched ${Object.keys(profileMap).length} profiles`);
+    devLog(`[BookingsData #${fetchId}] Fetched ${Object.keys(profileMap).length} profiles`);
     return profileMap;
   }, []);
 
   // Fetch Clients
   const fetchClients = useCallback(async (fetchId: number) => {
-    console.log(`[BookingsData #${fetchId}] Fetching clients...`);
+    devLog(`[BookingsData #${fetchId}] Fetching clients...`);
     const { data: clients, error } = await supabase
       .from('clients')
       .select('id, company_name');
 
     if (error) {
-      console.error(`[BookingsData #${fetchId}] ERROR fetching clients:`, error.message);
+      devError(`[BookingsData #${fetchId}] ERROR fetching clients:`, error.message);
       throw error;
     }
 
@@ -111,19 +113,19 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
       clientMap[c.id] = c.company_name;
     });
 
-    console.log(`[BookingsData #${fetchId}] Fetched ${Object.keys(clientMap).length} clients`);
+    devLog(`[BookingsData #${fetchId}] Fetched ${Object.keys(clientMap).length} clients`);
     return clientMap;
   }, []);
 
   // Fetch Vehicles for vehicle names
   const fetchVehicles = useCallback(async (fetchId: number) => {
-    console.log(`[BookingsData #${fetchId}] Fetching vehicles for booking info...`);
+    devLog(`[BookingsData #${fetchId}] Fetching vehicles for booking info...`);
     const { data: vehicles, error } = await supabase
       .from('vehicles')
       .select('id, license_plate, make, model');
 
     if (error) {
-      console.error(`[BookingsData #${fetchId}] ERROR fetching vehicles:`, error.message);
+      devError(`[BookingsData #${fetchId}] ERROR fetching vehicles:`, error.message);
       throw error;
     }
 
@@ -132,7 +134,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
       vehicleMap[v.id] = `${v.license_plate} - ${v.make} ${v.model}`;
     });
 
-    console.log(`[BookingsData #${fetchId}] Fetched ${Object.keys(vehicleMap).length} vehicles`);
+    devLog(`[BookingsData #${fetchId}] Fetched ${Object.keys(vehicleMap).length} vehicles`);
     return vehicleMap;
   }, []);
 
@@ -140,12 +142,12 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
   const fetchAllData = useCallback(async () => {
     const fetchId = ++fetchCounter;
 
-    console.log(`[BookingsData #${fetchId}] ========== FETCH START ==========`);
+    devLog(`[BookingsData #${fetchId}] ========== FETCH START ==========`);
 
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
 
-      console.log(`[BookingsData #${fetchId}] Starting parallel fetches...`);
+      devLog(`[BookingsData #${fetchId}] Starting parallel fetches...`);
       const startTime = Date.now();
 
       const [bookings, profiles, clients, vehicles] = await Promise.all([
@@ -156,7 +158,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
       ]);
 
       const fetchDuration = Date.now() - startTime;
-      console.log(`[BookingsData #${fetchId}] All fetches completed in ${fetchDuration}ms`);
+      devLog(`[BookingsData #${fetchId}] All fetches completed in ${fetchDuration}ms`);
 
       // Map client and profile names to bookings
       const bookingsWithNames = bookings.map(b => ({
@@ -172,10 +174,10 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
           : undefined,
       }));
 
-      console.log(`[BookingsData #${fetchId}] ========== FETCH SUMMARY ==========`);
-      console.log(`[BookingsData #${fetchId}] Bookings: ${bookings.length}`);
-      console.log(`[BookingsData #${fetchId}] Profiles: ${Object.keys(profiles).length}`);
-      console.log(`[BookingsData #${fetchId}] Clients: ${Object.keys(clients).length}`);
+      devLog(`[BookingsData #${fetchId}] ========== FETCH SUMMARY ==========`);
+      devLog(`[BookingsData #${fetchId}] Bookings: ${bookings.length}`);
+      devLog(`[BookingsData #${fetchId}] Profiles: ${Object.keys(profiles).length}`);
+      devLog(`[BookingsData #${fetchId}] Clients: ${Object.keys(clients).length}`);
 
       hasFetchedRef.current = true;
 
@@ -187,10 +189,10 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
         error: null,
       });
 
-      console.log(`[BookingsData #${fetchId}] ========== FETCH COMPLETE ==========`);
+      devLog(`[BookingsData #${fetchId}] ========== FETCH COMPLETE ==========`);
     } catch (error) {
-      console.error(`[BookingsData #${fetchId}] ========== FETCH ERROR ==========`);
-      console.error(`[BookingsData #${fetchId}] Error:`, error);
+      devError(`[BookingsData #${fetchId}] ========== FETCH ERROR ==========`);
+      devError(`[BookingsData #${fetchId}] Error:`, error);
       setData(prev => ({
         ...prev,
         loading: false,
@@ -201,7 +203,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
 
   // Fetch on mount and when filter changes
   useEffect(() => {
-    console.log('[BookingsData] useEffect triggered - fetching data...');
+    devLog('[BookingsData] useEffect triggered - fetching data...');
     fetchAllData();
   }, [fetchAllData]);
 
@@ -210,7 +212,7 @@ export function useBookingsData({ statusFilter = 'all' }: UseBookingsDataProps =
   refetchRef.current = fetchAllData;
 
   const stableRefetch = useCallback(() => {
-    console.log('[BookingsData] stableRefetch called');
+    devLog('[BookingsData] stableRefetch called');
     return refetchRef.current();
   }, []);
 

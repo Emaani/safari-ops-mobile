@@ -120,7 +120,13 @@ export interface CashRequisition {
   approver?: { full_name: string | null; email: string | null } | null;
 }
 
-export interface SafariBooking {
+/**
+ * Minimal financial-only projection of a safari booking, used for dashboard
+ * revenue/expense aggregation. NOT the same shape as the operational
+ * `SafariBooking` in src/types/safari.ts (status, booking_reference, joined
+ * relations, etc.) — kept distinctly named to prevent importing the wrong one.
+ */
+export interface SafariBookingSummary {
   id: string;
   total_price_usd: number;
   total_price_ugx: number;

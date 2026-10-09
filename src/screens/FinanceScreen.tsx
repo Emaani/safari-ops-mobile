@@ -26,6 +26,7 @@ import { Svg, Path, Circle, Rect, Line, Text as SvgText, Defs, LinearGradient, S
 import { useFinanceData } from '../hooks/useFinanceData';
 import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
 import { useFinanceRealtimeSync } from '../hooks/useFinanceRealtimeSync';
+import { useExchangeRate } from '../hooks/useExchangeRate';
 import { TransactionDetailModal } from '../components/finance';
 import { AddExpenseModal } from '../components/forms';
 import { LoadingOverlay } from '../components/system/JackalLoader';
@@ -37,6 +38,10 @@ import { formatCurrency } from '../lib/utils';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const CURRENT_YEAR = new Date().getFullYear();
+const FINANCE_YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
 
 const COLORS = {
   primary:    '#8B6B3E',
@@ -149,8 +154,8 @@ function buildLastNDays(
   expenseItems: ExpenseItem[],
   currency: Currency,
   n = 7,
+  rates: Record<string, number> = { USD: 1, UGX: 3670, KES: 130 },
 ): ChartPoint[] {
-  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
   const toBase = (amount: number, cur: string) => amount / (rates[cur] || 1);
   const fromBase = (amount: number) => amount * (rates[currency] || 1);
 
@@ -190,12 +195,13 @@ function fmt(v: number): string {
   return v.toFixed(0);
 }
 
-function RevenueExpenseChart({ revenueItems, expenseItems, currency }: {
+function RevenueExpenseChart({ revenueItems, expenseItems, currency, rates }: {
   revenueItems: RevenueItem[];
   expenseItems: ExpenseItem[];
   currency: Currency;
+  rates?: Record<string, number>;
 }) {
-  const data = useMemo(() => buildLastNDays(revenueItems, expenseItems, currency, 7), [revenueItems, expenseItems, currency]);
+  const data = useMemo(() => buildLastNDays(revenueItems, expenseItems, currency, 7, rates), [revenueItems, expenseItems, currency, rates]);
 
   const W      = SCREEN_W - 32;          // card width (16px margin each side)
   const H      = 180;
@@ -384,8 +390,7 @@ const SOURCE_LABELS: Record<string, string> = {
   transaction:    'Income',
 };
 
-function RevenueRow({ item, displayCurrency, onPress }: { item: RevenueItem; displayCurrency: Currency; onPress: (item: RevenueItem) => void }) {
-  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+function RevenueRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: { item: RevenueItem; displayCurrency: Currency; onPress: (item: RevenueItem) => void; rates?: Record<string, number> }) {
   const displayed = (item.amount / (rates[item.currency] || 1)) * (rates[displayCurrency] || 1);
   const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const statusColor = item.status?.toLowerCase() === 'completed' || item.status?.toLowerCase() === 'confirmed'
@@ -420,8 +425,7 @@ function RevenueRow({ item, displayCurrency, onPress }: { item: RevenueItem; dis
 // EXPENSE ROW
 // ============================================================================
 
-function ExpenseRow({ item, displayCurrency, onPress }: { item: ExpenseItem; displayCurrency: Currency; onPress: (item: ExpenseItem) => void }) {
-  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+function ExpenseRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: { item: ExpenseItem; displayCurrency: Currency; onPress: (item: ExpenseItem) => void; rates?: Record<string, number> }) {
   const displayed = (item.amount / (rates[item.currency] || 1)) * (rates[displayCurrency] || 1);
   const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const sourceLabel = item.source === 'cash_requisition' ? 'Cash Req.' : 'Expense';
@@ -457,8 +461,7 @@ function ExpenseRow({ item, displayCurrency, onPress }: { item: ExpenseItem; dis
 // CASH REQUISITION CARD
 // ============================================================================
 
-function CRCard({ cr, displayCurrency, onPress }: { cr: CashRequisition; displayCurrency: Currency; onPress: (cr: CashRequisition) => void }) {
-  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+function CRCard({ cr, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: { cr: CashRequisition; displayCurrency: Currency; onPress: (cr: CashRequisition) => void; rates?: Record<string, number> }) {
   const displayed = (cr.total_cost / (rates[cr.currency] || 1)) * (rates[displayCurrency] || 1);
   const dateNeeded = cr.date_needed
     ? new Date(cr.date_needed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -565,12 +568,13 @@ function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => v
 // PETTY CASH TAB
 // ============================================================================
 
-function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress }: {
+function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: {
   expenseItems: ExpenseItem[];
   currency: Currency;
   refreshing: boolean;
   onRefresh: () => void;
   onPress: (item: ExpenseItem) => void;
+  rates?: Record<string, number>;
 }) {
   // Filter by subtitle containing 'Petty Cash' or by source being a petty-cash transaction
   const pettyCashItems = expenseItems.filter(e =>
@@ -578,7 +582,6 @@ function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress }
     e.title?.toLowerCase().includes('petty')
   );
 
-  const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
   const toDisplay = (e: ExpenseItem) => (e.amount / (rates[e.currency] || 1)) * (rates[currency] || 1);
 
   const total = pettyCashItems.reduce((s, e) => s + toDisplay(e), 0);
@@ -592,6 +595,7 @@ function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress }
 
   return (
     <FlatList
+      keyboardShouldPersistTaps="handled"
       data={pettyCashItems}
       keyExtractor={(item: ExpenseItem) => item.id}
       showsVerticalScrollIndicator={false}
@@ -675,6 +679,8 @@ export function FinanceScreen() {
   const [modalItem,    setModalItem]    = useState<FinancialTransaction | CashRequisition | null>(null);
   const [modalType,    setModalType]    = useState<'transaction' | 'cr'>('transaction');
   const [modalVisible, setModalVisible] = useState(false);
+  const [filterYear,   setFilterYear]   = useState<number | 'all'>('all');
+  const [filterMonth,  setFilterMonth]  = useState<number | 'all'>('all');
 
   const {
     cashRequisitions,
@@ -683,11 +689,21 @@ export function FinanceScreen() {
     revenueMTD,
     expensesMTD,
     netProfitMTD,
+    totalRevenue,
+    totalExpenses,
     pendingCRCount,
     loading,
     error,
     refetch,
-  } = useFinanceData({ currency });
+  } = useFinanceData({ currency, year: filterYear, month: filterMonth });
+
+  const isPeriodFiltered = filterYear !== 'all';
+  const periodRevenue = isPeriodFiltered ? totalRevenue : revenueMTD;
+  const periodExpenses = isPeriodFiltered ? totalExpenses : expensesMTD;
+  const periodNetProfit = periodRevenue - periodExpenses;
+  const periodLabel = filterYear === 'all' ? 'MTD' : filterMonth === 'all' ? String(filterYear) : `${MONTH_NAMES[filterMonth]} ${filterYear}`;
+
+  const { exchangeRates } = useExchangeRate();
 
   useFinanceRealtimeSync(refetch);
 
@@ -738,9 +754,8 @@ export function FinanceScreen() {
     [cashRequisitions]
   );
 
-  const RATES: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
   const toDisplayAmt = (amount: number, fromCurrency: string) =>
-    (amount / (RATES[fromCurrency] || 1)) * (RATES[currency] || 1);
+    (amount / (exchangeRates[fromCurrency as Currency] || 1)) * (exchangeRates[currency] || 1);
 
   const filteredTotals = useMemo(() => {
     const totalIn  = filteredRevenue.reduce((s, i) => s + toDisplayAmt(i.amount, i.currency), 0);
@@ -850,12 +865,45 @@ export function FinanceScreen() {
         </View>
       </View>
 
-      <RevenueExpenseChart revenueItems={revenueItems} expenseItems={expenseItems} currency={currency} />
+      <RevenueExpenseChart revenueItems={revenueItems} expenseItems={expenseItems} currency={currency} rates={exchangeRates as unknown as Record<string, number>} />
+
+      {/* Period filter */}
+      <View style={styles.currencyRow}>
+        <Text style={styles.sectionLabel}>Period</Text>
+        <View style={styles.currencyChips}>
+          {(['all', ...FINANCE_YEARS] as const).map(y => (
+            <TouchableOpacity
+              key={String(y)}
+              style={[styles.currencyChip, filterYear === y && styles.currencyChipActive]}
+              onPress={() => { setFilterYear(y as any); setFilterMonth('all'); }}
+            >
+              <Text style={[styles.currencyChipText, filterYear === y && styles.currencyChipTextActive]}>
+                {y === 'all' ? 'This Month' : String(y)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+      {filterYear !== 'all' && (
+        <View style={[styles.currencyRow, { marginTop: -8 }]}>
+          <Text style={styles.sectionLabel}>Month</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.currencyChips}>
+            <TouchableOpacity style={[styles.currencyChip, filterMonth === 'all' && styles.currencyChipActive]} onPress={() => setFilterMonth('all')}>
+              <Text style={[styles.currencyChipText, filterMonth === 'all' && styles.currencyChipTextActive]}>Whole Year</Text>
+            </TouchableOpacity>
+            {MONTH_NAMES.map((m, i) => (
+              <TouchableOpacity key={m} style={[styles.currencyChip, filterMonth === i && styles.currencyChipActive]} onPress={() => setFilterMonth(i)}>
+                <Text style={[styles.currencyChipText, filterMonth === i && styles.currencyChipTextActive]}>{m}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <View style={styles.kpiGrid}>
-        <KPICard delay={0}   title="Revenue (MTD)"  value={formatCurrency(revenueMTD,  currency)} accent={COLORS.income}  bg={COLORS.revenueBg} icon={<TrendUpIcon   size={15} color={COLORS.income}  />} />
-        <KPICard delay={70}  title="Expenses (MTD)" value={formatCurrency(expensesMTD, currency)} accent={COLORS.expense} bg={COLORS.expenseBg} icon={<TrendDownIcon size={15} color={COLORS.expense} />} />
-        <KPICard delay={140} title="Net Profit"      value={formatCurrency(netProfitMTD, currency)} accent={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} bg={netProfitMTD >= 0 ? COLORS.revenueBg : '#FDE8C0'} icon={<TrendUpIcon size={15} color={netProfitMTD >= 0 ? COLORS.income : COLORS.expense} />} />
+        <KPICard delay={0}   title={`Revenue (${periodLabel})`}  value={formatCurrency(periodRevenue,  currency)} accent={COLORS.income}  bg={COLORS.revenueBg} icon={<TrendUpIcon   size={15} color={COLORS.income}  />} />
+        <KPICard delay={70}  title={`Expenses (${periodLabel})`} value={formatCurrency(periodExpenses, currency)} accent={COLORS.expense} bg={COLORS.expenseBg} icon={<TrendDownIcon size={15} color={COLORS.expense} />} />
+        <KPICard delay={140} title="Net Profit"      value={formatCurrency(periodNetProfit, currency)} accent={periodNetProfit >= 0 ? COLORS.income : COLORS.expense} bg={periodNetProfit >= 0 ? COLORS.revenueBg : '#FDE8C0'} icon={<TrendUpIcon size={15} color={periodNetProfit >= 0 ? COLORS.income : COLORS.expense} />} />
       </View>
 
       <View style={styles.searchRow}>
@@ -866,6 +914,11 @@ export function FinanceScreen() {
           placeholderTextColor={COLORS.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+
+          autoCorrect={false}
+          autoCapitalize="none"
+          blurOnSubmit={false}
+          returnKeyType="search"
         />
       </View>
 
@@ -928,6 +981,11 @@ export function FinanceScreen() {
           placeholderTextColor={COLORS.textMuted}
           value={crSearchQuery}
           onChangeText={setCrSearchQuery}
+
+          autoCorrect={false}
+          autoCapitalize="none"
+          blurOnSubmit={false}
+          returnKeyType="search"
         />
       </View>
 
@@ -940,19 +998,19 @@ export function FinanceScreen() {
 
   const renderRevenueItem  = ({ item, index }: { item: RevenueItem; index: number }) => (
     <FadeSlideIn delay={Math.min(index * 40, 300)} distance={14}>
-      <RevenueRow item={item} displayCurrency={currency} onPress={handleRevenuePress} />
+      <RevenueRow item={item} displayCurrency={currency} onPress={handleRevenuePress} rates={exchangeRates as unknown as Record<string, number>} />
     </FadeSlideIn>
   );
 
   const renderExpenseItem  = ({ item, index }: { item: ExpenseItem; index: number }) => (
     <FadeSlideIn delay={Math.min(index * 40, 300)} distance={14}>
-      <ExpenseRow item={item} displayCurrency={currency} onPress={handleExpensePress} />
+      <ExpenseRow item={item} displayCurrency={currency} onPress={handleExpensePress} rates={exchangeRates as unknown as Record<string, number>} />
     </FadeSlideIn>
   );
 
   const renderCRItem = ({ item, index }: { item: CashRequisition; index: number }) => (
     <FadeSlideIn delay={Math.min(index * 40, 300)} distance={14}>
-      <CRCard cr={item} displayCurrency={currency} onPress={handleCRPress} />
+      <CRCard cr={item} displayCurrency={currency} onPress={handleCRPress} rates={exchangeRates as unknown as Record<string, number>} />
     </FadeSlideIn>
   );
 
@@ -1053,6 +1111,7 @@ export function FinanceScreen() {
       {/* Content */}
       {activeTab === 'revenue' && (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           data={filteredRevenue}
           keyExtractor={(item: RevenueItem) => item.id}
           renderItem={renderRevenueItem}
@@ -1066,6 +1125,7 @@ export function FinanceScreen() {
 
       {activeTab === 'expenses' && (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           data={filteredExpenses}
           keyExtractor={(item: ExpenseItem) => item.id}
           renderItem={renderExpenseItem}
@@ -1079,6 +1139,7 @@ export function FinanceScreen() {
 
       {activeTab === 'requisitions' && (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           data={filteredCRs}
           keyExtractor={(item: CashRequisition) => item.id}
           renderItem={renderCRItem}
@@ -1097,6 +1158,7 @@ export function FinanceScreen() {
           refreshing={refreshing}
           onRefresh={handleRefresh}
           onPress={(item: ExpenseItem) => { setModalItem(item as any); setModalType('transaction'); setModalVisible(true); }}
+          rates={exchangeRates as unknown as Record<string, number>}
         />
       )}
 

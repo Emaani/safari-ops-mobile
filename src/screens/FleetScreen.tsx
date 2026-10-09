@@ -1,5 +1,5 @@
 import { devLog } from '../lib/devLog';
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import Animated, {
 import { Svg, Path, Circle } from 'react-native-svg';
 import { useFleetData } from '../hooks/useFleetData';
 import { useFleetRealtimeSync } from '../hooks/useFleetRealtimeSync';
+import { supabase } from '../lib/supabase';
 import { VehicleCard, VehicleDetailModal, MaintenanceTracker } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
 import { FadeSlideIn, EmptyState, ListSkeleton } from '../components/ui';
@@ -151,6 +152,9 @@ export function FleetScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [viewMode, setViewMode] = useState<'vehicles' | 'drivers'>('vehicles');
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
 
   // ========================================================================
   // HOOKS
@@ -160,6 +164,21 @@ export function FleetScreen() {
 
   // Real-time sync
   useFleetRealtimeSync(refetch);
+
+  // Fetch drivers lazily — only when the Drivers view is opened
+  useEffect(() => {
+    if (viewMode !== 'drivers' || drivers.length > 0) return;
+    let cancelled = false;
+    setDriversLoading(true);
+    (async () => {
+      const { data, error: fetchErr } = await supabase.from('drivers').select('*').order('full_name');
+      if (cancelled) return;
+      if (fetchErr) { devLog('[FleetScreen] Drivers fetch error:', fetchErr.message); setDrivers([]); }
+      else setDrivers(data || []);
+      setDriversLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [viewMode]);
 
   // ========================================================================
   // COMPUTED VALUES
@@ -174,6 +193,25 @@ export function FleetScreen() {
     devLog('[FleetScreen] Stats computed:', { total, available, booked, maintenance });
 
     return { total, available, booked, maintenance };
+  }, [vehicles]);
+
+  const needsAttention = useMemo(() => {
+    const now = Date.now();
+    return vehicles
+      .map((v) => {
+        const ext = v as any;
+        const issues: { label: string; overdue: boolean }[] = [];
+        if (ext.insurance_expiry) {
+          const days = (new Date(ext.insurance_expiry).getTime() - now) / 86400000;
+          if (days <= 30) issues.push({ label: days < 0 ? 'Insurance expired' : 'Insurance expiring', overdue: days < 0 });
+        }
+        if (ext.next_service_date) {
+          const days = (new Date(ext.next_service_date).getTime() - now) / 86400000;
+          if (days <= 30) issues.push({ label: days < 0 ? 'Service overdue' : 'Service due soon', overdue: days < 0 });
+        }
+        return { vehicle: v, issues };
+      })
+      .filter((x) => x.issues.length > 0);
   }, [vehicles]);
 
   const filteredVehicles = useMemo(() => {
@@ -211,6 +249,22 @@ export function FleetScreen() {
 
     return result;
   }, [vehicles, statusFilter, searchQuery]);
+
+  const vehicleByDriverId = useMemo(() => {
+    const map: Record<string, Vehicle> = {};
+    vehicles.forEach((v) => { if (v.current_driver_id) map[v.current_driver_id] = v; });
+    return map;
+  }, [vehicles]);
+
+  const filteredDrivers = useMemo(() => {
+    if (!searchQuery.trim()) return drivers;
+    const q = searchQuery.toLowerCase();
+    return drivers.filter((d) =>
+      (d.full_name || '').toLowerCase().includes(q) ||
+      (d.phone || '').toLowerCase().includes(q) ||
+      (d.license_number || '').toLowerCase().includes(q)
+    );
+  }, [drivers, searchQuery]);
 
   // ========================================================================
   // CALLBACKS
@@ -255,62 +309,107 @@ export function FleetScreen() {
 
   const renderHeader = () => (
     <>
-      {/* Stats Cards */}
-      <View style={styles.statsContainer}>
-        <StatCard title="Total Fleet"  value={stats.total}       color={COLORS.primary} bgColor="#F5E8D0" delay={0}   />
-        <StatCard title="Available"    value={stats.available}   color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
-        <StatCard title="On Safari"    value={stats.booked}      color={COLORS.purple}  bgColor="#ede8f9" delay={120} />
-        <StatCard title="Maintenance"  value={stats.maintenance} color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
-      </View>
+      {viewMode === 'vehicles' && (
+        <>
+          {/* Stats Cards */}
+          <View style={styles.statsContainer}>
+            <StatCard title="Total Fleet"  value={stats.total}       color={COLORS.primary} bgColor="#F5E8D0" delay={0}   />
+            <StatCard title="Available"    value={stats.available}   color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
+            <StatCard title="On Safari"    value={stats.booked}      color={COLORS.purple}  bgColor="#ede8f9" delay={120} />
+            <StatCard title="Maintenance"  value={stats.maintenance} color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
+          </View>
+        </>
+      )}
 
-      {/* Search Bar */}
+      {/* Search Bar — shared between Vehicles and Drivers */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
           <SearchIcon size={18} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search vehicles..."
+            placeholder={viewMode === 'vehicles' ? 'Search vehicles...' : 'Search drivers...'}
             placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
           />
         </View>
       </View>
 
-      {/* Status Filter Pills */}
-      <View style={styles.filterContainer}>
-        <FlatList
-          data={STATUS_FILTERS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.value}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.filterPill,
-                statusFilter === item.value && styles.filterPillActive,
-              ]}
-              onPress={() => setStatusFilter(item.value)}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  statusFilter === item.value && styles.filterPillTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
+      {viewMode === 'vehicles' && (
+        <>
+          {/* Status Filter Pills */}
+          <View style={styles.filterContainer}>
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={STATUS_FILTERS}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.filterPill,
+                    statusFilter === item.value && styles.filterPillActive,
+                  ]}
+                  onPress={() => setStatusFilter(item.value)}
+                >
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      statusFilter === item.value && styles.filterPillTextActive,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+
+          {/* Needs Attention — insurance/service due within 30 days or overdue */}
+          {needsAttention.length > 0 && (
+            <View style={styles.attnSection}>
+              <View style={styles.attnHeaderRow}>
+                <Text style={styles.attnHeaderIcon}>⚠</Text>
+                <Text style={styles.attnHeaderText}>Needs Attention ({needsAttention.length})</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attnScroll}>
+                {needsAttention.map(({ vehicle, issues }) => {
+                  const worst = issues.some((i) => i.overdue);
+                  return (
+                    <TouchableOpacity
+                      key={vehicle.id}
+                      style={[styles.attnCard, worst && styles.attnCardOverdue]}
+                      onPress={() => handleVehiclePress(vehicle)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.attnPlate}>{vehicle.license_plate}</Text>
+                      {issues.map((issue, i) => (
+                        <Text key={i} style={[styles.attnIssue, issue.overdue && styles.attnIssueOverdue]}>
+                          {issue.label}
+                        </Text>
+                      ))}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
           )}
-        />
-      </View>
 
-      {/* Maintenance Tracker */}
-      <MaintenanceTracker repairs={repairs} loading={loading} />
+          {/* Maintenance Tracker */}
+          <MaintenanceTracker repairs={repairs} loading={loading} />
+        </>
+      )}
 
-      {/* Vehicles List Header */}
+      {/* List Header */}
       <Text style={styles.listHeader}>
-        Vehicles ({filteredVehicles.length})
+        {viewMode === 'vehicles'
+          ? `Vehicles (${filteredVehicles.length})`
+          : driversLoading ? 'Loading drivers…' : `Drivers (${filteredDrivers.length})`}
       </Text>
     </>
   );
@@ -321,19 +420,56 @@ export function FleetScreen() {
     </FadeSlideIn>
   );
 
-  const renderEmpty = () => (
-    <EmptyState
-      type="fleet"
-      title={searchQuery || statusFilter !== 'all' ? 'No vehicles match' : 'Fleet is empty'}
-      subtitle={
-        searchQuery || statusFilter !== 'all'
-          ? 'Try adjusting your search or filters.'
-          : 'Add your first vehicle to start managing your safari fleet.'
-      }
-      secondaryLabel={searchQuery || statusFilter !== 'all' ? 'Clear Filters' : undefined}
-      onSecondary={searchQuery || statusFilter !== 'all' ? () => { setSearchQuery(''); setStatusFilter('all'); } : undefined}
-    />
-  );
+  const renderDriver = ({ item, index }: { item: any; index: number }) => {
+    const assignedVehicle = vehicleByDriverId[item.id];
+    const initials = (item.full_name || '?').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase();
+    return (
+      <FadeSlideIn delay={Math.min(index * 50, 320)} distance={16}>
+        <View style={styles.driverCard}>
+          <View style={styles.driverAvatar}><Text style={styles.driverAvatarT}>{initials}</Text></View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.driverName} numberOfLines={1}>{item.full_name || 'Unnamed Driver'}</Text>
+            <Text style={styles.driverMeta} numberOfLines={1}>
+              {[item.phone, item.license_number ? `Lic. ${item.license_number}` : null].filter(Boolean).join(' · ') || 'No contact info on file'}
+            </Text>
+          </View>
+          {assignedVehicle && (
+            <View style={styles.driverVehiclePill}>
+              <Text style={styles.driverVehiclePillT}>{assignedVehicle.license_plate}</Text>
+            </View>
+          )}
+        </View>
+      </FadeSlideIn>
+    );
+  };
+
+  const renderEmpty = () => {
+    if (viewMode === 'drivers') {
+      if (driversLoading) return null;
+      return (
+        <EmptyState
+          type="fleet"
+          title={searchQuery ? 'No drivers match' : 'No drivers on file'}
+          subtitle={searchQuery ? 'Try a different search.' : 'Drivers linked to vehicles will appear here.'}
+          secondaryLabel={searchQuery ? 'Clear Search' : undefined}
+          onSecondary={searchQuery ? () => setSearchQuery('') : undefined}
+        />
+      );
+    }
+    return (
+      <EmptyState
+        type="fleet"
+        title={searchQuery || statusFilter !== 'all' ? 'No vehicles match' : 'Fleet is empty'}
+        subtitle={
+          searchQuery || statusFilter !== 'all'
+            ? 'Try adjusting your search or filters.'
+            : 'Add your first vehicle to start managing your safari fleet.'
+        }
+        secondaryLabel={searchQuery || statusFilter !== 'all' ? 'Clear Filters' : undefined}
+        onSecondary={searchQuery || statusFilter !== 'all' ? () => { setSearchQuery(''); setStatusFilter('all'); } : undefined}
+      />
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -355,47 +491,81 @@ export function FleetScreen() {
               </View>
             )}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroTabs}>
-            {STATUS_FILTERS.map((f) => (
-              <TouchableOpacity
-                key={f.value}
-                style={[styles.heroTab, statusFilter === f.value && styles.heroTabActive]}
-                onPress={() => setStatusFilter(f.value)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
-                  {f.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+
+          {/* Vehicles / Drivers segment */}
+          <View style={styles.segmentRow}>
+            <TouchableOpacity
+              style={[styles.segmentBtn, viewMode === 'vehicles' && styles.segmentBtnOn]}
+              onPress={() => setViewMode('vehicles')}
+            >
+              <Text style={[styles.segmentT, viewMode === 'vehicles' && styles.segmentTOn]}>Vehicles</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segmentBtn, viewMode === 'drivers' && styles.segmentBtnOn]}
+              onPress={() => setViewMode('drivers')}
+            >
+              <Text style={[styles.segmentT, viewMode === 'drivers' && styles.segmentTOn]}>Drivers</Text>
+            </TouchableOpacity>
+          </View>
+
+          {viewMode === 'vehicles' && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroTabs}>
+              {STATUS_FILTERS.map((f) => (
+                <TouchableOpacity
+                  key={f.value}
+                  style={[styles.heroTab, statusFilter === f.value && styles.heroTabActive]}
+                  onPress={() => setStatusFilter(f.value)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
       </FadeSlideIn>
 
       {/* Main Content */}
-      <FlatList
-        data={filteredVehicles}
-        keyExtractor={(item) => item.id}
-        renderItem={renderVehicle}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={!loading ? renderEmpty : null}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
-          />
-        }
-      />
+      {viewMode === 'vehicles' ? (
+        <FlatList
+          keyboardShouldPersistTaps="handled"
+          data={filteredVehicles}
+          keyExtractor={(item) => item.id}
+          renderItem={renderVehicle}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={!loading ? renderEmpty : null}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary}
+              colors={[COLORS.primary]}
+            />
+          }
+        />
+      ) : (
+        <FlatList
+          keyboardShouldPersistTaps="handled"
+          data={filteredDrivers}
+          keyExtractor={(item) => item.id}
+          renderItem={renderDriver}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Vehicle Detail Modal */}
       <VehicleDetailModal
         vehicle={selectedVehicle}
         visible={modalVisible}
         onClose={handleCloseModal}
+        onUpdated={refetch}
       />
     </SafeAreaView>
   );
@@ -586,6 +756,130 @@ const styles = StyleSheet.create({
     fontSize: 14, lineHeight: 20,
     color: COLORS.textMuted,
     textAlign: 'center',
+  },
+  attnSection: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  attnHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  attnHeaderIcon: {
+    fontSize: 13,
+    color: COLORS.danger,
+  },
+  attnHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.danger,
+    letterSpacing: 0.2,
+  },
+  attnScroll: {
+    paddingHorizontal: 16,
+    gap: 10,
+    paddingBottom: 4,
+  },
+  attnCard: {
+    backgroundColor: '#FDE8C0',
+    borderRadius: 14,
+    padding: 12,
+    minWidth: 148,
+    borderWidth: 1,
+    borderColor: '#f0c674',
+  },
+  attnCardOverdue: {
+    backgroundColor: '#FFEEED',
+    borderColor: '#f5b0a8',
+  },
+  attnPlate: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  attnIssue: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7a5522',
+  },
+  attnIssueOverdue: {
+    color: COLORS.danger,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  segmentBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  segmentBtnOn: {
+    backgroundColor: '#C6A563',
+    borderColor: '#C6A563',
+  },
+  segmentT: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.65)',
+  },
+  segmentTOn: {
+    color: '#1C1611',
+  },
+  driverCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 14,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
+  },
+  driverAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F5E8D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverAvatarT: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  driverName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  driverMeta: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  driverVehiclePill: {
+    backgroundColor: '#F5E8D0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  driverVehiclePillT: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
 });
 

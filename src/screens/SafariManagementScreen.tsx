@@ -25,12 +25,16 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
+import * as Print from 'expo-print';
+import { RecordPaymentSheet } from '../components/payments/RecordPaymentSheet';
+import { PaymentHistoryList } from '../components/payments/PaymentHistoryList';
+import { isSchemaError } from '../lib/errors';
 import { supabase } from '../lib/supabase';
 import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
 import type {
   SafariBooking, SafariGuide, PermitCatalog, SafariPackage, SafariBookingPermit,
-  SafariFieldReport,
+  SafariFieldReport, SafariItineraryDay,
 } from '../types/safari';
 
 const { width: SW } = Dimensions.get('window');
@@ -67,6 +71,18 @@ const COUNTRIES = ['All', 'Uganda', 'Rwanda', 'Kenya', 'Tanzania', 'Multi-Countr
 const PERMIT_TYPES = ['Park Entry', 'Gorilla Permit', 'Chimp Permit', 'Activity Permit', 'Vehicle Entry', 'Other'];
 const GUIDE_STATUSES = ['available', 'busy', 'on_leave', 'inactive'];
 const PACKAGE_CATS = ['Wildlife Safari', 'Gorilla Trekking', 'Chimp Tracking', 'Beach & Safari', 'Cultural Tour', 'Adventure', 'Budget Safari', 'Luxury Safari', 'Custom'];
+
+const PRETRIP_CHECKLIST_ITEMS: { key: string; label: string }[] = [
+  { key: 'fire_extinguisher',   label: 'Fire extinguisher on board' },
+  { key: 'first_aid_kit',       label: 'First aid kit stocked' },
+  { key: 'insurance_card',      label: 'Valid insurance card present' },
+  { key: 'yellow_fever_certs',  label: 'Yellow fever certificates for all pax' },
+  { key: 'spare_tire',          label: 'Spare tire and jack present' },
+  { key: 'warning_triangle',    label: 'Warning triangle / reflectors' },
+  { key: 'fuel_full',           label: 'Fuel tank filled' },
+  { key: 'radio_comms',         label: 'Radio / communications check' },
+  { key: 'vehicle_clean',       label: 'Vehicle cleaned and stocked with water' },
+];
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const Ico = {
@@ -130,6 +146,12 @@ const Ico = {
     <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round">
       <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <Path d="M17 8l-5-5-5 5" /><Path d="M12 3v12" />
+    </Svg>
+  ),
+  Share: ({ s = 18, c = C.primary }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="18" cy="5" r="3" /><Circle cx="6" cy="12" r="3" /><Circle cx="18" cy="19" r="3" />
+      <Path d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9" />
     </Svg>
   ),
   FileText: ({ s = 20, c = C.primary }) => (
@@ -301,7 +323,8 @@ interface GuideOpt { id: string; full_name: string; status?: string }
 function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
   booking: SafariBooking | null; visible: boolean; onClose: () => void; onRefetch: () => void;
 }) {
-  const [subTab, setSubTab] = useState<'overview' | 'ops' | 'permits'>('overview');
+  const [subTab, setSubTab] = useState<'overview' | 'ops' | 'permits' | 'documents' | 'checklist' | 'payments'>('overview');
+  const [showRecordPayment, setShowRecordPayment] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleOpt[]>([]);
   const [guides, setGuides] = useState<GuideOpt[]>([]);
   const [permits, setPermits] = useState<SafariBookingPermit[]>([]);
@@ -311,14 +334,72 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
   const [loadingOps, setLoadingOps] = useState(false);
   const [showVPicker, setShowVPicker] = useState(false);
   const [showGPicker, setShowGPicker] = useState(false);
+  const [docReports, setDocReports] = useState<SafariFieldReport[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<SafariFieldReport | null>(null);
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [checklistMeta, setChecklistMeta] = useState<{ completed_by?: string; completed_at?: string } | null>(null);
+  const [loadingChecklist, setLoadingChecklist] = useState(false);
+  const [savingChecklist, setSavingChecklist] = useState(false);
+  const [itinerary, setItinerary] = useState<SafariItineraryDay[]>([]);
+  const [editingItinerary, setEditingItinerary] = useState(false);
+  const [savingItinerary, setSavingItinerary] = useState(false);
+
+  const fetchPermits = useCallback(() => {
+    if (!booking) return;
+    supabase.from('safari_booking_permits')
+      .select('id, status, quantity, cost_per_permit, total_cost, currency, external_reference, authority_confirmed, safari_permits(permit_name, permit_type, cost_usd)')
+      .eq('booking_id', booking.id)
+      .then(({ data }) => setPermits((data || []) as unknown as SafariBookingPermit[]));
+  }, [booking?.id]);
 
   useEffect(() => {
     if (!visible || !booking) { setSubTab('overview'); return; }
-    supabase.from('safari_booking_permits')
-      .select('id, status, quantity, cost_per_permit, total_cost, currency, safari_permits(permit_name, permit_type, cost_usd)')
-      .eq('booking_id', booking.id)
-      .then(({ data }) => setPermits((data || []) as unknown as SafariBookingPermit[]));
+    fetchPermits();
+    setItinerary(booking.itinerary_days || []);
+    setEditingItinerary(false);
   }, [visible, booking?.id]);
+
+  const [editingPermitId, setEditingPermitId] = useState<string | null>(null);
+  const [refInput, setRefInput] = useState('');
+
+  const addItineraryDay = useCallback(() => {
+    setItinerary(prev => [...prev, { day: prev.length + 1, title: '', description: '' }]);
+  }, []);
+
+  const updateItineraryDay = useCallback((idx: number, patch: Partial<SafariItineraryDay>) => {
+    setItinerary(prev => prev.map((d, i) => i === idx ? { ...d, ...patch } : d));
+  }, []);
+
+  const removeItineraryDay = useCallback((idx: number) => {
+    setItinerary(prev => prev.filter((_, i) => i !== idx).map((d, i) => ({ ...d, day: i + 1 })));
+  }, []);
+
+  const saveItinerary = useCallback(async () => {
+    if (!booking) return;
+    setSavingItinerary(true);
+    try {
+      const { error } = await supabase.from('safari_bookings').update({ itinerary_days: itinerary }).eq('id', booking.id);
+      if (error) throw error;
+      setEditingItinerary(false);
+      onRefetch();
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to save itinerary.');
+    } finally {
+      setSavingItinerary(false);
+    }
+  }, [booking, itinerary, onRefetch]);
+
+  const savePermitRef = useCallback(async (permitId: string) => {
+    await supabase.from('safari_booking_permits').update({ external_reference: refInput.trim() || null }).eq('id', permitId);
+    setEditingPermitId(null);
+    fetchPermits();
+  }, [refInput, fetchPermits]);
+
+  const toggleAuthorityConfirmed = useCallback(async (permit: SafariBookingPermit) => {
+    await supabase.from('safari_booking_permits').update({ authority_confirmed: !permit.authority_confirmed }).eq('id', permit.id);
+    fetchPermits();
+  }, [fetchPermits]);
 
   useEffect(() => {
     if (subTab !== 'ops' || !visible || !booking) return;
@@ -339,17 +420,64 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
     }).finally(() => setLoadingOps(false));
   }, [subTab, visible, booking?.id]);
 
+  useEffect(() => {
+    if (subTab !== 'documents' || !visible || !booking) return;
+    setLoadingDocs(true);
+    supabase.from('safari_field_reports')
+      .select('id, booking_id, file_name, file_url, file_size, file_type, notes, created_at')
+      .eq('booking_id', booking.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setDocReports((data || []) as SafariFieldReport[]);
+        setLoadingDocs(false);
+      });
+  }, [subTab, visible, booking?.id]);
+
+  useEffect(() => {
+    if (subTab !== 'checklist' || !visible || !booking) return;
+    setLoadingChecklist(true);
+    supabase.from('safari_pretrip_checklists')
+      .select('checklist, completed_by, completed_at')
+      .eq('booking_id', booking.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setChecklist((data?.checklist as Record<string, boolean>) || {});
+        setChecklistMeta(data ? { completed_by: data.completed_by, completed_at: data.completed_at } : null);
+        setLoadingChecklist(false);
+      });
+  }, [subTab, visible, booking?.id]);
+
+  const toggleChecklistItem = useCallback((key: string) => {
+    setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const saveChecklist = useCallback(async (complete: boolean) => {
+    if (!booking) return;
+    setSavingChecklist(true);
+    try {
+      const payload: Record<string, any> = {
+        booking_id: booking.id,
+        checklist,
+        updated_at: new Date().toISOString(),
+      };
+      if (complete) {
+        payload.completed_by = 'Mobile App';
+        payload.completed_at = new Date().toISOString();
+      }
+      const { error } = await supabase.from('safari_pretrip_checklists').upsert(payload, { onConflict: 'booking_id' });
+      if (error) throw error;
+      if (complete) setChecklistMeta({ completed_by: payload.completed_by, completed_at: payload.completed_at });
+      if (complete) Alert.alert('Checklist Complete', 'Pre-trip checklist signed off.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to save checklist.');
+    } finally {
+      setSavingChecklist(false);
+    }
+  }, [booking, checklist]);
+
   const saveOps = useCallback(async () => {
     if (!booking) return;
     setSaving(true);
-
-    // Supabase returns code PGRST204 / "Could not find … schema cache" when a column
-    // doesn't exist — the old "does not exist" check missed this exact message.
-    const isSchemaErr = (err: any) =>
-      err?.code === 'PGRST204' ||
-      err?.message?.includes('schema cache') ||
-      err?.message?.includes('Could not find') ||
-      err?.message?.includes('does not exist');
 
     try {
       // Update vehicle_id (column always exists)
@@ -358,7 +486,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
           .from('safari_bookings')
           .update({ vehicle_id: selVehicle.id })
           .eq('id', booking.id);
-        if (error && !isSchemaErr(error)) throw error;
+        if (error && !isSchemaError(error)) throw error;
       }
 
       // Update guide — try guide_id first, fall back to assigned_guide_id
@@ -367,21 +495,21 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
           .from('safari_bookings')
           .update({ guide_id: selGuide.id })
           .eq('id', booking.id);
-        if (eg1 && isSchemaErr(eg1)) {
+        if (eg1 && isSchemaError(eg1)) {
           const { error: eg2 } = await supabase
             .from('safari_bookings')
             .update({ assigned_guide_id: selGuide.id })
             .eq('id', booking.id);
-          if (eg2 && !isSchemaErr(eg2)) throw eg2;
+          if (eg2 && !isSchemaError(eg2)) throw eg2;
         } else if (eg1) {
           throw eg1;
         }
       }
 
-      // Mark vehicle as booked
-      if (selVehicle && selVehicle.status === 'available') {
-        try { await supabase.from('vehicles').update({ status: 'booked' }).eq('id', selVehicle.id); } catch { /* non-fatal */ }
-      }
+      // Vehicle availability is fully server-side now (database triggers on
+      // safari_bookings react to vehicle_id/status changes) — mobile only
+      // saves the assignment above; refetching shows the server-computed
+      // vehicle status immediately rather than waiting for a realtime event.
       Alert.alert('Saved', 'Booking assignments updated.');
       onRefetch(); onClose();
     } catch (e: any) {
@@ -400,6 +528,82 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
   const netProfit     = totalRevenue - totalCosts;
   const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : null;
 
+  const shareConfirmation = async () => {
+    const ref = booking.booking_reference || booking.id.slice(0, 10).toUpperCase();
+    const clientName = booking.clients?.company_name || booking.customer_name || 'Guest';
+
+    // Receipt vs Invoice is determined purely by balance_due — never guessed client-side
+    // beyond that single rule — and the document carries the payment's system transaction
+    // ID(s) so it stays traceable back to payment_events on both web and mobile.
+    const isReceipt = balance <= 0;
+    const docLabel = isReceipt ? 'Payment Receipt' : 'Invoice';
+
+    let paymentRows = '';
+    try {
+      const { data: events } = await supabase.rpc('search_payment_events', { p_search: booking.id });
+      const completed = ((events || []) as any[]).filter(e => e.status !== 'reversed');
+      if (completed.length > 0) {
+        paymentRows = completed.map(e => `
+          <tr>
+            <td style="padding:6px 0;color:#6C6C70;">${fmtDate(e.transaction_date)}</td>
+            <td style="padding:6px 0;font-family:monospace;font-size:11px;">${e.system_transaction_id}</td>
+            <td style="padding:6px 0;text-transform:capitalize;">${String(e.method).replace('_', ' ')}</td>
+            <td style="padding:6px 0;text-align:right;font-weight:700;">${formatCurrency(e.amount, e.currency)}</td>
+          </tr>`).join('');
+      }
+    } catch { /* receipt still generates without payment rows if the RPC is unreachable */ }
+
+    const html = `
+      <html><body style="font-family:-apple-system,Helvetica,Arial,sans-serif;padding:32px;color:#1C1611;">
+        <div style="border-bottom:3px solid #8B6B3E;padding-bottom:16px;margin-bottom:24px;">
+          <div style="font-size:11px;letter-spacing:2px;color:#8B6B3E;font-weight:700;text-transform:uppercase;">Jackal Adventures</div>
+          <div style="font-size:24px;font-weight:800;margin-top:4px;">${docLabel}</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6C6C70;width:40%;">Booking Reference</td><td style="padding:8px 0;font-weight:700;">${ref}</td></tr>
+          <tr><td style="padding:8px 0;color:#6C6C70;">Client</td><td style="padding:8px 0;font-weight:700;">${clientName}</td></tr>
+          <tr><td style="padding:8px 0;color:#6C6C70;">Start Date</td><td style="padding:8px 0;">${fmtDate(booking.start_date)}</td></tr>
+          <tr><td style="padding:8px 0;color:#6C6C70;">End Date</td><td style="padding:8px 0;">${fmtDate(booking.end_date)}</td></tr>
+          <tr><td style="padding:8px 0;color:#6C6C70;">Duration</td><td style="padding:8px 0;">${calcDays(booking.start_date, booking.end_date)}</td></tr>
+          ${booking.pax_count ? `<tr><td style="padding:8px 0;color:#6C6C70;">Travellers</td><td style="padding:8px 0;">${booking.pax_count} pax</td></tr>` : ''}
+          ${booking.safari_packages?.name ? `<tr><td style="padding:8px 0;color:#6C6C70;">Package</td><td style="padding:8px 0;">${booking.safari_packages.name}</td></tr>` : ''}
+          ${booking.safari_guides?.full_name ? `<tr><td style="padding:8px 0;color:#6C6C70;">Guide</td><td style="padding:8px 0;">${booking.safari_guides.full_name}</td></tr>` : ''}
+          ${booking.vehicles?.license_plate ? `<tr><td style="padding:8px 0;color:#6C6C70;">Vehicle</td><td style="padding:8px 0;">${booking.vehicles.license_plate}${booking.vehicles.make ? ` – ${booking.vehicles.make} ${booking.vehicles.model || ''}` : ''}</td></tr>` : ''}
+        </table>
+        <div style="margin-top:24px;padding:16px;background:#FEF0DC;border-radius:8px;">
+          <table style="width:100%;font-size:14px;">
+            <tr><td style="color:#6C6C70;">Total Cost</td><td style="text-align:right;font-weight:800;font-size:16px;">${formatCurrency(totalRevenue, 'USD')}</td></tr>
+            <tr><td style="color:#6C6C70;">Amount Paid</td><td style="text-align:right;color:#34A853;font-weight:700;">${formatCurrency(booking.amount_paid || 0, 'USD')}</td></tr>
+            <tr><td style="color:#6C6C70;">Balance Due</td><td style="text-align:right;color:${balance > 0 ? '#FF3B30' : '#34A853'};font-weight:700;">${formatCurrency(balance, 'USD')}</td></tr>
+          </table>
+        </div>
+        ${paymentRows ? `
+        <div style="margin-top:24px;">
+          <div style="font-size:12px;font-weight:700;color:#1C1611;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Payments Applied</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr style="border-bottom:1px solid #E5E5EA;">
+              <td style="padding:6px 0;color:#6C6C70;font-size:11px;">DATE</td>
+              <td style="padding:6px 0;color:#6C6C70;font-size:11px;">TRANSACTION ID</td>
+              <td style="padding:6px 0;color:#6C6C70;font-size:11px;">METHOD</td>
+              <td style="padding:6px 0;color:#6C6C70;font-size:11px;text-align:right;">AMOUNT</td>
+            </tr>
+            ${paymentRows}
+          </table>
+        </div>` : ''}
+        <div style="margin-top:32px;font-size:11px;color:#6C6C70;text-align:center;">Generated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} · Jackal Adventures</div>
+      </body></html>
+    `;
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${docLabel} — ${ref}`, UTI: 'com.adobe.pdf' });
+      }
+    } catch (e: any) {
+      Alert.alert('Share Failed', e?.message || 'Could not generate the document.');
+    }
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
@@ -409,7 +613,8 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
             <Text style={dm.headerRef}>{booking.booking_reference || booking.id.slice(0, 10).toUpperCase()}</Text>
             <Text style={dm.headerSub}>{booking.clients?.company_name || booking.customer_name || 'Safari Booking'}</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={dm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          <TouchableOpacity onPress={shareConfirmation} style={dm.closeBtn}><Ico.Share s={17} c={C.primary} /></TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={[dm.closeBtn, { marginLeft: 8 }]}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
         </View>
 
         {/* Status row */}
@@ -420,17 +625,22 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
         </View>
 
         {/* Sub-tabs */}
-        <View style={dm.subBar}>
-          {(['overview', 'ops', 'permits'] as const).map(t => (
-            <TouchableOpacity key={t} style={[dm.subTab, subTab === t && dm.subTabOn]} onPress={() => setSubTab(t)}>
-              <Text style={[dm.subTabT, subTab === t && dm.subTabTOn]}>
-                {t === 'overview' ? 'Overview' : t === 'ops' ? 'Operations' : 'Permits'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+          <View style={dm.subBar}>
+            {(['overview', 'ops', 'permits', 'payments', 'checklist', 'documents'] as const).map(t => (
+              <TouchableOpacity key={t} style={[dm.subTab, subTab === t && dm.subTabOn]} onPress={() => setSubTab(t)}>
+                <Text style={[dm.subTabT, subTab === t && dm.subTabTOn]}>
+                  {t === 'overview' ? 'Overview' : t === 'ops' ? 'Operations' : t === 'permits' ? 'Permits' : t === 'payments' ? 'Payments' : t === 'checklist' ? 'Pre-Trip' : 'Documents'}
+                  {t === 'documents' && docReports.length > 0 ? ` (${docReports.length})` : ''}
+                  {t === 'checklist' && checklistMeta?.completed_at ? ' ✓' : ''}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
           {/* Overview */}
           {subTab === 'overview' && <>
             <View style={dm.sect}>
@@ -449,6 +659,11 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
                   <Text style={[dm.finV, row.big && { fontSize: 17, color: C.primary }, row.c && { color: row.c }]}>{row.v}</Text>
                 </View>
               ))}
+              {balance > 0 && (
+                <TouchableOpacity style={dm.recordPayBtn} onPress={() => setShowRecordPayment(true)}>
+                  <Text style={dm.recordPayBtnT}>Record Payment</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={dm.sect}>
               <Text style={dm.sectTitle}>Trip Details</Text>
@@ -468,6 +683,68 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
                   <Text style={dm.detV} numberOfLines={2}>{row.v}</Text>
                 </View>
               ))}
+            </View>
+
+            {/* Day-by-Day Itinerary */}
+            <View style={dm.sect}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <Text style={[dm.sectTitle, { marginBottom: 0 }]}>Itinerary</Text>
+                <TouchableOpacity onPress={() => setEditingItinerary(e => !e)}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: C.primary }}>{editingItinerary ? 'Done' : itinerary.length > 0 ? 'Edit' : '+ Add Days'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {itinerary.length === 0 && !editingItinerary && (
+                <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingVertical: 12 }}>No itinerary added yet</Text>
+              )}
+
+              {itinerary.map((d, idx) => (
+                <View key={idx} style={dm.itinDay}>
+                  <View style={dm.itinDayNum}><Text style={dm.itinDayNumT}>{d.day}</Text></View>
+                  <View style={{ flex: 1 }}>
+                    {editingItinerary ? (
+                      <>
+                        <TextInput
+                          style={dm.itinTitleInput}
+                          value={d.title}
+                          onChangeText={v => updateItineraryDay(idx, { title: v })}
+                          placeholder={`Day ${d.day} title…`}
+                          placeholderTextColor={C.textMuted}
+                        />
+                        <TextInput
+                          style={dm.itinDescInput}
+                          value={d.description || ''}
+                          onChangeText={v => updateItineraryDay(idx, { description: v })}
+                          placeholder="Activity / location details…"
+                          placeholderTextColor={C.textMuted}
+                          multiline
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Text style={dm.itinTitle}>{d.title || `Day ${d.day}`}</Text>
+                        {d.description ? <Text style={dm.itinDesc}>{d.description}</Text> : null}
+                      </>
+                    )}
+                  </View>
+                  {editingItinerary && (
+                    <TouchableOpacity onPress={() => removeItineraryDay(idx)} style={{ padding: 4 }}>
+                      <Ico.Close s={14} c={C.danger} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+
+              {editingItinerary && (
+                <>
+                  <TouchableOpacity style={dm.itinAddBtn} onPress={addItineraryDay}>
+                    <Text style={dm.itinAddBtnT}>+ Add Day</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[dm.saveBtn, savingItinerary && { opacity: 0.6 }]} onPress={saveItinerary} disabled={savingItinerary}>
+                    {savingItinerary ? <ActivityIndicator size="small" color="#fff" /> : <Text style={dm.saveBtnT}>Save Itinerary</Text>}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </>}
 
@@ -502,23 +779,151 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
             <Text style={dm.sectTitle}>Booking Permits</Text>
             {permits.length === 0
               ? <Text style={{ color: C.textMuted, textAlign: 'center', paddingVertical: 20, fontSize: 13 }}>No permits recorded for this booking</Text>
-              : permits.map(p => (
-                <View key={p.id} style={dm.permitRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={dm.permitName}>{p.safari_permits?.permit_name || '—'}</Text>
-                    {p.safari_permits?.permit_type ? <Text style={dm.permitType}>{p.safari_permits.permit_type}</Text> : null}
+              : permits.map(p => {
+                const typeLower = (p.safari_permits?.permit_type || p.safari_permits?.permit_name || '').toLowerCase();
+                const highStakes = typeLower.includes('gorilla') || typeLower.includes('chimp');
+                const unconfirmed = highStakes && !p.authority_confirmed;
+                const isEditing = editingPermitId === p.id;
+                return (
+                  <View key={p.id} style={[dm.permitCard, unconfirmed && dm.permitCardWarn]}>
+                    <View style={{ flexDirection: 'row' }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={dm.permitName}>{p.safari_permits?.permit_name || '—'}</Text>
+                        {p.safari_permits?.permit_type ? <Text style={dm.permitType}>{p.safari_permits.permit_type}</Text> : null}
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        {p.quantity && p.quantity > 1 ? <Text style={{ fontSize: 11, color: C.textMuted }}>×{p.quantity}</Text> : null}
+                        {p.total_cost ? <Text style={{ fontSize: 14, fontWeight: '700', color: C.primary }}>{formatCurrency(p.total_cost, (p.currency as any) || 'USD')}</Text> : null}
+                        {p.status ? <View style={[dm.permitBadge, { backgroundColor: p.status === 'active' ? C.primarySoft : C.input }]}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: p.status === 'active' ? C.primary : C.textMuted }}>{p.status.toUpperCase()}</Text>
+                        </View> : null}
+                      </View>
+                    </View>
+
+                    {unconfirmed && (
+                      <View style={dm.permitWarnBanner}>
+                        <Text style={dm.permitWarnText}>⚠ Not yet confirmed by the authority — trek is at risk without confirmation</Text>
+                      </View>
+                    )}
+
+                    <View style={dm.permitFooter}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={dm.permitFooterLabel}>Authority Reference</Text>
+                        {isEditing ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <TextInput
+                              style={dm.permitRefInput}
+                              value={refInput}
+                              onChangeText={setRefInput}
+                              placeholder="e.g. UWA-2026-00123"
+                              placeholderTextColor={C.textMuted}
+                              autoCapitalize="characters"
+                              autoCorrect={false}
+                            />
+                            <TouchableOpacity onPress={() => savePermitRef(p.id)}><Text style={dm.permitRefSave}>Save</Text></TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity onPress={() => { setEditingPermitId(p.id); setRefInput(p.external_reference || ''); }}>
+                            <Text style={dm.permitFooterValue}>{p.external_reference || 'Tap to add reference…'}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <View style={{ alignItems: 'center', gap: 4 }}>
+                        <Text style={dm.permitFooterLabel}>Confirmed</Text>
+                        <Switch
+                          value={!!p.authority_confirmed}
+                          onValueChange={() => toggleAuthorityConfirmed(p)}
+                          trackColor={{ false: C.border, true: C.success }}
+                          thumbColor="#fff"
+                        />
+                      </View>
+                    </View>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    {p.quantity && p.quantity > 1 ? <Text style={{ fontSize: 11, color: C.textMuted }}>×{p.quantity}</Text> : null}
-                    {p.total_cost ? <Text style={{ fontSize: 14, fontWeight: '700', color: C.primary }}>{formatCurrency(p.total_cost, (p.currency as any) || 'USD')}</Text> : null}
-                    {p.status ? <View style={[dm.permitBadge, { backgroundColor: p.status === 'active' ? C.primarySoft : C.input }]}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: p.status === 'active' ? C.primary : C.textMuted }}>{p.status.toUpperCase()}</Text>
-                    </View> : null}
-                  </View>
-                </View>
-              ))
+                );
+              })
             }
           </View>}
+
+          {/* Payments */}
+          {subTab === 'payments' && (
+            <View style={dm.sect}>
+              <Text style={dm.sectTitle}>Payment History</Text>
+              <PaymentHistoryList sourceId={booking.id} />
+            </View>
+          )}
+
+          {/* Pre-Trip Checklist */}
+          {subTab === 'checklist' && (
+            loadingChecklist ? <LoadingView label="Loading checklist…" /> : (
+              <View style={dm.sect}>
+                <Text style={dm.sectTitle}>Pre-Trip Vehicle Checklist</Text>
+                {checklistMeta?.completed_at ? (
+                  <View style={dm.checklistDoneBanner}>
+                    <Text style={dm.checklistDoneText}>
+                      ✓ Signed off {new Date(checklistMeta.completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {checklistMeta.completed_by ? ` by ${checklistMeta.completed_by}` : ''}
+                    </Text>
+                  </View>
+                ) : null}
+                {PRETRIP_CHECKLIST_ITEMS.map(item => (
+                  <TouchableOpacity key={item.key} style={dm.checklistRow} onPress={() => toggleChecklistItem(item.key)} activeOpacity={0.7}>
+                    <View style={[dm.checkbox, checklist[item.key] && dm.checkboxOn]}>
+                      {checklist[item.key] ? <Text style={dm.checkboxTick}>✓</Text> : null}
+                    </View>
+                    <Text style={[dm.checklistLabel, checklist[item.key] && dm.checklistLabelDone]}>{item.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[dm.saveBtn, savingChecklist && { opacity: 0.6 }]}
+                  onPress={() => saveChecklist(PRETRIP_CHECKLIST_ITEMS.every(i => checklist[i.key]))}
+                  disabled={savingChecklist}
+                >
+                  {savingChecklist
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={dm.saveBtnT}>
+                        {PRETRIP_CHECKLIST_ITEMS.every(i => checklist[i.key]) ? 'Sign & Complete Checklist' : 'Save Progress'}
+                      </Text>}
+                </TouchableOpacity>
+              </View>
+            )
+          )}
+
+          {/* Documents */}
+          {subTab === 'documents' && (
+            loadingDocs ? <LoadingView label="Loading documents…" /> :
+            docReports.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                  <Ico.FileText s={24} c={C.textMuted} />
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 6 }}>No Field Reports</Text>
+                <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingHorizontal: 24, lineHeight: 18 }}>
+                  Upload post-safari field reports from the Operations tab in Safari Management.
+                </Text>
+              </View>
+            ) : docReports.map(r => {
+              const isPdf = r.file_type?.includes('pdf') || r.file_name?.toLowerCase().endsWith('.pdf');
+              return (
+                <TouchableOpacity key={r.id} style={fr.card} onPress={() => setPreviewDoc(r)} activeOpacity={0.78}>
+                  <View style={fr.iconWrap}><Ico.FileText s={22} c={C.primary} /></View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={fr.fileName} numberOfLines={2}>{r.file_name}</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+                      {r.file_size ? <Text style={fr.meta}>{fmtBytes(r.file_size)}</Text> : null}
+                      {r.created_at ? <Text style={fr.meta}>{fmtDate(r.created_at)}</Text> : null}
+                      <View style={[fr.typePill, { backgroundColor: isPdf ? '#FFEEDD' : '#EEF0FF' }]}>
+                        <Text style={[fr.typePillT, { color: isPdf ? '#8B4513' : '#3B5BDB' }]}>
+                          {isPdf ? 'PDF' : (r.file_type?.split('/')[1]?.toUpperCase() || 'DOC')}
+                        </Text>
+                      </View>
+                    </View>
+                    {r.notes ? <Text style={fr.notes} numberOfLines={1}>{r.notes}</Text> : null}
+                  </View>
+                  <Ico.Eye s={15} c={C.primary} />
+                </TouchableOpacity>
+              );
+            })
+          )}
         </ScrollView>
 
         <PickerModal visible={showVPicker} title="Select Vehicle"
@@ -527,7 +932,18 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
         <PickerModal visible={showGPicker} title="Select Safari Guide"
           options={guides.map(g => ({ value: g.id, label: g.full_name, sub: g.status }))}
           selected={selGuide?.id} onSelect={o => setSelGuide(guides.find(g => g.id === o.value) || null)} onClose={() => setShowGPicker(false)} />
+        <ReportPreviewModal report={previewDoc} visible={previewDoc != null} onClose={() => setPreviewDoc(null)} />
       </SafeAreaView>
+
+      <RecordPaymentSheet
+        visible={showRecordPayment}
+        onClose={() => { setShowRecordPayment(false); onRefetch(); }}
+        source="safari"
+        sourceId={booking.id}
+        balanceDue={balance}
+        currency="USD"
+        subjectLabel={`${booking.booking_reference || booking.id.slice(0, 10).toUpperCase()} · ${booking.clients?.company_name || booking.customer_name || 'Guest'}`}
+      />
     </Modal>
   );
 }
@@ -543,6 +959,8 @@ const dm = StyleSheet.create({
   duration: { fontSize: 12, color: C.textMuted, fontWeight: '600' },
   payBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginLeft: 'auto' as any },
   payText: { fontSize: 11, fontWeight: '700' },
+  recordPayBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
+  recordPayBtnT: { fontSize: 14, fontWeight: '700', color: '#fff' },
   subBar: { flexDirection: 'row', backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, paddingHorizontal: 12 },
   subTab: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
   subTabOn: { borderBottomColor: C.primary },
@@ -564,6 +982,32 @@ const dm = StyleSheet.create({
   permitName: { fontSize: 14, fontWeight: '600', color: C.text },
   permitType: { fontSize: 11, color: C.textMuted, marginTop: 2 },
   permitBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginTop: 4 },
+  permitCard: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '60' },
+  permitCardWarn: { backgroundColor: '#FFF5F3', marginHorizontal: -16, paddingHorizontal: 16, borderRadius: 10 },
+  permitWarnBanner: { backgroundColor: '#FFEEED', borderRadius: 8, padding: 8, marginTop: 8 },
+  permitWarnText: { fontSize: 11, fontWeight: '700', color: C.danger, lineHeight: 15 },
+  permitFooter: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border + '50' },
+  permitFooterLabel: { fontSize: 10, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  permitFooterValue: { fontSize: 13, fontWeight: '600', color: C.primary, marginTop: 3 },
+  permitRefInput: { flex: 1, backgroundColor: C.input, borderWidth: 1, borderColor: C.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: C.text },
+  permitRefSave: { fontSize: 12, fontWeight: '700', color: C.primary },
+  checklistDoneBanner: { backgroundColor: '#E8F7EE', borderRadius: 10, padding: 12, marginBottom: 14 },
+  checklistDoneText: { fontSize: 12, fontWeight: '700', color: '#1A6B3C' },
+  checklistRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.border + '60' },
+  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  checkboxOn: { backgroundColor: C.success, borderColor: C.success },
+  checkboxTick: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  checklistLabel: { flex: 1, fontSize: 14, color: C.text },
+  checklistLabelDone: { color: C.textMuted, textDecorationLine: 'line-through' },
+  itinDay: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border + '60' },
+  itinDayNum: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  itinDayNumT: { fontSize: 12, fontWeight: '800', color: C.primary },
+  itinTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  itinDesc: { fontSize: 12, color: C.textMuted, marginTop: 3, lineHeight: 17 },
+  itinTitleInput: { fontSize: 14, fontWeight: '700', color: C.text, backgroundColor: C.input, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: C.border },
+  itinDescInput: { fontSize: 12, color: C.text, backgroundColor: C.input, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: C.border, marginTop: 6, minHeight: 44, textAlignVertical: 'top' },
+  itinAddBtn: { alignSelf: 'flex-start', paddingVertical: 8 },
+  itinAddBtnT: { fontSize: 13, fontWeight: '700', color: C.primary },
 });
 
 // ─── Date-range helpers ───────────────────────────────────────────────────────
@@ -764,7 +1208,8 @@ function BookingsTab() {
     const { data: baseData, error: baseErr } = await supabase
       .from('safari_bookings')
       .select('*')
-      .order('start_date', { ascending: false });
+      .order('start_date', { ascending: false })
+      .limit(500);
     if (baseErr) { console.error('[SafariBookings]', baseErr.message); setBookings([]); return; }
 
     // Normalize: map any column variants into the SafariBooking interface shape
@@ -877,7 +1322,12 @@ function BookingsTab() {
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
           <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-            placeholder="Search ref, client, email…" placeholderTextColor={C.textMuted} />
+            placeholder="Search ref, client, email…" placeholderTextColor={C.textMuted}
+              autoCorrect={false}
+              autoCapitalize="none"
+              blurOnSubmit={false}
+              returnKeyType="search"
+            />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
               <Ico.Close s={16} c={C.textMuted} />
@@ -930,6 +1380,7 @@ function BookingsTab() {
       <Text style={ts.resultCount}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</Text>
 
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item }) => <BookingCard b={item} onPress={() => { setSelected(item); setShowDetail(true); }} />}
@@ -1062,7 +1513,8 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
             <Text style={gm.title}>Upload Field Report</Text>
             <TouchableOpacity onPress={() => { onClose(); reset(); }} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
 
             {/* Booking selector */}
             <FieldLabel label="Safari Booking *" />
@@ -1181,7 +1633,8 @@ function ReportPreviewModal({ report, visible, onClose }: {
           <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
           {/* File info card */}
           <View style={rp.infoCard}>
             <View style={rp.iconWrap}><Ico.FileText s={32} c={C.primary} /></View>
@@ -1308,11 +1761,17 @@ function FieldReportsSubTab() {
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
           <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-            placeholder="Search by booking, client, file…" placeholderTextColor={C.textMuted} />
+            placeholder="Search by booking, client, file…" placeholderTextColor={C.textMuted}
+              autoCorrect={false}
+              autoCapitalize="none"
+              blurOnSubmit={false}
+              returnKeyType="search"
+            />
         </View>
       </View>
 
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: r }) => {
@@ -1370,8 +1829,8 @@ function FieldReportsSubTab() {
       />
 
       {/* FAB */}
-      <TouchableOpacity style={fabStyle.fab} onPress={() => setShowUpload(true)}>
-        <Ico.Upload s={20} c="#fff" />
+      <TouchableOpacity style={[fabStyle.fab, { backgroundColor: C.gold }]} onPress={() => setShowUpload(true)}>
+        <Ico.Plus s={24} c="#fff" />
       </TouchableOpacity>
 
       <UploadReportModal visible={showUpload} onClose={() => setShowUpload(false)} onUploaded={fetchReports} />
@@ -1446,7 +1905,8 @@ function AddEditGuideModal({ visible, guide, onClose, onSaved }: {
             <Text style={gm.title}>{guide ? 'Edit Guide' : 'Add Safari Guide'}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
             <FieldLabel label="Full Name *" /><TextF value={name} onChange={setName} placeholder="e.g. John Musoke" />
             <FieldLabel label="Phone" /><TextF value={phone} onChange={setPhone} placeholder="+256 700 000000" keyboardType="phone-pad" />
             <FieldLabel label="Email" /><TextF value={email} onChange={setEmail} placeholder="guide@example.com" keyboardType="email-address" />
@@ -1526,7 +1986,8 @@ function AddEditPermitModal({ visible, permit, onClose, onSaved }: {
             <Text style={gm.title}>{permit ? 'Edit Permit' : 'Add Permit'}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
             <FieldLabel label="Permit Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Gorilla Permit" />
             <FieldLabel label="Permit Type" />
             <TouchableOpacity style={gm.selector} onPress={() => setShowTypePicker(true)}>
@@ -1629,13 +2090,19 @@ function OperationsTab() {
           <View style={ts.searchBox}>
             <Ico.Search s={15} c={C.textMuted} />
             <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-              placeholder={subTab === 'guides' ? 'Search guides…' : 'Search permits…'} placeholderTextColor={C.textMuted} />
+              placeholder={subTab === 'guides' ? 'Search guides…' : 'Search permits…'} placeholderTextColor={C.textMuted}
+                autoCorrect={false}
+                autoCapitalize="none"
+                blurOnSubmit={false}
+                returnKeyType="search"
+              />
           </View>
         </View>
       )}
 
       {subTab === 'guides' && (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           data={filteredGuides}
           keyExtractor={i => i.id}
           renderItem={({ item: g }) => (
@@ -1673,6 +2140,7 @@ function OperationsTab() {
 
       {subTab === 'permits' && (
         <FlatList
+          keyboardShouldPersistTaps="handled"
           data={filteredPermits}
           keyExtractor={i => i.id}
           renderItem={({ item: p }) => (
@@ -1800,7 +2268,8 @@ function PackageFormModal({ visible, pkg, onClose, onSaved }: {
             <Text style={gm.title}>{pkg ? 'Edit Package' : 'New Safari Package'}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
             <FieldLabel label="Package Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Uganda Gorilla Safari" />
             <FieldLabel label="Package Code" /><TextF value={code} onChange={setCode} placeholder="e.g. UG-GOR-3D" />
             <FieldLabel label="Category" />
@@ -1876,6 +2345,7 @@ function PackagesTab() {
         ))}
       </ScrollView>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: p }) => (
@@ -1938,8 +2408,14 @@ function AnalyticsTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // This feeds revenue/profit totals, so truncating too aggressively would
+    // silently produce wrong numbers rather than just being slow — this cap is
+    // a safety net against a genuinely unbounded fetch, not a "recent window."
+    // Switch to year-scoping (like Dashboard/Finance already do) before this
+    // safari_bookings table approaches 2000 rows.
     supabase.from('safari_bookings')
       .select('id, status, total_price_usd, amount_paid, deposit_amount, profit_margin, created_at, safari_packages(name)')
+      .limit(2000)
       .then(({ data }) => { setBookings((data || []) as unknown as SafariBooking[]); setLoading(false); });
   }, []);
 
@@ -1964,7 +2440,8 @@ function AnalyticsTab() {
   if (loading) return <LoadingView label="Computing analytics…" />;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
       {/* KPI Grid */}
       <Text style={an.sectionTitle}>Key Performance Indicators</Text>
       <View style={an.kpiGrid}>
@@ -2120,7 +2597,8 @@ function AirportFormModal({ visible, airport, defaultCountry, onClose, onSaved }
             <Text style={gm.title}>{airport ? 'Edit Airport' : 'Add Airport'}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
             <FieldLabel label="Airport Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Entebbe International Airport" />
             <FieldLabel label="IATA Code" /><TextF value={code} onChange={setCode} placeholder="EBB" />
             <FieldLabel label="City" /><TextF value={city} onChange={setCity} placeholder="Entebbe" />
@@ -2196,7 +2674,12 @@ function AirportsTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search airports, cities, codes…" placeholderTextColor={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search airports, cities, codes…" placeholderTextColor={C.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
+          />
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }} contentContainerStyle={ts.chipRow}>
@@ -2207,6 +2690,7 @@ function AirportsTab() {
         ))}
       </ScrollView>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: a }) => {
@@ -2329,7 +2813,8 @@ function LodgeFormModal({ visible, lodge, onClose, onSaved }: {
             <Text style={gm.title}>{lodge ? 'Edit Lodge' : 'Add Hotel / Lodge'}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
             <FieldLabel label="Lodge / Hotel Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Forest Lodge" />
             <FieldLabel label="Destination" /><TextF value={dest} onChange={setDest} placeholder="e.g. Bwindi Impenetrable Forest" />
             <FieldLabel label="Type" />
@@ -2406,10 +2891,16 @@ function HotelsLodgesTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search lodges, destinations…" placeholderTextColor={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search lodges, destinations…" placeholderTextColor={C.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
+          />
         </View>
       </View>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: l }) => (
@@ -2534,7 +3025,12 @@ function NationalParksTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search parks, regions…" placeholderTextColor={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search parks, regions…" placeholderTextColor={C.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
+          />
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }} contentContainerStyle={ts.chipRow}>
@@ -2545,6 +3041,7 @@ function NationalParksTab() {
         ))}
       </ScrollView>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: p }) => {
@@ -2641,6 +3138,7 @@ function PaymentsTab() {
         clients(company_name), safari_packages(name, duration_days)`)
       .gte('amount_paid', 0)
       .order('updated_at', { ascending: false })
+      .limit(300)
       .then(({ data }) => { setBookings((data || []) as unknown as PaymentBooking[]); setLoading(false); });
   }, []);
 
@@ -2685,10 +3183,16 @@ function PaymentsTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search bookings, customers…" placeholderTextColor={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search bookings, customers…" placeholderTextColor={C.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
+          />
         </View>
       </View>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: b }) => {
@@ -2806,7 +3310,8 @@ function ClientFormModal({ visible, client, onClose, onSaved }: {
             <Text style={gm.title}>{client ? 'Edit Client' : 'Add Safari Client'}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
             <FieldLabel label="Customer Name *" /><TextF value={name} onChange={setName} placeholder="Client or company name" />
             <FieldLabel label="Contact Person" /><TextF value={contact} onChange={setContact} placeholder="Primary contact" />
             <FieldLabel label="Email *" /><TextF value={email} onChange={setEmail} placeholder="email@example.com" keyboardType="email-address" />
@@ -2836,12 +3341,94 @@ const KYC_CFG: Record<string, { bg: string; text: string }> = {
   Incomplete:      { bg: '#FFEEED',     text: C.danger  },
 };
 
+function ClientHistoryModal({ client, visible, onClose }: {
+  client: SafariClient | null; visible: boolean; onClose: () => void;
+}) {
+  const [bookings, setBookings] = useState<SafariBooking[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !client) return;
+    setLoading(true);
+    supabase.from('safari_bookings')
+      .select('id, booking_reference, status, start_date, end_date, total_price_usd, amount_paid')
+      .eq('client_id', client.id)
+      .order('start_date', { ascending: false })
+      .then(({ data }) => { setBookings((data || []) as unknown as SafariBooking[]); setLoading(false); });
+  }, [visible, client?.id]);
+
+  if (!client) return null;
+  const lifetimeSpend = bookings.reduce((s, b) => s + (b.total_price_usd || 0), 0);
+  const lifetimePaid  = bookings.reduce((s, b) => s + (b.amount_paid || 0), 0);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+        <View style={dm.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={dm.headerRef}>{client.company_name}</Text>
+            <Text style={dm.headerSub}>{client.email || client.phone_number || 'Client history'}</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={dm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+        </View>
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+            <View style={[paStyle.kpiCard, { flex: 1 }]}>
+              <Text style={paStyle.kpiLabel}>Total Bookings</Text>
+              <Text style={[paStyle.kpiValue, { color: C.primary, fontSize: 22 }]}>{bookings.length}</Text>
+            </View>
+            <View style={[paStyle.kpiCard, { flex: 1 }]}>
+              <Text style={paStyle.kpiLabel}>Lifetime Value</Text>
+              <Text style={[paStyle.kpiValue, { color: C.success, fontSize: 20 }]}>{formatCurrency(lifetimeSpend, 'USD')}</Text>
+            </View>
+          </View>
+          {client.address ? (
+            <View style={dm.sect}>
+              <Text style={dm.sectTitle}>Contact</Text>
+              <View style={dm.detRow}><Text style={dm.detL}>Contact Person</Text><Text style={dm.detV}>{client.contact_person || '—'}</Text></View>
+              <View style={dm.detRow}><Text style={dm.detL}>Address</Text><Text style={dm.detV} numberOfLines={2}>{client.address}</Text></View>
+            </View>
+          ) : null}
+          <View style={dm.sect}>
+            <Text style={dm.sectTitle}>Booking History</Text>
+            {loading ? <LoadingView label="Loading bookings…" /> : bookings.length === 0 ? (
+              <Text style={{ color: C.textMuted, textAlign: 'center', paddingVertical: 20, fontSize: 13 }}>No bookings yet for this client</Text>
+            ) : bookings.map(b => {
+              const st = STATUS_CFG[b.status] || STATUS_CFG.pending;
+              return (
+                <View key={b.id} style={dm.detRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={dm.detL}>{b.booking_reference || b.id.slice(0, 8)}</Text>
+                    <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{fmtDate(b.start_date)} → {fmtDate(b.end_date)}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={dm.detV}>{formatCurrency(b.total_price_usd || 0, 'USD')}</Text>
+                    <View style={[dm.permitBadge, { backgroundColor: st.bg, marginTop: 4 }]}>
+                      <Text style={{ fontSize: 9, fontWeight: '700', color: st.text }}>{st.label}</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+          {lifetimePaid < lifetimeSpend && bookings.length > 0 && (
+            <Text style={{ fontSize: 12, color: C.danger, textAlign: 'center', marginTop: 4 }}>
+              {formatCurrency(lifetimeSpend - lifetimePaid, 'USD')} outstanding across all bookings
+            </Text>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function ClientsTab() {
   const [clients, setClients] = useState<SafariClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editClient, setEditClient] = useState<SafariClient | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [historyClient, setHistoryClient] = useState<SafariClient | null>(null);
 
   const fetchClients = useCallback(async () => {
     const { data } = await supabase.from('clients')
@@ -2894,16 +3481,22 @@ function ClientsTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search clients, emails…" placeholderTextColor={C.textMuted} />
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search clients, emails…" placeholderTextColor={C.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            blurOnSubmit={false}
+            returnKeyType="search"
+          />
         </View>
       </View>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item: c }) => {
           const kyc = KYC_CFG[c.kyc_status || 'Incomplete'] || KYC_CFG.Incomplete;
           return (
-            <View style={clStyle.card}>
+            <TouchableOpacity style={clStyle.card} onPress={() => setHistoryClient(c)} activeOpacity={0.78}>
               <View style={clStyle.avatar}><Text style={clStyle.avatarT}>{c.company_name?.[0]?.toUpperCase() || '?'}</Text></View>
               <View style={{ flex: 1, paddingHorizontal: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
@@ -2924,7 +3517,7 @@ function ClientsTab() {
                   <Ico.Trash s={14} c={C.danger} />
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
         ListEmptyComponent={<EmptyView title="No safari clients" sub="Add clients using the + button below." />}
@@ -2934,6 +3527,7 @@ function ClientsTab() {
         <Ico.Plus s={22} c="#fff" />
       </TouchableOpacity>
       <ClientFormModal visible={showModal} client={editClient} onClose={() => setShowModal(false)} onSaved={fetchClients} />
+      <ClientHistoryModal client={historyClient} visible={historyClient != null} onClose={() => setHistoryClient(null)} />
     </View>
   );
 }

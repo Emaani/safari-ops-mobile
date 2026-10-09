@@ -17,6 +17,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
 import { devLog } from '../lib/devLog';
+import { supabase } from '../lib/supabase';
+import { RecordPaymentSheet } from '../components/payments/RecordPaymentSheet';
 
 // Hooks
 import { useExchangeRate, getConversionRates } from '../hooks/useExchangeRate';
@@ -41,7 +43,6 @@ import {
 
 // Forms
 import { NewBookingModal, AddExpenseModal, CreateSafariModal } from '../components/forms';
-import { LoadingOverlay } from '../components/system/JackalLoader';
 import { KpiRowSkeleton, FadeSlideIn } from '../components/ui';
 
 // Utils
@@ -297,6 +298,111 @@ function getGreeting(): string {
 }
 
 // ============================================================================
+// TODAY'S OPERATIONS BRIEFING
+// ============================================================================
+
+interface BriefingCard {
+  id: string;
+  kind: 'safari' | 'vehicle';
+  reference: string;
+  clientName: string;
+  detail: string;
+  pax?: number;
+  guideName?: string;
+  vehiclePlate?: string;
+  status: string;
+}
+
+function TodaysOperationsBriefing() {
+  const [cards, setCards] = useState<BriefingCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation<any>();
+
+  useEffect(() => {
+    let cancelled = false;
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    (async () => {
+      const [safariRes, vehicleRes] = await Promise.all([
+        supabase.from('safari_bookings')
+          .select(`booking_reference, id, status, start_date, end_date, pax_count,
+            clients(company_name), customer_name, safari_guides(full_name), vehicles(license_plate)`)
+          .or(`status.eq.active,start_date.eq.${todayStr}`)
+          .limit(20),
+        supabase.from('bookings')
+          .select('id, booking_reference, booking_number, status, start_date, client_name, clients(company_name)')
+          .or(`status.eq.In-Progress,start_date.eq.${todayStr}`)
+          .limit(20),
+      ]);
+
+      if (cancelled) return;
+
+      const safariCards: BriefingCard[] = ((safariRes.data || []) as any[]).map(b => ({
+        id: `safari-${b.id}`,
+        kind: 'safari',
+        reference: b.booking_reference || b.id.slice(0, 8).toUpperCase(),
+        clientName: b.clients?.company_name || b.customer_name || 'Guest',
+        detail: `${new Date(b.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} → ${new Date(b.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+        pax: b.pax_count,
+        guideName: b.safari_guides?.full_name,
+        vehiclePlate: b.vehicles?.license_plate,
+        status: b.status,
+      }));
+
+      const vehicleCards: BriefingCard[] = ((vehicleRes.data || []) as any[]).map(b => ({
+        id: `vehicle-${b.id}`,
+        kind: 'vehicle',
+        reference: b.booking_reference || b.booking_number || b.id.slice(0, 8).toUpperCase(),
+        clientName: b.clients?.company_name || b.client_name || 'Guest',
+        detail: new Date(b.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        status: b.status,
+      }));
+
+      setCards([...safariCards, ...vehicleCards]);
+      setLoading(false);
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || cards.length === 0) return null;
+
+  return (
+    <View style={styles.briefingCard}>
+      <View style={styles.briefingHeaderRow}>
+        <Text style={styles.briefingEyebrow}>TODAY'S OPERATIONS</Text>
+        <Text style={styles.briefingCount}>{cards.length} active</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.briefingScroll}>
+        {cards.map(c => (
+          <TouchableOpacity
+            key={c.id}
+            style={styles.briefingItemCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('MainTabs', { screen: c.kind === 'safari' ? 'Safari' : 'Bookings' })}
+          >
+            <View style={styles.briefingItemHeader}>
+              <Text style={styles.briefingItemKind}>{c.kind === 'safari' ? '🧭 SAFARI' : '🚙 VEHICLE'}</Text>
+              <Text style={styles.briefingItemStatus}>{c.status}</Text>
+            </View>
+            <Text style={styles.briefingItemRef}>{c.reference}</Text>
+            <Text style={styles.briefingItemClient} numberOfLines={1}>{c.clientName}</Text>
+            <Text style={styles.briefingItemDetail}>{c.detail}</Text>
+            {(c.vehiclePlate || c.guideName || c.pax) && (
+              <View style={styles.briefingItemMetaRow}>
+                {c.vehiclePlate ? <Text style={styles.briefingItemMeta}>{c.vehiclePlate}</Text> : null}
+                {c.guideName ? <Text style={styles.briefingItemMeta}>{c.guideName}</Text> : null}
+                {c.pax ? <Text style={styles.briefingItemMeta}>{c.pax} pax</Text> : null}
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ============================================================================
 // MAIN DASHBOARD SCREEN
 // ============================================================================
 
@@ -323,6 +429,7 @@ export function DashboardScreen() {
   const [showAddExpense,       setShowAddExpense]       = useState(false);
   const [showCreateSafari,     setShowCreateSafari]     = useState(false);
   const [showOutstandingModal, setShowOutstandingModal] = useState(false);
+  const [payingBooking,        setPayingBooking]        = useState<OutstandingPaymentData | null>(null);
 
   // ========================================================================
   // AUTH
@@ -465,6 +572,10 @@ export function DashboardScreen() {
     setRefreshing(false);
   }, [refetch]);
 
+  const openRecordPayment = useCallback((item: OutstandingPaymentData) => {
+    setPayingBooking(item);
+  }, []);
+
   const handleMonthChange = useCallback((value: MonthFilter) => {
     devLog(
       '[Dashboard] Month filter changed to:',
@@ -601,9 +712,6 @@ export function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Full-screen loader only on very first mount before header renders */}
-      {loading && !refreshing && false && <LoadingOverlay />}
-
       {/* Hero Header */}
       <View style={styles.header}>
         <View style={styles.headerGlowLeft} />
@@ -718,6 +826,9 @@ export function DashboardScreen() {
             <Text style={styles.quickActionLabel}>New Safari</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Today's Operations Briefing */}
+        <TodaysOperationsBriefing />
 
         <View style={styles.controlsCard}>
           <View style={styles.controlsHeader}>
@@ -1030,6 +1141,9 @@ export function DashboardScreen() {
                     <Text style={styles.opRowBalance}>{formatCurrency(item.balance_due, item.currency)}</Text>
                     <Text style={styles.opRowLabel}>Balance Due</Text>
                     <Text style={styles.opRowPaid}>Paid: {formatCurrency(item.amount_paid, item.currency)}</Text>
+                    <TouchableOpacity style={styles.recordPayBtn} onPress={() => openRecordPayment(item)}>
+                      <Text style={styles.recordPayBtnT}>Record Payment</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               );
@@ -1037,6 +1151,19 @@ export function DashboardScreen() {
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Record Payment — routed through record_payment RPC, never a direct write */}
+      {payingBooking && (
+        <RecordPaymentSheet
+          visible={payingBooking != null}
+          onClose={() => { setPayingBooking(null); refetch(); }}
+          source="booking"
+          sourceId={payingBooking.id}
+          balanceDue={payingBooking.balance_due}
+          currency={payingBooking.currency}
+          subjectLabel={`${payingBooking.booking_number || payingBooking.id.slice(0, 10).toUpperCase()} · ${payingBooking.client_name}`}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -1197,6 +1324,87 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
     letterSpacing: 0.1,
+  },
+  briefingCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+  briefingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  briefingEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: COLORS.primary,
+  },
+  briefingCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  briefingScroll: {
+    gap: 10,
+  },
+  briefingItemCard: {
+    width: 170,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  briefingItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  briefingItemKind: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 0.3,
+  },
+  briefingItemStatus: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.success,
+    textTransform: 'uppercase',
+  },
+  briefingItemRef: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  briefingItemClient: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  briefingItemDetail: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  briefingItemMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  briefingItemMeta: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   scrollView: {
     flex: 1,
@@ -1652,6 +1860,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.success,
     marginTop: 4,
+  },
+  recordPayBtn: {
+    marginTop: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  recordPayBtnT: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
   opEmpty: {
     paddingVertical: 48,

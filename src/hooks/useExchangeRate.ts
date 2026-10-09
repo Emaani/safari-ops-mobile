@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { devLog } from '../lib/devLog';
+import { realtimeManager } from '../lib/realtimeManager';
 import type { ExchangeRate, Currency } from '../types/dashboard';
 
 // Default fallback rates (only used if database fetch fails)
@@ -101,26 +102,21 @@ export function useExchangeRate() {
     }
   }, []);
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates — routed through the shared realtimeManager
+  // so Dashboard + Finance (both mount this hook) share ONE channel instead of
+  // each opening its own under the identical name 'exchange-rates-changes'.
   useEffect(() => {
     fetchExchangeRate();
 
-    devLog('[ExchangeRate] Setting up real-time subscription...');
-    const channel = supabase
-      .channel('exchange-rates-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'exchange_rates',
-        },
-        () => {
-          devLog('[ExchangeRate] Exchange rate updated in database, refetching...');
-          fetchExchangeRate();
-        }
-      )
-      .subscribe();
+    devLog('[ExchangeRate] Registering with realtimeManager...');
+    const unsubscribe = realtimeManager.subscribe(
+      ['exchange_rates'],
+      () => {
+        devLog('[ExchangeRate] Exchange rate updated in database, refetching...');
+        fetchExchangeRate();
+      },
+      'useExchangeRate',
+    );
 
     // Refresh hourly as backup
     const interval = setInterval(() => {
@@ -130,7 +126,7 @@ export function useExchangeRate() {
 
     return () => {
       devLog('[ExchangeRate] Cleaning up subscription and interval');
-      supabase.removeChannel(channel);
+      unsubscribe();
       clearInterval(interval);
     };
   }, [fetchExchangeRate]);

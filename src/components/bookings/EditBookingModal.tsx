@@ -134,6 +134,7 @@ const fld = StyleSheet.create({
   label:     { fontSize: 12, fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.input, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
   inputText: { flex: 1, fontSize: 15, color: C.text, fontWeight: '500' },
+  hint:      { fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 14 },
 });
 
 // ─── Status Selector ──────────────────────────────────────────────────────────
@@ -314,8 +315,11 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
       }
 
       const totalAmount  = parseFloat(totalCost);
-      const paidAmount   = parseFloat(amountPaid || '0');
-      const balanceDue   = totalAmount - paidAmount;
+      // amount_paid / balance_due are NEVER written from this general edit form —
+      // they only ever change via the record_payment RPC (Record Payment on the
+      // booking detail screen), so mobile stays in sync with the web payment system.
+      const existingPaid = parseFloat(amountPaid || '0');
+      const balanceDue   = totalAmount - existingPaid;
       const numDays      = countDays(startDate, endDate);
 
       const { error } = await supabase
@@ -329,7 +333,6 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
           daily_rate:          parseFloat(dailyRate) || undefined,
           number_of_days:      numDays,
           total_amount:        totalAmount,
-          amount_paid:         paidAmount,
           balance_due:         balanceDue,
           currency,
           assigned_vehicle_id: vehicleId || null,
@@ -343,25 +346,11 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
       if (error) throw error;
 
-      // Mirror dashboard logic exactly:
-      // - Completed / Cancelled → release vehicle to 'available'
-      // - All other active statuses → mark vehicle 'booked'
-      // This runs regardless of whether the vehicle changed, ensuring
-      // status-completions/cancellations never leave a vehicle stuck as 'booked'.
-      const targetVehicleStatus: 'booked' | 'available' =
-        (status === 'Completed' || status === 'Cancelled') ? 'available' : 'booked';
-
-      if (vehicleId) {
-        // Update assigned vehicle status based on booking status
-        await supabase.from('vehicles').update({ status: targetVehicleStatus }).eq('id', vehicleId);
-        // Release the previously-assigned vehicle if it was swapped out
-        if (booking.assigned_vehicle_id && vehicleId !== booking.assigned_vehicle_id) {
-          await supabase.from('vehicles').update({ status: 'available' }).eq('id', booking.assigned_vehicle_id);
-        }
-      } else if (booking.assigned_vehicle_id) {
-        // Vehicle was unassigned — release it
-        await supabase.from('vehicles').update({ status: 'available' }).eq('id', booking.assigned_vehicle_id);
-      }
+      // Vehicle availability is computed entirely server-side now — database
+      // triggers on bookings react to assigned_vehicle_id/status changes
+      // (swap, unassign, and status transitions all handled there, including
+      // a nightly sweep for trips whose end date has passed). Mobile only
+      // ever saves the assignment above.
 
       onSuccess();
       onClose();
@@ -462,11 +451,12 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
               </View>
 
               <View style={s.row}>
-                <View style={{ flex: 1 }}>
-                  <View style={fld.wrap}>
-                    <Text style={fld.label}>Amount Paid</Text>
-                    <TextInput style={s.input} value={amountPaid} onChangeText={setAmountPaid} placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" />
+                <View style={{ flex: 1, marginBottom: 14 }}>
+                  <Text style={fld.label}>Amount Paid</Text>
+                  <View style={s.readOnly}>
+                    <Text style={s.readOnlyText}>{currency} {(parseFloat(amountPaid) || 0).toFixed(2)}</Text>
                   </View>
+                  <Text style={fld.hint}>Use Record Payment on the booking detail screen to change this.</Text>
                 </View>
                 <View style={{ flex: 1, marginBottom: 14 }}>
                   <Text style={fld.label}>Balance Due</Text>

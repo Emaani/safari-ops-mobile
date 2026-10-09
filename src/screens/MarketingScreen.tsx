@@ -15,7 +15,7 @@ import {
   View, Text, StyleSheet, ScrollView, FlatList,
   TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert,
   Switch, KeyboardAvoidingView, Platform, Pressable, RefreshControl,
-  Dimensions,
+  Dimensions, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
@@ -25,6 +25,7 @@ import { formatCurrency } from '../lib/utils';
 import type { PortalVehicle, Promotion, SafariPackage } from '../types/safari';
 import { useGA4Analytics, type DatePreset } from '../hooks/useGA4Analytics';
 import { useBlogAnalytics } from '../hooks/useBlogAnalytics';
+import { useGoogleAds } from '../hooks/useGoogleAds';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -45,8 +46,6 @@ const C = {
   border:      '#E5E5EA',
   input:       '#F2F2F7',
 };
-
-const PROMO_TYPES = ['banner', 'featured_safari', 'featured_vehicle', 'seasonal', 'partner'];
 
 // ─── Icons ─────────────────────────────────────────────────────────────────────
 const Ico = {
@@ -206,7 +205,8 @@ function VehicleEditModal({ vehicle, visible, onClose, onSaved }: {
             <Text style={pm.headerTitle}>{vehicle?.license_plate} — Portal Settings</Text>
             <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
             <View style={{ backgroundColor: C.primarySoft, borderRadius: 12, padding: 12, marginBottom: 8 }}>
               <Text style={{ fontSize: 12, color: C.primary, fontWeight: '600' }}>
                 {vehicle?.make} {vehicle?.model}{vehicle?.capacity ? ` · ${vehicle.capacity} seats` : ''}
@@ -284,6 +284,7 @@ function VehicleCatalogTab() {
         <Text style={vc.bannerText}>{visibleCount} of {vehicles.length} vehicles visible on customer portal</Text>
       </View>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={vehicles}
         keyExtractor={i => i.id}
         renderItem={({ item: v }) => (
@@ -377,7 +378,8 @@ function PackageEditModal({ pkg, visible, onClose, onSaved }: {
             <Text style={pm.headerTitle} numberOfLines={1}>{pkg?.name} — Portal</Text>
             <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
             <View style={{ backgroundColor: C.primarySoft, borderRadius: 12, padding: 12, marginBottom: 8 }}>
               <Text style={{ fontSize: 12, color: C.primary, fontWeight: '600' }}>
                 {pkg?.category}{pkg?.country ? ` · ${pkg.country}` : ''}{pkg?.duration_days ? ` · ${pkg.duration_days} days` : ''}
@@ -445,6 +447,7 @@ function SafariCatalogTab() {
         <Text style={vc.bannerText}>{visibleCount} of {packages.length} packages visible on portal</Text>
       </View>
       <FlatList
+        keyboardShouldPersistTaps="handled"
         data={packages}
         keyExtractor={i => i.id}
         renderItem={({ item: p }) => (
@@ -504,95 +507,6 @@ const sc2 = StyleSheet.create({
 // CREATE PROMOTION MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function CreatePromotionModal({ visible, onClose, onSaved }: {
-  visible: boolean; onClose: () => void; onSaved: () => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
-  const [desc, setDesc] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [promoType, setPromoType] = useState('banner');
-  const [displayOrder, setDisplayOrder] = useState('0');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [showTypePicker, setShowTypePicker] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      setTitle(''); setSubtitle(''); setDesc(''); setImageUrl('');
-      setPromoType('banner'); setDisplayOrder('0'); setStartDate(''); setEndDate('');
-    }
-  }, [visible]);
-
-  const save = useCallback(async () => {
-    if (!title.trim()) { Alert.alert('Required', 'Promotion title is required.'); return; }
-    setSaving(true);
-    try {
-      const payload: Record<string, any> = {
-        title: title.trim(), subtitle: subtitle.trim() || null, description: desc.trim() || null,
-        image_url: imageUrl.trim() || null, promotion_type: promoType,
-        display_order: displayOrder ? parseInt(displayOrder) : 0,
-        start_date: startDate.trim() || null, end_date: endDate.trim() || null,
-        is_active: true,
-      };
-      const { error } = await supabase.from('portal_promotions').insert(payload);
-      if (error) throw error;
-      Alert.alert('Created', `"${title}" promotion is now live.`);
-      onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to create promotion.'); }
-    finally { setSaving(false); }
-  }, [title, subtitle, desc, imageUrl, promoType, displayOrder, startDate, endDate, onSaved, onClose]);
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ flex: 1, backgroundColor: C.bg }}>
-          <View style={pm.header}>
-            <Text style={pm.headerTitle}>New Promotion</Text>
-            <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
-          </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-            <FieldLabel label="Title *" />
-            <TextF value={title} onChange={setTitle} placeholder="e.g. Gorilla Safari Special" />
-
-            <FieldLabel label="Subtitle" />
-            <TextF value={subtitle} onChange={setSubtitle} placeholder="e.g. Limited slots – book now" />
-
-            <FieldLabel label="Description" />
-            <TextF value={desc} onChange={setDesc} placeholder="Full promotion details…" multiline />
-
-            <FieldLabel label="Image URL" />
-            <TextF value={imageUrl} onChange={setImageUrl} placeholder="https://…" keyboardType="url" />
-
-            <FieldLabel label="Promotion Type" />
-            <TouchableOpacity style={pm.selector} onPress={() => setShowTypePicker(true)}>
-              <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{promoType.replace('_', ' ')}</Text>
-              <Ico.ChevDown s={16} c={C.textMuted} />
-            </TouchableOpacity>
-
-            <FieldLabel label="Display Order" />
-            <TextF value={displayOrder} onChange={setDisplayOrder} placeholder="0" keyboardType="number-pad" />
-
-            <FieldLabel label="Start Date (YYYY-MM-DD)" />
-            <TextF value={startDate} onChange={setStartDate} placeholder="2025-06-01" />
-
-            <FieldLabel label="End Date (YYYY-MM-DD)" />
-            <TextF value={endDate} onChange={setEndDate} placeholder="2025-12-31" />
-
-            <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>Create Promotion</Text>}
-            </TouchableOpacity>
-          </ScrollView>
-          <PickerModal visible={showTypePicker} title="Promotion Type"
-            options={PROMO_TYPES.map(t => ({ value: t, label: t.replace(/_/g, ' ') }))}
-            selected={promoType} onSelect={o => setPromoType(o.value)} onClose={() => setShowTypePicker(false)} />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
 const pm = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.card, paddingHorizontal: 18, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
   headerTitle: { fontSize: 18, fontWeight: '800', color: C.text },
@@ -600,152 +514,6 @@ const pm = StyleSheet.create({
   selector: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13 },
   saveBtn: { backgroundColor: C.primary, borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 24 },
   saveBtnT: { fontSize: 15, fontWeight: '700', color: '#fff' },
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// PROMOTIONS TAB
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
-  banner:           { bg: '#dce8f5', text: '#1a5a8f' },
-  featured_safari:  { bg: C.primarySoft, text: C.primary },
-  featured_vehicle: { bg: C.goldSoft, text: C.gold },
-  seasonal:         { bg: '#f5dce8', text: '#8f1a5a' },
-  partner:          { bg: '#e8f5dc', text: '#5a8f1a' },
-};
-
-function PromotionsTab() {
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [toggling, setToggling] = useState<Record<string, boolean>>({});
-  const [showCreateModal, setShowCreateModal] = useState(false);
-
-  const fetchPromos = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('portal_promotions')
-      .select('*')
-      .order('display_order', { ascending: true });
-    if (error) console.error('[Marketing/Promos]', error.message);
-    setPromotions((data || []) as Promotion[]);
-  }, []);
-
-  useEffect(() => { setLoading(true); fetchPromos().finally(() => setLoading(false)); }, [fetchPromos]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchPromos(); setRefreshing(false); }, [fetchPromos]);
-
-  const toggleActive = useCallback(async (p: Promotion) => {
-    setToggling(t => ({ ...t, [p.id]: true }));
-    const newVal = !p.is_active;
-    try {
-      const { error } = await supabase.from('portal_promotions').update({ is_active: newVal }).eq('id', p.id);
-      if (error) throw error;
-      setPromotions(prev => prev.map(x => x.id === p.id ? { ...x, is_active: newVal } : x));
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update.');
-    } finally {
-      setToggling(t => { const n = { ...t }; delete n[p.id]; return n; });
-    }
-  }, []);
-
-  const deletePromo = useCallback((p: Promotion) => {
-    Alert.alert('Delete Promotion', `Remove "${p.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        const { error } = await supabase.from('portal_promotions').delete().eq('id', p.id);
-        if (error) Alert.alert('Error', error.message);
-        fetchPromos();
-      }},
-    ]);
-  }, [fetchPromos]);
-
-  const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
-
-  if (loading) return <LoadingView label="Loading promotions…" />;
-
-  const activeCount = promotions.filter(p => p.is_active).length;
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={vc.banner}>
-        <Ico.Tag s={16} c={C.gold} />
-        <Text style={[vc.bannerText, { color: C.gold }]}>{activeCount} active promotion{activeCount !== 1 ? 's' : ''} on portal</Text>
-      </View>
-      <FlatList
-        data={promotions}
-        keyExtractor={i => i.id}
-        renderItem={({ item: p }) => {
-          const typeCfg = TYPE_COLORS[p.promotion_type] || { bg: C.input, text: C.textMuted };
-          return (
-            <View style={pr.card}>
-              {/* Left: type badge + order */}
-              <View style={pr.left}>
-                <View style={[pr.typeBadge, { backgroundColor: typeCfg.bg }]}>
-                  <Text style={[pr.typeText, { color: typeCfg.text }]}>{p.promotion_type.replace(/_/g, '\n')}</Text>
-                </View>
-                {p.display_order != null ? <Text style={pr.order}>#{p.display_order}</Text> : null}
-              </View>
-              {/* Center: title + dates */}
-              <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                <Text style={pr.title} numberOfLines={1}>{p.title}</Text>
-                {p.subtitle ? <Text style={pr.sub} numberOfLines={1}>{p.subtitle}</Text> : null}
-                {p.start_date || p.end_date ? (
-                  <Text style={pr.dates}>
-                    {fmtDate(p.start_date) || '—'} → {fmtDate(p.end_date) || '—'}
-                  </Text>
-                ) : null}
-              </View>
-              {/* Right: toggle + delete */}
-              <View style={{ alignItems: 'center', gap: 8 }}>
-                <View style={[pr.activeBadge, { backgroundColor: p.is_active ? C.success + '20' : C.danger + '20' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '700', color: p.is_active ? C.success : C.danger }}>{p.is_active ? 'LIVE' : 'OFF'}</Text>
-                </View>
-                {toggling[p.id]
-                  ? <ActivityIndicator size="small" color={C.primary} />
-                  : <Switch
-                      value={p.is_active}
-                      onValueChange={() => toggleActive(p)}
-                      trackColor={{ false: C.border, true: C.primary }}
-                      thumbColor="#fff"
-                      style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                    />
-                }
-                <TouchableOpacity style={pr.delBtn} onPress={() => deletePromo(p)}>
-                  <Ico.Trash s={14} c={C.danger} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={<EmptyView title="No promotions yet" sub="Create your first portal promotion using the + button." />}
-        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
-      />
-
-      {/* FAB */}
-      <TouchableOpacity style={fabSt.fab} onPress={() => setShowCreateModal(true)}>
-        <Ico.Plus s={22} c="#fff" />
-      </TouchableOpacity>
-
-      <CreatePromotionModal visible={showCreateModal} onClose={() => setShowCreateModal(false)} onSaved={fetchPromos} />
-    </View>
-  );
-}
-
-const pr = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
-  left: { alignItems: 'center', gap: 6, width: 56 },
-  typeBadge: { paddingHorizontal: 6, paddingVertical: 4, borderRadius: 10, alignItems: 'center' },
-  typeText: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', textAlign: 'center', lineHeight: 12 },
-  order: { fontSize: 11, color: C.textMuted, fontWeight: '700' },
-  title: { fontSize: 14, fontWeight: '800', color: C.text, letterSpacing: -0.2 },
-  sub: { fontSize: 12, color: C.textMuted, marginTop: 2 },
-  dates: { fontSize: 11, color: C.textMuted, marginTop: 4 },
-  activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFEEED', alignItems: 'center', justifyContent: 'center' },
-});
-
-const fabSt = StyleSheet.create({
-  fab: { position: 'absolute', bottom: 28, right: 18, width: 56, height: 56, borderRadius: 28, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 8 },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -798,6 +566,116 @@ const STATUS_COLORS: Record<string, string> = {
   draft:     C.textMuted,
   cancelled: C.danger,
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTM LINK GENERATOR — build trackable share links for campaigns
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const UTM_SOURCE_PRESETS = ['whatsapp', 'facebook', 'instagram', 'email', 'agent'];
+const UTM_MEDIUM_PRESETS = ['social', 'referral', 'email', 'campaign'];
+
+function UTMLinkGenerator() {
+  const [expanded, setExpanded]   = useState(false);
+  const [baseUrl, setBaseUrl]     = useState('https://jackaladventures.com');
+  const [path, setPath]           = useState('/');
+  const [source, setSource]       = useState('whatsapp');
+  const [medium, setMedium]       = useState('social');
+  const [campaign, setCampaign]   = useState('');
+
+  const generatedUrl = useMemo(() => {
+    try {
+      const url = new URL(path.startsWith('/') ? path : `/${path}`, baseUrl.trim() || 'https://jackaladventures.com');
+      if (source.trim())   url.searchParams.set('utm_source', source.trim());
+      if (medium.trim())   url.searchParams.set('utm_medium', medium.trim());
+      if (campaign.trim()) url.searchParams.set('utm_campaign', campaign.trim());
+      return url.toString();
+    } catch {
+      return '';
+    }
+  }, [baseUrl, path, source, medium, campaign]);
+
+  const shareLink = useCallback(async () => {
+    if (!generatedUrl) return;
+    try {
+      await Share.share({ message: generatedUrl });
+    } catch { /* user cancelled */ }
+  }, [generatedUrl]);
+
+  return (
+    <View style={ug.card}>
+      <TouchableOpacity style={ug.header} onPress={() => setExpanded(e => !e)} activeOpacity={0.75}>
+        <View style={{ flex: 1 }}>
+          <Text style={ug.title}>Trackable Share Link</Text>
+          <Text style={ug.sub}>Generate a UTM link for WhatsApp, agent emails or social posts</Text>
+        </View>
+        <Ico.ChevDown s={18} c={C.textMuted} />
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={ug.body}>
+          <FieldLabel label="Destination URL" />
+          <TextF value={baseUrl} onChange={setBaseUrl} placeholder="https://jackaladventures.com" keyboardType="url" />
+
+          <FieldLabel label="Page Path" />
+          <TextF value={path} onChange={setPath} placeholder="/safaris/gorilla-trekking" />
+
+          <FieldLabel label="Source" />
+          <View style={ug.chipRow}>
+            {UTM_SOURCE_PRESETS.map(s => (
+              <TouchableOpacity key={s} style={[ug.chip, source === s && ug.chipOn]} onPress={() => setSource(s)}>
+                <Text style={[ug.chipT, source === s && ug.chipTOn]}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextF value={source} onChange={setSource} placeholder="Custom source…" />
+
+          <FieldLabel label="Medium" />
+          <View style={ug.chipRow}>
+            {UTM_MEDIUM_PRESETS.map(m => (
+              <TouchableOpacity key={m} style={[ug.chip, medium === m && ug.chipOn]} onPress={() => setMedium(m)}>
+                <Text style={[ug.chipT, medium === m && ug.chipTOn]}>{m}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextF value={medium} onChange={setMedium} placeholder="Custom medium…" />
+
+          <FieldLabel label="Campaign" />
+          <TextF value={campaign} onChange={setCampaign} placeholder="e.g. christmas-gorilla-promo" />
+
+          {generatedUrl ? (
+            <>
+              <View style={ug.resultBox}>
+                <Text style={ug.resultText} selectable numberOfLines={3}>{generatedUrl}</Text>
+              </View>
+              <TouchableOpacity style={ug.shareBtn} onPress={shareLink}>
+                <Text style={ug.shareBtnT}>Share Link</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={{ fontSize: 12, color: C.danger, marginTop: 12 }}>Enter a valid destination URL.</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const ug = StyleSheet.create({
+  card: { backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, marginBottom: 16, overflow: 'hidden' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 14 },
+  title: { fontSize: 14, fontWeight: '700', color: C.text },
+  sub: { fontSize: 11.5, color: C.textMuted, marginTop: 2 },
+  body: { paddingHorizontal: 14, paddingBottom: 16, borderTopWidth: 1, borderTopColor: C.border },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: C.input, borderWidth: 1, borderColor: C.border },
+  chipOn: { backgroundColor: C.primarySoft, borderColor: C.primary },
+  chipT: { fontSize: 11, fontWeight: '600', color: C.textMuted },
+  chipTOn: { color: C.primary },
+  resultBox: { backgroundColor: C.input, borderRadius: 10, padding: 12, marginTop: 16 },
+  resultText: { fontSize: 12, color: C.text, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  shareBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 12 },
+  shareBtnT: { fontSize: 14, fontWeight: '700', color: '#fff' },
+});
 
 function MarketingCommandCenterTab() {
   const [period, setPeriod] = useState<DatePreset>('30d');
@@ -936,7 +814,8 @@ function MarketingCommandCenterTab() {
     : '0.0';
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
+    <ScrollView
+      keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
 
       {/* Period selector */}
@@ -954,6 +833,9 @@ function MarketingCommandCenterTab() {
           </Text>
         ) : null}
       </View>
+
+      {/* Trackable share link generator */}
+      <UTMLinkGenerator />
 
       {/* GA4 unavailable banner */}
       {unavailable && (
@@ -1319,7 +1201,8 @@ function WebsiteAnalyticsTab() {
   };
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
+    <ScrollView
+      keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}>
 
       {/* Date range + Live GA4 badge */}
@@ -1566,668 +1449,210 @@ const an = StyleSheet.create({
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// BLOG MANAGEMENT TAB
+// GOOGLE ADS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type BlogStatus = 'draft' | 'published' | 'archived';
+function GoogleAdsTab() {
+  const [period, setPeriod] = useState<DatePreset>('30d');
+  const { data, loading, refreshing, stale, error, unavailable, refresh } = useGoogleAds(period);
 
-interface BlogPost {
-  id: string;
-  title: string;
-  excerpt?: string;
-  content?: string;
-  status: BlogStatus;
-  cover_image_url?: string;
-  tags?: string[];
-  views?: number;
-  author_name?: string;
-  published_at?: string;
-  created_at?: string;
-}
+  const fmt$ = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(2)}`;
+  const fmtN = (n: number) => n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 
-const BLOG_STATUS_CFG: Record<BlogStatus, { bg: string; text: string; label: string }> = {
-  draft:     { bg: C.input,      text: C.textMuted, label: 'Draft' },
-  published: { bg: C.primarySoft, text: C.primary,  label: 'Published' },
-  archived:  { bg: '#FDE8C0',    text: C.gold,      label: 'Archived' },
-};
+  if (loading) return <LoadingView label="Loading Google Ads data…" />;
 
-function BlogFormModal({ visible, post, onClose, onSaved }: {
-  visible: boolean; post: BlogPost | null; onClose: () => void; onSaved: () => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [excerpt, setExcerpt] = useState('');
-  const [content, setContent] = useState('');
-  const [status, setStatus] = useState<BlogStatus>('draft');
-  const [coverUrl, setCoverUrl] = useState('');
-  const [tags, setTags] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [showStatusPicker, setShowStatusPicker] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      setTitle(post?.title || '');
-      setExcerpt(post?.excerpt || '');
-      setContent(post?.content || '');
-      setStatus(post?.status || 'draft');
-      setCoverUrl(post?.cover_image_url || '');
-      setTags((post?.tags || []).join(', '));
-    }
-  }, [visible, post]);
-
-  const save = useCallback(async () => {
-    if (!title.trim()) { Alert.alert('Required', 'Title is required.'); return; }
-    setSaving(true);
-    try {
-      const payload: Record<string, any> = {
-        title: title.trim(),
-        excerpt: excerpt.trim() || null,
-        content: content.trim() || null,
-        status,
-        cover_image_url: coverUrl.trim() || null,
-        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-        published_at: status === 'published' ? new Date().toISOString() : null,
-      };
-      let err;
-      if (post?.id) {
-        ({ error: err } = await supabase.from('blog_posts').update(payload).eq('id', post.id));
-      } else {
-        ({ error: err } = await supabase.from('blog_posts').insert(payload));
-      }
-      if (err) throw err;
-      onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save post.'); }
-    finally { setSaving(false); }
-  }, [title, excerpt, content, status, coverUrl, tags, post, onSaved, onClose]);
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ flex: 1, backgroundColor: C.bg }}>
-          <View style={pm.header}>
-            <Text style={pm.headerTitle}>{post ? 'Edit Post' : 'New Blog Post'}</Text>
-            <TouchableOpacity onPress={onClose} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-            <FieldLabel label="Title *" />
-            <TextF value={title} onChange={setTitle} placeholder="Post title…" />
-            <FieldLabel label="Excerpt" />
-            <TextF value={excerpt} onChange={setExcerpt} placeholder="Brief description shown in listings…" multiline />
-            <FieldLabel label="Content" />
-            <TextF value={content} onChange={setContent} placeholder="Full article content…" multiline />
-            <FieldLabel label="Cover Image URL" />
-            <TextF value={coverUrl} onChange={setCoverUrl} placeholder="https://…" keyboardType="url" />
-            <FieldLabel label="Tags (comma-separated)" />
-            <TextF value={tags} onChange={setTags} placeholder="gorilla, safari, uganda" />
-            <FieldLabel label="Status" />
-            <TouchableOpacity style={pm.selector} onPress={() => setShowStatusPicker(true)}>
-              <View style={[{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: BLOG_STATUS_CFG[status].bg }]}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: BLOG_STATUS_CFG[status].text }}>{BLOG_STATUS_CFG[status].label}</Text>
-              </View>
-              <Ico.ChevDown s={16} c={C.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>{post ? 'Save Changes' : 'Create Post'}</Text>}
-            </TouchableOpacity>
-          </ScrollView>
-          <PickerModal visible={showStatusPicker} title="Post Status"
-            options={(['draft','published','archived'] as BlogStatus[]).map(s => ({ value: s, label: BLOG_STATUS_CFG[s].label }))}
-            selected={status} onSelect={o => setStatus(o.value as BlogStatus)} onClose={() => setShowStatusPicker(false)} />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function BlogManagementTab() {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<BlogStatus | 'all'>('all');
-  const [editPost, setEditPost] = useState<BlogPost | null>(null);
-  const [showModal, setShowModal] = useState(false);
-
-  const fetchPosts = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) console.error('[Blog]', error.message);
-    // Normalize flexible column names to BlogPost interface
-    const posts = (data || []).map((d: any) => ({
-      id: d.id,
-      title: d.title || d.heading || '',
-      excerpt: d.excerpt || d.summary || d.description || '',
-      content: d.content || d.body || '',
-      status: d.status || d.publish_status || 'draft',
-      cover_image_url: d.cover_image_url || d.cover_image || d.thumbnail_url || d.image_url || '',
-      tags: Array.isArray(d.tags) ? d.tags : (typeof d.tags === 'string' ? d.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []),
-      views: d.views ?? d.view_count ?? d.page_views ?? 0,
-      author_name: d.author_name || d.author || '',
-      published_at: d.published_at || d.publish_date || '',
-      created_at: d.created_at || '',
-    })) as BlogPost[];
-    setPosts(posts);
-  }, []);
-
-  useEffect(() => { setLoading(true); fetchPosts().finally(() => setLoading(false)); }, [fetchPosts]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchPosts(); setRefreshing(false); }, [fetchPosts]);
-
-  const deletePost = useCallback((p: BlogPost) => {
-    Alert.alert('Delete Post', `Remove "${p.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        const { error } = await supabase.from('blog_posts').delete().eq('id', p.id);
-        if (error) Alert.alert('Error', error.message);
-        else fetchPosts();
-      }},
-    ]);
-  }, [fetchPosts]);
-
-  const filtered = useMemo(() =>
-    statusFilter === 'all' ? posts : posts.filter(p => p.status === statusFilter),
-  [posts, statusFilter]);
-
-  if (loading) return <LoadingView label="Loading blog posts…" />;
-
-  return (
-    <View style={{ flex: 1 }}>
-      {/* Status filter pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10 }}>
-        {(['all','published','draft','archived'] as const).map(f => (
-          <TouchableOpacity key={f} style={[bl.filterPill, statusFilter === f && bl.filterPillOn]} onPress={() => setStatusFilter(f)}>
-            <Text style={[bl.filterT, statusFilter === f && bl.filterTOn]}>{f === 'all' ? 'All' : BLOG_STATUS_CFG[f as BlogStatus].label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <FlatList
-        data={filtered}
-        keyExtractor={i => i.id}
-        renderItem={({ item: p }) => {
-          const st = BLOG_STATUS_CFG[p.status] || BLOG_STATUS_CFG.draft;
-          return (
-            <TouchableOpacity style={bl.card} onPress={() => { setEditPost(p); setShowModal(true); }} activeOpacity={0.82}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-                <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
-                  <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
-                </View>
-                <TouchableOpacity style={bl.deleteBtn} onPress={() => deletePost(p)}>
-                  <Ico.Trash s={14} c={C.danger} />
-                </TouchableOpacity>
-              </View>
-              <Text style={bl.title} numberOfLines={2}>{p.title}</Text>
-              {p.excerpt ? <Text style={bl.excerpt} numberOfLines={2}>{p.excerpt}</Text> : null}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                {p.views != null ? <Text style={bl.meta}>{p.views.toLocaleString()} views</Text> : null}
-                {p.published_at ? <Text style={bl.meta}>{new Date(p.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text> : null}
-                {(p.tags || []).slice(0, 2).map(t => (
-                  <View key={t} style={bl.tag}><Text style={bl.tagT}>{t}</Text></View>
-                ))}
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={<EmptyView title="No blog posts" sub="Create your first post using the + button." />}
-        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
-      />
-
-      <TouchableOpacity style={fabSt.fab} onPress={() => { setEditPost(null); setShowModal(true); }}>
-        <Ico.Plus s={22} c="#fff" />
-      </TouchableOpacity>
-      <BlogFormModal visible={showModal} post={editPost} onClose={() => setShowModal(false)} onSaved={fetchPosts} />
-    </View>
-  );
-}
-
-const bl = StyleSheet.create({
-  filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
-  filterPillOn: { backgroundColor: C.primary, borderColor: C.primary },
-  filterT: { fontSize: 12, fontWeight: '600', color: C.textMuted },
-  filterTOn: { color: '#fff' },
-  card: { backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  statusT: { fontSize: 11, fontWeight: '700' },
-  deleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFEEED', alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 15, fontWeight: '800', color: C.text, letterSpacing: -0.3, marginBottom: 4 },
-  excerpt: { fontSize: 12, color: C.textMuted, lineHeight: 17 },
-  meta: { fontSize: 11, color: C.textMuted },
-  tag: { backgroundColor: C.primarySoft, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  tagT: { fontSize: 10, fontWeight: '700', color: C.primary },
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// BLOG ANALYTICS TAB
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function BlogAnalyticsTab() {
-  const {
-    posts, totalViews, totalLeads, totalBookings,
-    ga4Available, loading, refreshing, error, refresh,
-  } = useBlogAnalytics();
-
-  const maxViews  = useMemo(() => Math.max(...posts.map(p => p.totalViews), 1), [posts]);
-  const published = useMemo(() => posts.filter(p => p.status === 'published'), [posts]);
-
-  if (loading) return <LoadingView label="Loading blog analytics…" />;
-
-  const viewsSource = ga4Available ? 'GA4' : 'DB';
-
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}>
-
-      {/* Error */}
-      {error ? (
-        <View style={{ backgroundColor: '#FFEEED', borderRadius: 10, padding: 12, marginBottom: 14 }}>
-          <Text style={{ fontSize: 12, color: C.danger }}>{error}</Text>
-        </View>
-      ) : null}
-
-      {/* Data source banner */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14,
-        backgroundColor: ga4Available ? C.primarySoft : C.goldSoft,
-        borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
-        <View style={{ width: 8, height: 8, borderRadius: 4,
-          backgroundColor: ga4Available ? C.success : C.gold }} />
-        <Text style={{ fontSize: 12, fontWeight: '600',
-          color: ga4Available ? C.primary : C.gold, flex: 1 }}>
-          {ga4Available
-            ? 'Live GA4 data · Views reflect website traffic'
-            : 'GA4 offline · Views from blog_posts counter'}
-        </Text>
-      </View>
-
-      {/* Summary KPI cards — 2×2 grid */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-        <View style={[an.metCard, { width: '47%' }]}>
-          <Text style={an.metLabel}>Total Views <Text style={{ color: C.textMuted, fontWeight: '400' }}>({viewsSource})</Text></Text>
-          <Text style={[an.metVal, { color: C.primary }]}>{totalViews.toLocaleString()}</Text>
-          <Text style={an.metSub}>{posts.length} post{posts.length !== 1 ? 's' : ''} total</Text>
-        </View>
-        <View style={[an.metCard, { width: '47%' }]}>
-          <Text style={an.metLabel}>Live Posts</Text>
-          <Text style={[an.metVal, { color: C.success }]}>{published.length}</Text>
-          <Text style={an.metSub}>{posts.length - published.length} draft / archived</Text>
-        </View>
-        <View style={[an.metCard, { width: '47%' }]}>
-          <Text style={an.metLabel}>Leads Attributed</Text>
-          <Text style={[an.metVal, { color: C.gold }]}>{totalLeads}</Text>
-          <Text style={an.metSub}>via UTM / referrer</Text>
-        </View>
-        <View style={[an.metCard, { width: '47%' }]}>
-          <Text style={an.metLabel}>Bookings Attributed</Text>
-          <Text style={[an.metVal, { color: C.success }]}>{totalBookings}</Text>
-          <Text style={an.metSub}>safari_bookings linked</Text>
-        </View>
-      </View>
-
-      {/* Per-post performance */}
-      {posts.length === 0 ? (
-        <EmptyView title="No blog data" sub="Publish blog posts to see analytics." />
-      ) : (
-        <View style={an.sect}>
-          <Text style={an.sectTitle}>Post Performance</Text>
-          {posts.map(p => {
-            const barPct = maxViews > 0 ? p.totalViews / maxViews : 0;
-            const st = BLOG_STATUS_CFG[p.status as BlogStatus] || BLOG_STATUS_CFG.draft;
-            return (
-              <View key={p.slug} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '50' }}>
-
-                {/* Title row */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.text, flex: 1, marginRight: 12 }} numberOfLines={1}>
-                    {p.title}
-                  </Text>
-                  <View style={[bl.statusBadge, { backgroundColor: st.bg }]}>
-                    <Text style={[bl.statusT, { color: st.text }]}>{st.label}</Text>
-                  </View>
-                </View>
-
-                {/* Metrics row — always shown */}
-                <View style={{ flexDirection: 'row', gap: 14, marginBottom: 8 }}>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.primary }}>{p.totalViews.toLocaleString()}</Text>
-                    <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Views</Text>
-                  </View>
-                  {ga4Available && p.ga4Views > 0 ? (
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 15, fontWeight: '800', color: '#0891b2' }}>{p.ga4EngagedSessions.toLocaleString()}</Text>
-                      <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Engaged</Text>
-                    </View>
-                  ) : null}
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.gold }}>{p.leads}</Text>
-                    <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Leads</Text>
-                  </View>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.success }}>{p.bookings}</Text>
-                    <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Bookings</Text>
-                  </View>
-                  {p.conversionRate > 0 ? (
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 15, fontWeight: '800', color: C.danger }}>{p.conversionRate}%</Text>
-                      <Text style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Conv.</Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                {/* Views progress bar */}
-                <View style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginBottom: 5 }}>
-                  <View style={{ height: 5, width: `${Math.round(barPct * 100)}%` as any,
-                    backgroundColor: p.status === 'published' ? C.primary : C.textMuted + '80', borderRadius: 3 }} />
-                </View>
-
-                {/* Date + source hint */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  {p.published_at
-                    ? <Text style={{ fontSize: 10, color: C.textMuted }}>
-                        Published {new Date(p.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </Text>
-                    : <Text style={{ fontSize: 10, color: C.textMuted }}>Not published</Text>}
-                  {!ga4Available && p.dbViews > 0
-                    ? <Text style={{ fontSize: 10, color: C.textMuted }}>{p.dbViews.toLocaleString()} DB views</Text>
-                    : null}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-    </ScrollView>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MEDIA MANAGEMENT TAB
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface MediaAsset {
-  id: string;
-  file_name: string;
-  file_type?: string;
-  file_size?: number;
-  public_url?: string;
-  bucket?: string;
-  folder?: string;
-  uploaded_by?: string;
-  created_at?: string;
-}
-
-// Known alternative table names for media assets across Supabase schemas
-const MEDIA_TABLE_CANDIDATES = ['media_assets', 'media', 'assets', 'files', 'uploads', 'storage_files'];
-
-function MediaManagementTab() {
-  const [assets, setAssets] = useState<MediaAsset[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newUrl, setNewUrl] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState('image/jpeg');
-  const [saving, setSaving] = useState(false);
-  const [tableUnavailable, setTableUnavailable] = useState(false);
-  const [activeTable, setActiveTable] = useState<string | null>(null);
-
-  const normalizeRow = (d: any): MediaAsset => ({
-    id:          d.id || String(Math.random()),
-    file_name:   d.file_name   || d.name       || d.filename   || d.title    || 'Unnamed',
-    file_type:   d.file_type   || d.mime_type  || d.type       || d.format   || '',
-    file_size:   d.file_size   || d.size        || d.bytes      || 0,
-    public_url:  d.public_url  || d.url         || d.storage_url || d.src    || d.link || '',
-    bucket:      d.bucket      || d.bucket_name || '',
-    folder:      d.folder      || d.directory   || d.path       || '',
-    uploaded_by: d.uploaded_by || d.user_id     || d.created_by || '',
-    created_at:  d.created_at  || d.uploaded_at || '',
-  });
-
-  const fetchAssets = useCallback(async () => {
-    // Try each candidate table name until one works
-    for (const table of MEDIA_TABLE_CANDIDATES) {
-      const { data, error } = await supabase
-        .from(table)
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (!error) {
-        setActiveTable(table);
-        setTableUnavailable(false);
-        setAssets((data || []).map(normalizeRow));
-        return;
-      }
-
-      // Skip to next candidate only on "table not found" errors
-      const isNotFound = error.message.includes('does not exist') ||
-                         error.message.includes('schema cache') ||
-                         error.message.includes('relation') ||
-                         error.code === '42P01';
-      if (!isNotFound) {
-        // Real error (auth, RLS, etc.) — stop and report
-        console.error(`[Media/${table}]`, error.message);
-        setTableUnavailable(false);
-        setAssets([]);
-        return;
-      }
-    }
-
-    // None of the candidates exist
-    console.warn('[Media] No media table found in schema. Showing empty state.');
-    setTableUnavailable(true);
-    setAssets([]);
-  }, []);
-
-  useEffect(() => { setLoading(true); fetchAssets().finally(() => setLoading(false)); }, [fetchAssets]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await fetchAssets(); setRefreshing(false); }, [fetchAssets]);
-
-  const deleteAsset = useCallback((a: MediaAsset) => {
-    if (!activeTable) return;
-    Alert.alert('Delete Asset', `Remove "${a.file_name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        const { error } = await supabase.from(activeTable).delete().eq('id', a.id);
-        if (error) Alert.alert('Error', error.message);
-        else fetchAssets();
-      }},
-    ]);
-  }, [activeTable, fetchAssets]);
-
-  const addAsset = useCallback(async () => {
-    if (!newUrl.trim() || !newName.trim()) { Alert.alert('Required', 'File name and URL are required.'); return; }
-    if (!activeTable) {
-      Alert.alert('Table Unavailable', 'The media_assets table does not exist in the database yet. Please create it in your Supabase project first.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const { error } = await supabase.from(activeTable).insert({
-        file_name: newName.trim(),
-        file_type: newType.trim() || 'image/jpeg',
-        public_url: newUrl.trim(),
-      });
-      if (error) throw error;
-      setShowAddModal(false); setNewUrl(''); setNewName(''); setNewType('image/jpeg');
-      fetchAssets();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to add asset.'); }
-    finally { setSaving(false); }
-  }, [activeTable, newUrl, newName, newType, fetchAssets]);
-
-  const filtered = useMemo(() =>
-    search ? assets.filter(a => a.file_name.toLowerCase().includes(search.toLowerCase())) : assets,
-  [assets, search]);
-
-  const fmtSize = (bytes?: number) => {
-    if (!bytes) return '';
-    if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
-    if (bytes > 1024)    return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${bytes} B`;
-  };
-
-  const typeIcon = (type?: string) => {
-    if (!type) return '📄';
-    if (type.startsWith('image/')) return '🖼️';
-    if (type.startsWith('video/')) return '🎬';
-    if (type.includes('pdf')) return '📕';
-    return '📄';
-  };
-
-  if (loading) return <LoadingView label="Loading media…" />;
-
-  // Table doesn't exist yet — helpful setup screen
-  if (tableUnavailable) {
+  if (unavailable) {
     return (
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}>
-        <View style={md.unavailableCard}>
-          <Text style={{ fontSize: 32, marginBottom: 12 }}>🖼️</Text>
-          <Text style={md.unavailableTitle}>Media Library Not Set Up</Text>
-          <Text style={md.unavailableSub}>
-            The media assets table does not exist in your Supabase database yet.{'\n\n'}
-            To enable this feature, run the following SQL in your Supabase SQL editor:
+      <ScrollView
+        keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 80 }}>
+        <View style={ga.unavailCard}>
+          <Text style={{ fontSize: 32, marginBottom: 12 }}>📢</Text>
+          <Text style={ga.unavailTitle}>Google Ads Not Connected</Text>
+          <Text style={ga.unavailSub}>
+            Add the following secrets to your Supabase Edge Function environment to enable Google Ads analytics:
           </Text>
-          <View style={md.sqlBox}>
-            <Text style={md.sqlText}>{
-`create table public.media_assets (
-  id uuid default gen_random_uuid() primary key,
-  file_name text not null,
-  file_type text,
-  file_size bigint,
-  public_url text,
-  bucket text,
-  folder text,
-  uploaded_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz default now()
-);
-
-alter table public.media_assets
-  enable row level security;
-
-create policy "Authenticated users can manage media"
-  on public.media_assets
-  for all
-  to authenticated
-  using (true)
-  with check (true);
-
-grant all on public.media_assets to authenticated;
-grant select on public.media_assets to anon;`
-            }</Text>
+          <View style={ga.codeBox}>
+            <Text style={ga.codeText}>{`GOOGLE_ADS_DEVELOPER_TOKEN\nGOOGLE_ADS_CUSTOMER_ID\nGOOGLE_ADS_CLIENT_ID\nGOOGLE_ADS_CLIENT_SECRET\nGOOGLE_ADS_REFRESH_TOKEN`}</Text>
           </View>
-          <TouchableOpacity style={md.retryBtn} onPress={onRefresh}>
-            <Text style={md.retryBtnT}>Retry After Setup</Text>
+          <Text style={[ga.unavailSub, { marginTop: 8 }]}>
+            Optional: GOOGLE_ADS_LOGIN_CUSTOMER_ID (MCC manager account)
+          </Text>
+          <TouchableOpacity style={ga.retryBtn} onPress={refresh}>
+            <Text style={ga.retryBtnT}>Retry Connection</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
     );
   }
 
+  const s = data?.summary;
+
   return (
-    <View style={{ flex: 1 }}>
-      {/* Search bar */}
-      <View style={md.searchRow}>
-        <View style={md.searchBox}>
-          <Ico.Globe s={14} c={C.textMuted} />
-          <TextInput style={md.searchInput} value={search} onChangeText={setSearch}
-            placeholder="Search assets…" placeholderTextColor={C.textMuted} />
-        </View>
-        <View style={md.countBadge}>
-          <Text style={md.countT}>{assets.length}</Text>
-        </View>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />}
+    >
+      {/* Period selector */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {(['7d', '30d', '90d'] as DatePreset[]).map(p => (
+          <TouchableOpacity key={p} style={[cc.periodBtn, period === p && cc.periodBtnOn]} onPress={() => setPeriod(p)}>
+            <Text style={[cc.periodT, period === p && cc.periodTOn]}>
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        {stale && <Text style={{ fontSize: 10, color: C.textMuted, marginLeft: 4 }}>⚠ cached</Text>}
+        {data?.fetchedAt && !stale && (
+          <Text style={{ fontSize: 10, color: C.textMuted, marginLeft: 4 }}>
+            Updated {new Date(data.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        )}
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={i => i.id}
-        renderItem={({ item: a }) => (
-          <View style={md.card}>
-            <View style={md.iconBox}>
-              <Text style={{ fontSize: 22 }}>{typeIcon(a.file_type)}</Text>
-            </View>
-            <View style={{ flex: 1, paddingHorizontal: 12 }}>
-              <Text style={md.fileName} numberOfLines={1}>{a.file_name}</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 3 }}>
-                {a.file_type ? <Text style={md.meta}>{a.file_type.split('/')[1]?.toUpperCase()}</Text> : null}
-                {a.file_size ? <Text style={md.meta}>{fmtSize(a.file_size)}</Text> : null}
-                {a.folder ? <Text style={md.meta}>{a.folder}</Text> : null}
+      {error && (
+        <View style={[cc.warnBanner, { backgroundColor: '#FDE8C020', borderColor: '#F59E0B' }]}>
+          <Text style={[cc.warnText, { color: '#7a5522' }]}>⚠ {error}</Text>
+        </View>
+      )}
+
+      {/* ── KPI Summary ─────────────────────────────────────────────────────── */}
+      {s && (
+        <>
+          <Text style={cc.sectionHeader}>
+            📢 Google Ads Performance  <Text style={cc.sourceTag}>Google Ads</Text>
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+            {[
+              { label: 'Total Spend',    value: fmt$(s.totalSpend),                color: C.danger   },
+              { label: 'Impressions',    value: fmtN(s.totalImpressions),          color: C.primary  },
+              { label: 'Clicks',         value: fmtN(s.totalClicks),               color: C.gold     },
+              { label: 'CTR',            value: `${s.ctr.toFixed(2)}%`,            color: '#7c3aed'  },
+              { label: 'Avg CPC',        value: fmt$(s.avgCpc),                    color: '#0891b2'  },
+              { label: 'Conversions',    value: fmtN(s.totalConversions),          color: C.success  },
+              { label: 'Conv Rate',      value: `${s.convRate.toFixed(2)}%`,       color: C.gold     },
+              { label: 'Cost / Conv',    value: s.totalConversions > 0 ? fmt$(s.costPerConv) : '—', color: C.textMuted },
+            ].map(k => (
+              <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
+                <Text style={cc.kpiLabel}>{k.label}</Text>
+                <Text style={[cc.kpiVal, { color: k.color }]}>{k.value}</Text>
               </View>
-              {a.public_url ? <Text style={md.url} numberOfLines={1}>{a.public_url}</Text> : null}
-            </View>
-            {activeTable && (
-              <TouchableOpacity style={md.delBtn} onPress={() => deleteAsset(a)}>
-                <Ico.Trash s={14} c={C.danger} />
-              </TouchableOpacity>
-            )}
+            ))}
           </View>
-        )}
-        ListEmptyComponent={
-          <EmptyView
-            title={search ? 'No results' : 'No media assets'}
-            sub={search ? 'Try a different search term.' : 'Add your first asset using the + button.'}
-          />
-        }
-        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
-      />
 
-      <TouchableOpacity style={fabSt.fab} onPress={() => setShowAddModal(true)}>
-        <Ico.Plus s={22} c="#fff" />
-      </TouchableOpacity>
-
-      {/* Add asset modal */}
-      <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddModal(false)}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={{ flex: 1, backgroundColor: C.bg }}>
-            <View style={pm.header}>
-              <Text style={pm.headerTitle}>Add Media Asset</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)} style={pm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
+          {/* Campaigns summary pill */}
+          <View style={[cc.sect, { flexDirection: 'row', gap: 14, justifyContent: 'center' }]}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[cc.kpiVal, { color: C.success, fontSize: 24 }]}>{s.activeCampaigns}</Text>
+              <Text style={cc.kpiLabel}>Active Campaigns</Text>
             </View>
-            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-              <FieldLabel label="File Name *" />
-              <TextF value={newName} onChange={setNewName} placeholder="e.g. gorilla-trekking-hero.jpg" />
-              <FieldLabel label="Public URL *" />
-              <TextF value={newUrl} onChange={setNewUrl} placeholder="https://…" keyboardType="url" />
-              <FieldLabel label="File Type" />
-              <TextF value={newType} onChange={setNewType} placeholder="image/jpeg" />
-              <TouchableOpacity style={[pm.saveBtn, saving && { opacity: 0.6 }]} onPress={addAsset} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={pm.saveBtnT}>Add Asset</Text>}
-              </TouchableOpacity>
-            </ScrollView>
+            <View style={{ width: 1, backgroundColor: C.border, alignSelf: 'stretch' }} />
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[cc.kpiVal, { color: C.textMuted, fontSize: 24 }]}>{s.totalCampaigns}</Text>
+              <Text style={cc.kpiLabel}>Total Campaigns</Text>
+            </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </View>
+        </>
+      )}
+
+      {/* ── Campaigns list ──────────────────────────────────────────────────── */}
+      {data && data.campaigns.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Campaign Performance  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
+          {data.campaigns.map((c, i) => (
+            <View key={c.id ?? i} style={ga.campRow}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <View style={[ga.statusDot, { backgroundColor: c.status === 'ENABLED' ? C.success + '25' : C.textMuted + '20' }]}>
+                    <Text style={{ fontSize: 8, fontWeight: '800', color: c.status === 'ENABLED' ? C.success : C.textMuted }}>{c.status === 'ENABLED' ? 'ON' : 'OFF'}</Text>
+                  </View>
+                  <Text style={ga.campName} numberOfLines={1}>{c.name}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                  <Text style={ga.campMeta}>{fmt$(c.spend)}</Text>
+                  <Text style={[ga.campMeta, { color: C.primary }]}>{fmtN(c.clicks)} clicks</Text>
+                  <Text style={[ga.campMeta, { color: '#7c3aed' }]}>{c.ctr.toFixed(2)}% CTR</Text>
+                  {c.conversions > 0 && <Text style={[ga.campMeta, { color: C.success }]}>{fmtN(c.conversions)} conv</Text>}
+                </View>
+                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2 }}>
+                  <View style={{ height: 4, width: `${Math.min(c.pctOfSpend, 100)}%` as any, backgroundColor: C.danger + '80', borderRadius: 2 }} />
+                </View>
+              </View>
+              <Text style={[ga.campMeta, { minWidth: 36, textAlign: 'right', fontWeight: '700', color: C.danger }]}>{c.pctOfSpend}%</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* ── Daily Trend ─────────────────────────────────────────────────────── */}
+      {data && data.trend.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Daily Spend Trend  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
+          {(() => {
+            const maxSpend = Math.max(...data.trend.map(t => t.spend), 0.01);
+            return data.trend.slice(-30).map((t, i) => {
+              const barPct = Math.round((t.spend / maxSpend) * 100);
+              return (
+                <View key={t.date} style={[cc.funnelRow, { paddingVertical: 3 }]}>
+                  <Text style={[cc.kpiSub, { minWidth: 54, fontSize: 9 }]}>{t.date.slice(5)}</Text>
+                  <View style={{ flex: 1, height: 10, backgroundColor: C.border, borderRadius: 5, overflow: 'hidden', marginHorizontal: 8 }}>
+                    <View style={{ height: 10, width: `${barPct}%` as any, backgroundColor: C.danger + '80', borderRadius: 5 }} />
+                  </View>
+                  <Text style={[cc.kpiSub, { minWidth: 50, textAlign: 'right', fontWeight: '600' }]}>{fmt$(t.spend)}</Text>
+                </View>
+              );
+            });
+          })()}
+        </View>
+      )}
+
+      {/* ── Ad Groups ───────────────────────────────────────────────────────── */}
+      {data && data.adGroups.length > 0 && (
+        <View style={cc.sect}>
+          <Text style={cc.sectTitle}>Top Ad Groups  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
+          {data.adGroups.map((ag, i) => (
+            <View key={i} style={[ga.campRow, { paddingVertical: 10 }]}>
+              <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
+              <View style={{ flex: 1, paddingLeft: 10 }}>
+                <Text style={ga.campName} numberOfLines={1}>{ag.name}</Text>
+                <Text style={[ga.campMeta, { color: C.textMuted }]} numberOfLines={1}>{ag.campaign}</Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 3 }}>
+                  <Text style={[ga.campMeta, { color: C.danger }]}>{fmt$(ag.spend)}</Text>
+                  <Text style={[ga.campMeta, { color: C.primary }]}>{fmtN(ag.clicks)} clicks</Text>
+                  <Text style={[ga.campMeta, { color: '#7c3aed' }]}>{ag.ctr.toFixed(2)}% CTR</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {!data && !loading && !error && (
+        <EmptyView title="No Ads data available" sub="Pull to refresh or check your Google Ads account configuration." />
+      )}
+    </ScrollView>
   );
 }
 
-const md = StyleSheet.create({
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput: { flex: 1, fontSize: 14, color: C.text },
-  countBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  countT: { fontSize: 13, fontWeight: '700', color: C.primary },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
-  iconBox: { width: 44, height: 44, borderRadius: 10, backgroundColor: C.input, alignItems: 'center', justifyContent: 'center' },
-  fileName: { fontSize: 14, fontWeight: '700', color: C.text },
-  meta: { fontSize: 11, color: C.textMuted },
-  url: { fontSize: 10, color: C.gold, marginTop: 3, fontStyle: 'italic' },
-  delBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFEEED', alignItems: 'center', justifyContent: 'center' },
-  // Setup / unavailable state
-  unavailableCard: { backgroundColor: C.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
-  unavailableTitle: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 10, textAlign: 'center' },
-  unavailableSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
-  sqlBox: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, width: '100%', marginBottom: 20 },
-  sqlText: { fontSize: 10.5, color: '#7ec8a0', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
+const ga = StyleSheet.create({
+  unavailCard: { backgroundColor: C.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  unavailTitle: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 10, textAlign: 'center' },
+  unavailSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
+  codeBox: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, width: '100%', marginBottom: 12 },
+  codeText: { fontSize: 10.5, color: '#7ec8a0', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 18 },
   retryBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 28, alignItems: 'center' },
   retryBtnT: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  campRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '60' },
+  campName: { fontSize: 13, fontWeight: '700', color: C.text, flex: 1 },
+  campMeta: { fontSize: 11, color: C.textMuted, fontVariant: ['tabular-nums'] },
+  statusDot: { width: 28, height: 20, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN MARKETING SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type MarketingTab = 'command-center' | 'vehicles' | 'safaris' | 'promotions' | 'analytics' | 'blog' | 'blog-analytics' | 'media';
+type MarketingTab = 'command-center' | 'vehicles' | 'safaris' | 'analytics' | 'ads';
 
 export function MarketingScreen() {
   const [tab, setTab] = useState<MarketingTab>('command-center');
@@ -2237,11 +1662,8 @@ export function MarketingScreen() {
     { key: 'command-center',  label: 'Console' },
     { key: 'vehicles',        label: 'Vehicles' },
     { key: 'safaris',         label: 'Safaris' },
-    { key: 'promotions',      label: 'Promotions' },
     { key: 'analytics',       label: 'Analytics' },
-    { key: 'blog',            label: 'Blog' },
-    { key: 'blog-analytics',  label: 'Blog Stats' },
-    { key: 'media',           label: 'Media' },
+    { key: 'ads',             label: 'ADs' },
   ];
 
   return (
@@ -2265,11 +1687,8 @@ export function MarketingScreen() {
         {tab === 'command-center' && <MarketingCommandCenterTab />}
         {tab === 'vehicles'       && <VehicleCatalogTab />}
         {tab === 'safaris'        && <SafariCatalogTab />}
-        {tab === 'promotions'     && <PromotionsTab />}
         {tab === 'analytics'      && <WebsiteAnalyticsTab />}
-        {tab === 'blog'           && <BlogManagementTab />}
-        {tab === 'blog-analytics' && <BlogAnalyticsTab />}
-        {tab === 'media'          && <MediaManagementTab />}
+        {tab === 'ads'            && <GoogleAdsTab />}
       </View>
     </View>
   );

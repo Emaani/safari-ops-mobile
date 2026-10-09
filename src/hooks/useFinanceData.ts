@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { normalizeCashRequisition } from '../lib/cashRequisition';
 import type { FinancialTransaction, CashRequisition, Currency } from '../types/dashboard';
+import { devLog, devError } from '../lib/devLog';
+import { useExchangeRate } from './useExchangeRate';
 
 // ─── Unified Revenue Item ─────────────────────────────────────────────────────
 // Represents any revenue entry regardless of source table
@@ -39,6 +41,20 @@ interface FinanceDataState {
 
 interface UseFinanceDataProps {
   currency?: Currency;
+  /** 0-11, or 'all' for the entire selected year */
+  month?: number | 'all';
+  /** Calendar year, or 'all' for no date bound (legacy behaviour) */
+  year?: number | 'all';
+}
+
+function periodBounds(month: number | 'all' | undefined, year: number | 'all' | undefined): { start: string | null; end: string | null } {
+  if (year == null || year === 'all') return { start: null, end: null };
+  if (month == null || month === 'all') {
+    return { start: `${year}-01-01T00:00:00.000Z`, end: `${year}-12-31T23:59:59.999Z` };
+  }
+  const start = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+  const end   = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 // Normalise transaction_type from DB — DB may store 'revenue', 'Revenue', 'booking', etc.
@@ -53,7 +69,7 @@ function normalizeTransactionType(raw: string | null | undefined): 'income' | 'e
 
 let fetchCounter = 0;
 
-export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
+export function useFinanceData({ currency = 'USD', month, year }: UseFinanceDataProps = {}) {
   const [data, setData] = useState<FinanceDataState>({
     transactions: [],
     cashRequisitions: [],
@@ -66,17 +82,23 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
   const [rawSafariBookings, setRawSafariBookings] = useState<Record<string, unknown>[]>([]);
 
   const hasFetchedRef = useRef(false);
+  const { exchangeRates } = useExchangeRate();
+
+  const { start: periodStart, end: periodEnd } = periodBounds(month, year);
+  const isFiltered = periodStart != null;
 
   // ── Fetchers ──────────────────────────────────────────────────────────────
 
   const fetchTransactions = useCallback(async (fetchId: number) => {
-    console.log(`[FinanceData #${fetchId}] Fetching transactions...`);
-    const { data: rows, error } = await supabase
+    devLog(`[FinanceData #${fetchId}] Fetching transactions...`);
+    let q = supabase
       .from('financial_transactions')
       .select('id, transaction_date, amount, transaction_type, category, currency, description, reference_number, status')
-      .neq('status', 'cancelled')
+      .neq('status', 'cancelled');
+    if (periodStart && periodEnd) q = q.gte('transaction_date', periodStart).lte('transaction_date', periodEnd);
+    const { data: rows, error } = await q
       .order('transaction_date', { ascending: false })
-      .limit(100);
+      .limit(isFiltered ? 500 : 100);
 
     if (error) throw error;
 
@@ -90,19 +112,21 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
       acc[t.transaction_type] = (acc[t.transaction_type] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    console.log(`[FinanceData #${fetchId}] Transactions:`, typeBreakdown);
+    devLog(`[FinanceData #${fetchId}] Transactions:`, typeBreakdown);
 
     return result;
-  }, []);
+  }, [periodStart, periodEnd, isFiltered]);
 
   const fetchCashRequisitions = useCallback(async (fetchId: number) => {
-    console.log(`[FinanceData #${fetchId}] Fetching cash requisitions...`);
-    const { data: crs, error } = await supabase
+    devLog(`[FinanceData #${fetchId}] Fetching cash requisitions...`);
+    let q = supabase
       .from('cash_requisitions')
       .select('*')
-      .eq('soft_deleted', false)
+      .eq('soft_deleted', false);
+    if (periodStart && periodEnd) q = q.gte('created_at', periodStart).lte('created_at', periodEnd);
+    const { data: crs, error } = await q
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(isFiltered ? 500 : 200);
 
     if (error) throw error;
 
@@ -140,46 +164,50 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
         approver: approverId ? approverMap[approverId] ?? null : null,
       });
     }) as CashRequisition[];
-  }, []);
+  }, [periodStart, periodEnd, isFiltered]);
 
   const fetchBookings = useCallback(async (fetchId: number) => {
-    console.log(`[FinanceData #${fetchId}] Fetching bookings (revenue)...`);
-    const { data: rows, error } = await supabase
+    devLog(`[FinanceData #${fetchId}] Fetching bookings (revenue)...`);
+    let q = supabase
       .from('bookings')
       .select('id, booking_reference, start_date, end_date, status, amount_paid, total_amount, currency, client_name, created_at')
-      .not('status', 'in', '(Cancelled,cancelled)')
+      .not('status', 'in', '(Cancelled,cancelled)');
+    if (periodStart && periodEnd) q = q.gte('start_date', periodStart).lte('start_date', periodEnd);
+    const { data: rows, error } = await q
       .order('start_date', { ascending: false })
-      .limit(100);
+      .limit(isFiltered ? 500 : 100);
 
     if (error) {
       console.warn(`[FinanceData #${fetchId}] Could not fetch bookings:`, error.message);
       return [];
     }
-    console.log(`[FinanceData #${fetchId}] Fetched ${(rows || []).length} bookings`);
+    devLog(`[FinanceData #${fetchId}] Fetched ${(rows || []).length} bookings`);
     return (rows || []) as Record<string, unknown>[];
-  }, []);
+  }, [periodStart, periodEnd, isFiltered]);
 
   const fetchSafariBookings = useCallback(async (fetchId: number) => {
-    console.log(`[FinanceData #${fetchId}] Fetching safari bookings (revenue)...`);
-    const { data: rows, error } = await supabase
+    devLog(`[FinanceData #${fetchId}] Fetching safari bookings (revenue)...`);
+    let q = supabase
       .from('safari_bookings')
-      .select('id, total_price_usd, total_price_ugx, start_date, end_date, amount_paid, currency, status')
+      .select('id, total_price_usd, total_price_ugx, start_date, end_date, amount_paid, currency, status');
+    if (periodStart && periodEnd) q = q.gte('start_date', periodStart).lte('start_date', periodEnd);
+    const { data: rows, error } = await q
       .order('start_date', { ascending: false })
-      .limit(100);
+      .limit(isFiltered ? 500 : 100);
 
     if (error) {
       console.warn(`[FinanceData #${fetchId}] Could not fetch safari bookings:`, error.message);
       return [];
     }
-    console.log(`[FinanceData #${fetchId}] Fetched ${(rows || []).length} safari bookings`);
+    devLog(`[FinanceData #${fetchId}] Fetched ${(rows || []).length} safari bookings`);
     return (rows || []) as Record<string, unknown>[];
-  }, []);
+  }, [periodStart, periodEnd, isFiltered]);
 
   // ── Fetch All ─────────────────────────────────────────────────────────────
 
   const fetchAllData = useCallback(async () => {
     const fetchId = ++fetchCounter;
-    console.log(`[FinanceData #${fetchId}] ===== FETCH START =====`);
+    devLog(`[FinanceData #${fetchId}] ===== FETCH START =====`);
 
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
@@ -197,9 +225,9 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
       setRawBookings(bookings);
       setRawSafariBookings(safariBookings);
 
-      console.log(`[FinanceData #${fetchId}] ===== FETCH COMPLETE =====`);
+      devLog(`[FinanceData #${fetchId}] ===== FETCH COMPLETE =====`);
     } catch (error) {
-      console.error(`[FinanceData #${fetchId}] FETCH ERROR:`, error);
+      devError(`[FinanceData #${fetchId}] FETCH ERROR:`, error);
       setData(prev => ({ ...prev, loading: false, error: error as Error }));
     }
   }, [fetchTransactions, fetchCashRequisitions, fetchBookings, fetchSafariBookings]);
@@ -215,11 +243,11 @@ export function useFinanceData({ currency = 'USD' }: UseFinanceDataProps = {}) {
   // ── Currency conversion ───────────────────────────────────────────────────
 
   const convertAmount = useCallback((amount: number, fromCurrency: string): number => {
-    const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
+    const rates = exchangeRates as unknown as Record<string, number>;
     const fromRate = rates[fromCurrency] || 1;
     const toRate   = rates[currency] || 1;
     return (amount / fromRate) * toRate;
-  }, [currency]);
+  }, [currency, exchangeRates]);
 
   // ── Unified Revenue Items ─────────────────────────────────────────────────
   // Sources: bookings (Reservations) + safari_bookings + income financial_transactions
