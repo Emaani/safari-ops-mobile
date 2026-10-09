@@ -129,6 +129,41 @@ const infoStyles = StyleSheet.create({
   value: { fontSize: 13, color: C.text, fontWeight: '700', textAlign: 'right', flex: 1.5 },
 });
 
+// ─── Audit timeline ───────────────────────────────────────────────────────────
+// Built only from fields the server actually persists on cash_requisitions
+// (created_at, approved_at, declined_at, status). There is no decline_reason,
+// cancel_reason, or cancelled_at column yet, so Declined/Cancelled steps show
+// without a reason or — for Cancelled — without a timestamp. See the web-team
+// proposal in CR_AUDIT_TRAIL_PROPOSAL.md before adding those.
+function AuditStep({
+  label, time, sublabel, tone = 'done', isLast = false,
+}: { label: string; time?: string; sublabel?: string; tone?: 'done' | 'active' | 'danger' | 'muted'; isLast?: boolean }) {
+  const dotColor = tone === 'done' ? C.success : tone === 'active' ? C.warning : tone === 'danger' ? C.danger : C.muted;
+  return (
+    <View style={auditStyles.step}>
+      <View style={auditStyles.rail}>
+        <View style={[auditStyles.dot, { backgroundColor: dotColor }]} />
+        {!isLast && <View style={auditStyles.line} />}
+      </View>
+      <View style={auditStyles.stepBody}>
+        <Text style={auditStyles.stepLabel}>{label}</Text>
+        {!!time && <Text style={auditStyles.stepTime}>{time}</Text>}
+        {!!sublabel && <Text style={auditStyles.stepSub}>{sublabel}</Text>}
+      </View>
+    </View>
+  );
+}
+const auditStyles = StyleSheet.create({
+  step:     { flexDirection: 'row' },
+  rail:     { width: 20, alignItems: 'center' },
+  dot:      { width: 10, height: 10, borderRadius: 5, marginTop: 3 },
+  line:     { flex: 1, width: 2, backgroundColor: '#E5E5EA', marginTop: 2, marginBottom: 2 },
+  stepBody: { flex: 1, paddingBottom: 16, marginLeft: 10 },
+  stepLabel:{ fontSize: 14, color: C.text, fontWeight: '700' },
+  stepTime: { fontSize: 12, color: C.muted, fontWeight: '500', marginTop: 2 },
+  stepSub:  { fontSize: 12, color: C.muted, fontStyle: 'italic', marginTop: 2 },
+});
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DetailItem = FinancialTransaction | (CashRequisition & { description?: string });
 
@@ -376,14 +411,42 @@ export function TransactionDetailModal({
                 value={cr.approver.full_name?.trim() || cr.approver.email || undefined}
               />
             )}
-            {cr.approved_at && (
-              <InfoRow
-                label="Approved At"
-                value={new Date(cr.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </View>
+
+          {/* Audit timeline — see AuditStep comment above for what's omitted and why */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Audit Timeline</Text>
+            <AuditStep label="Submitted" time={createdDate} tone="done" />
+            {cr.status === 'Pending' && (
+              <AuditStep label="Awaiting Approval" tone="active" isLast />
+            )}
+            {(cr.status === 'Approved' || cr.status === 'Completed' || cr.status === 'Resolved') && (
+              <AuditStep
+                label="Approved"
+                time={cr.approved_at ? new Date(cr.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined}
+                sublabel={cr.approver?.full_name?.trim() || cr.approver?.email || undefined}
+                tone="done"
+                isLast={cr.status === 'Approved'}
               />
             )}
-            {cr.status === 'Declined' && (
-              <InfoRow label="Decision" value="Declined by approver" />
+            {(cr.status === 'Declined' || cr.status === 'Rejected') && (
+              <AuditStep
+                label={cr.status}
+                time={cr.declined_at ? new Date(cr.declined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined}
+                tone="danger"
+                isLast
+              />
+            )}
+            {cr.status === 'Cancelled' && (
+              <AuditStep label="Cancelled" tone="muted" isLast />
+            )}
+            {(cr.status === 'Completed' || cr.status === 'Resolved') && (
+              <AuditStep
+                label={cr.status === 'Completed' ? 'Completed' : 'Resolved'}
+                time={cr.date_completed ? new Date(cr.date_completed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined}
+                tone="done"
+                isLast
+              />
             )}
           </View>
 

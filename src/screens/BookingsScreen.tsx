@@ -23,7 +23,7 @@ import { FadeSlideIn } from '../components/ui';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { useBookingsData } from '../hooks/useBookingsData';
 import { useBookingsRealtimeSync } from '../hooks/useBookingsRealtimeSync';
-import { useFleetData } from '../hooks/useFleetData';
+import { useFleetDataContext } from '../contexts/FleetDataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { BookingCard, BookingDetailModal, EditBookingModal } from '../components/bookings';
 import { NewBookingModal } from '../components/forms';
@@ -298,7 +298,7 @@ export function BookingsScreen() {
 
   const { user } = useAuth();
   const { bookings, loading, error, refetch } = useBookingsData();
-  const { vehicles } = useFleetData();
+  const { vehicles } = useFleetDataContext();
 
   // Real-time sync
   useBookingsRealtimeSync(refetch);

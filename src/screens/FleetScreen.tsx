@@ -20,8 +20,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Svg, Path, Circle } from 'react-native-svg';
-import { useFleetData } from '../hooks/useFleetData';
-import { useFleetRealtimeSync } from '../hooks/useFleetRealtimeSync';
+import { useFleetDataContext } from '../contexts/FleetDataContext';
 import { supabase } from '../lib/supabase';
 import { VehicleCard, VehicleDetailModal, MaintenanceTracker } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
@@ -160,10 +159,9 @@ export function FleetScreen() {
   // HOOKS
   // ========================================================================
 
-  const { vehicles, repairs, loading, error, refetch } = useFleetData();
-
-  // Real-time sync
-  useFleetRealtimeSync(refetch);
+  // Shared across Fleet + Bookings tabs via FleetDataProvider — one fetch,
+  // one realtime subscription, instead of each screen running its own.
+  const { vehicles, repairs, loading, error, refetch } = useFleetDataContext();
 
   // Fetch drivers lazily — only when the Drivers view is opened
   useEffect(() => {

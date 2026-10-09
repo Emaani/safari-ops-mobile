@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { devLog } from '../lib/devLog';
 import { realtimeManager } from '../lib/realtimeManager';
+import { logEvent } from '../lib/eventLogger';
 import type { ExchangeRate, Currency } from '../types/dashboard';
 
 // Default fallback rates (only used if database fetch fails)
@@ -40,6 +41,7 @@ export function useExchangeRate() {
       if (fetchError) {
         console.warn('[ExchangeRate] Error fetching exchange rates:', fetchError);
         console.warn('[ExchangeRate] Using default fallback rates');
+        logEvent('exchange_rate_fetch_failed', fetchError.message, {}, 'warning');
         setExchangeRates(DEFAULT_RATES);
         return;
       }
@@ -95,6 +97,7 @@ export function useExchangeRate() {
       devLog('[ExchangeRate] Exchange rates updated successfully:', rates);
     } catch (err) {
       console.error('[ExchangeRate] Exchange rate fetch error:', err);
+      logEvent('exchange_rate_fetch_exception', (err as Error)?.message || 'Unknown error');
       setError(err as Error);
       setExchangeRates(DEFAULT_RATES);
     } finally {

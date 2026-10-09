@@ -20,13 +20,14 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { FadeSlideIn, EmptyState } from '../components/ui';
+import { FadeSlideIn, EmptyState, ListSkeleton } from '../components/ui';
 import { tapLight, selectionTick } from '../lib/haptics';
 import { Svg, Path, Circle, Rect, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useFinanceData } from '../hooks/useFinanceData';
 import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
 import { useFinanceRealtimeSync } from '../hooks/useFinanceRealtimeSync';
 import { useExchangeRate } from '../hooks/useExchangeRate';
+import { usePendingSyncStatus } from '../hooks/usePendingSyncStatus';
 import { TransactionDetailModal } from '../components/finance';
 import { AddExpenseModal } from '../components/forms';
 import { LoadingOverlay } from '../components/system/JackalLoader';
@@ -461,7 +462,7 @@ function ExpenseRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 367
 // CASH REQUISITION CARD
 // ============================================================================
 
-function CRCard({ cr, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: { cr: CashRequisition; displayCurrency: Currency; onPress: (cr: CashRequisition) => void; rates?: Record<string, number> }) {
+function CRCard({ cr, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 }, pendingSync = false }: { cr: CashRequisition; displayCurrency: Currency; onPress: (cr: CashRequisition) => void; rates?: Record<string, number>; pendingSync?: boolean }) {
   const displayed = (cr.total_cost / (rates[cr.currency] || 1)) * (rates[displayCurrency] || 1);
   const dateNeeded = cr.date_needed
     ? new Date(cr.date_needed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -492,6 +493,11 @@ function CRCard({ cr, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES
 
         {/* Category + Department */}
         <View style={styles.crBadgeRow}>
+          {pendingSync && (
+            <View style={[styles.crBadge, { backgroundColor: '#FFF1D6' }]}>
+              <Text style={[styles.crBadgeText, { color: '#B8860B' }]}>⏳ Pending Sync</Text>
+            </View>
+          )}
           <View style={[styles.crBadge, { backgroundColor: '#FDE8C0' }]}>
             <Text style={[styles.crBadgeText, { color: '#7a5522' }]}>{cr.expense_category}</Text>
           </View>
@@ -707,6 +713,10 @@ export function FinanceScreen() {
 
   useFinanceRealtimeSync(refetch);
 
+  // Pending offline-queue visibility — see usePendingSyncStatus.ts for why
+  // this can't just reuse the App.tsx global banner's counts.
+  const { pendingPaymentCount, pendingCrIds, pendingTotal, isOnline, retrying, retryNow } = usePendingSyncStatus();
+
   // ── Filtered lists ────────────────────────────────────────────────────────
 
   const filteredRevenue = useMemo(() => {
@@ -756,6 +766,51 @@ export function FinanceScreen() {
 
   const toDisplayAmt = (amount: number, fromCurrency: string) =>
     (amount / (exchangeRates[fromCurrency as Currency] || 1)) * (exchangeRates[currency] || 1);
+
+  // Approval workload, overdue, and department/category breakdowns — all
+  // derived client-side from CRs the screen already fetched. No new query,
+  // no server dependency.
+  const crInsights = useMemo(() => {
+    const pending = cashRequisitions.filter(cr => cr.status === 'Pending');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
+    const overdue = pending.filter(cr => cr.date_needed && new Date(cr.date_needed) < today);
+
+    // Mirrors TransactionDetailModal's approve-eligibility rule: a designated
+    // approver sees only their own; with no approver assigned, any
+    // non-submitter may act.
+    const myApprovals = pending.filter(cr => {
+      const approverId = (cr as any).approver_id as string | undefined;
+      const requesterId = (cr as any).requester_id as string | undefined;
+      if (requesterId && user?.id && requesterId === user.id) return false;
+      return approverId ? approverId === user?.id : true;
+    });
+
+    const byDepartment = new Map<string, number>();
+    pending.forEach(cr => {
+      const dept = cr.department || 'Unassigned';
+      byDepartment.set(dept, (byDepartment.get(dept) || 0) + 1);
+    });
+    const topDepartments = Array.from(byDepartment.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    const byCategory = new Map<string, number>();
+    pending.forEach(cr => {
+      const cat = cr.expense_category || 'Other';
+      const amt = toDisplayAmt(cr.total_cost, cr.currency || 'USD');
+      byCategory.set(cat, (byCategory.get(cat) || 0) + amt);
+    });
+    const topCategory = Array.from(byCategory.entries()).sort((a, b) => b[1] - a[1])[0];
+
+    return {
+      pendingCount: pending.length,
+      overdueCount: overdue.length,
+      myApprovalsCount: myApprovals.length,
+      topDepartments,
+      topCategory,
+    };
+  }, [cashRequisitions, user?.id, exchangeRates, currency]);
 
   const filteredTotals = useMemo(() => {
     const totalIn  = filteredRevenue.reduce((s, i) => s + toDisplayAmt(i.amount, i.currency), 0);
@@ -941,6 +996,49 @@ export function FinanceScreen() {
         <KPICard delay={120} title="Completed"    value={String(cashRequisitions.filter(c => c.status === 'Completed' || c.status === 'Resolved').length)} accent={COLORS.success} bg={COLORS.revenueBg} icon={<TrendUpIcon size={15} color={COLORS.success} />} />
       </View>
 
+      {/* Next-action nudge — only surfaces when there's something this user can act on */}
+      {crInsights.myApprovalsCount > 0 && (
+        <TouchableOpacity
+          style={styles.nudgeCard}
+          onPress={() => setCrStatusFilter('Pending')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.nudgeText}>
+            👉 {crInsights.myApprovalsCount} requisition{crInsights.myApprovalsCount === 1 ? '' : 's'} awaiting your approval
+            {crInsights.overdueCount > 0 ? ` · ${crInsights.overdueCount} overdue` : ''}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Insights — approval workload & spend breakdown, computed from CRs already loaded */}
+      {pendingCount > 0 && (
+        <View style={styles.insightsCard}>
+          <Text style={styles.insightsTitle}>Insights</Text>
+          <View style={styles.insightsRow}>
+            <Text style={styles.insightsLabel}>Overdue requisitions</Text>
+            <Text style={[styles.insightsValue, crInsights.overdueCount > 0 && { color: COLORS.danger }]}>
+              {crInsights.overdueCount}
+            </Text>
+          </View>
+          {crInsights.topCategory && (
+            <View style={styles.insightsRow}>
+              <Text style={styles.insightsLabel}>Top pending category</Text>
+              <Text style={styles.insightsValue}>
+                {crInsights.topCategory[0]} ({formatCurrency(crInsights.topCategory[1], currency)})
+              </Text>
+            </View>
+          )}
+          {crInsights.topDepartments.length > 0 && (
+            <View style={[styles.insightsRow, { alignItems: 'flex-start' }]}>
+              <Text style={styles.insightsLabel}>Pending by department</Text>
+              <Text style={[styles.insightsValue, { textAlign: 'right' }]}>
+                {crInsights.topDepartments.map(([dept, count]) => `${dept} (${count})`).join('  ·  ')}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* New CR button */}
       <TouchableOpacity
         style={styles.newCRBtn}
@@ -1010,7 +1108,13 @@ export function FinanceScreen() {
 
   const renderCRItem = ({ item, index }: { item: CashRequisition; index: number }) => (
     <FadeSlideIn delay={Math.min(index * 40, 300)} distance={14}>
-      <CRCard cr={item} displayCurrency={currency} onPress={handleCRPress} rates={exchangeRates as unknown as Record<string, number>} />
+      <CRCard
+        cr={item}
+        displayCurrency={currency}
+        onPress={handleCRPress}
+        rates={exchangeRates as unknown as Record<string, number>}
+        pendingSync={pendingCrIds.has(item.id)}
+      />
     </FadeSlideIn>
   );
 
@@ -1086,6 +1190,30 @@ export function FinanceScreen() {
         </View>
       </FadeSlideIn>
 
+      {/* Pending sync strip — visible whenever a payment or CR action is still
+          queued offline, even after connectivity returns (App.tsx's global
+          banner only shows while actually offline and resets on reconnect,
+          so a failed/queued item was otherwise invisible here). */}
+      {pendingTotal > 0 && (
+        <View style={styles.pendingSyncStrip}>
+          <Text style={styles.pendingSyncText}>
+            ⏳ {pendingTotal} item{pendingTotal === 1 ? '' : 's'} pending sync
+            {pendingPaymentCount > 0 ? ` · ${pendingPaymentCount} payment${pendingPaymentCount === 1 ? '' : 's'}` : ''}
+            {pendingCrIds.size > 0 ? ` · ${pendingCrIds.size} requisition action${pendingCrIds.size === 1 ? '' : 's'}` : ''}
+          </Text>
+          {isOnline && (
+            <TouchableOpacity
+              style={styles.pendingSyncRetryBtn}
+              onPress={retryNow}
+              disabled={retrying}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pendingSyncRetryText}>{retrying ? 'Syncing…' : 'Retry Now'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* Totals bar — revenue & expenses tabs only */}
       {(activeTab === 'revenue' || activeTab === 'expenses') && (
         <View style={styles.totalsBar}>
@@ -1116,7 +1244,7 @@ export function FinanceScreen() {
           keyExtractor={(item: RevenueItem) => item.id}
           renderItem={renderRevenueItem}
           ListHeaderComponent={renderTxHeader}
-          ListEmptyComponent={!loading ? renderEmpty : null}
+          ListEmptyComponent={loading ? <ListSkeleton type="finance" rows={5} /> : renderEmpty}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />}
@@ -1130,7 +1258,7 @@ export function FinanceScreen() {
           keyExtractor={(item: ExpenseItem) => item.id}
           renderItem={renderExpenseItem}
           ListHeaderComponent={renderTxHeader}
-          ListEmptyComponent={!loading ? renderEmpty : null}
+          ListEmptyComponent={loading ? <ListSkeleton type="finance" rows={5} /> : renderEmpty}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />}
@@ -1144,7 +1272,7 @@ export function FinanceScreen() {
           keyExtractor={(item: CashRequisition) => item.id}
           renderItem={renderCRItem}
           ListHeaderComponent={renderCRHeader}
-          ListEmptyComponent={!loading ? renderEmpty : null}
+          ListEmptyComponent={loading ? <ListSkeleton type="finance" rows={5} /> : renderEmpty}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} colors={[COLORS.primary]} />}
@@ -1296,6 +1424,90 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', paddingVertical: 48 },
   emptyTitle:     { fontSize: 16, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
   emptyMessage:   { fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
+
+  // Next-action nudge
+  nudgeCard: {
+    backgroundColor: COLORS.primary + '12',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  nudgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+
+  // CR insights card
+  insightsCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    gap: 8,
+  },
+  insightsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  insightsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  insightsLabel: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+    flexShrink: 0,
+  },
+  insightsValue: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'right',
+  },
+
+  // Pending sync strip
+  pendingSyncStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF7E6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5D896',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  pendingSyncText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7a5500',
+  },
+  pendingSyncRetryBtn: {
+    backgroundColor: COLORS.warning,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  pendingSyncRetryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
 
   // Totals bar
   totalsBar: {

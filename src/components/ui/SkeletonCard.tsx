@@ -100,9 +100,31 @@ export function NotifRowSkeleton() {
   );
 }
 
+// ─── Finance / CR card skeleton ───────────────────────────────────────────────
+export function FinanceCardSkeleton() {
+  return (
+    <View style={s.card}>
+      <View style={s.row}>
+        <Bone width={28} height={14} style={{ borderRadius: radius.sm }} />
+        <View style={{ flex: 1 }} />
+        <Bone width={70} height={16} />
+      </View>
+      <View style={[s.row, { gap: 8 }]}>
+        <Bone width={60} height={20} style={{ borderRadius: radius.full }} />
+        <Bone width={50} height={20} style={{ borderRadius: radius.full }} />
+      </View>
+      <View style={s.divider} />
+      <View style={[s.row, { justifyContent: 'space-between' }]}>
+        <Bone width="35%" height={11} />
+        <Bone width="25%" height={11} />
+      </View>
+    </View>
+  );
+}
+
 // ─── Generic list skeleton (n rows) ──────────────────────────────────────────
-export function ListSkeleton({ rows = 4, type = 'booking' }: { rows?: number; type?: 'booking' | 'vehicle' | 'notif' }) {
-  const Comp = type === 'vehicle' ? VehicleCardSkeleton : type === 'notif' ? NotifRowSkeleton : BookingCardSkeleton;
+export function ListSkeleton({ rows = 4, type = 'booking' }: { rows?: number; type?: 'booking' | 'vehicle' | 'notif' | 'finance' }) {
+  const Comp = type === 'vehicle' ? VehicleCardSkeleton : type === 'notif' ? NotifRowSkeleton : type === 'finance' ? FinanceCardSkeleton : BookingCardSkeleton;
   return (
     <View style={{ gap: 12, paddingHorizontal: spacing['4'], paddingTop: spacing['4'] }}>
       {Array.from({ length: rows }).map((_, i) => <Comp key={i} />)}

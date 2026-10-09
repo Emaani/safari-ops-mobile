@@ -27,6 +27,7 @@
 
 import { supabase } from './supabase';
 import { devLog } from './devLog';
+import { logEvent } from './eventLogger';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // All tables the app cares about
@@ -150,6 +151,7 @@ class RealtimeManager {
             devLog(`[Realtime] ✓ subscribed to ${table}`);
           } else if (status === 'CHANNEL_ERROR') {
             console.warn(`[Realtime] Channel error on ${table}:`, err);
+            logEvent('realtime_channel_error', err?.message || `Channel error on ${table}`, { table }, 'warning');
           } else if (status === 'CLOSED') {
             // Channel was removed — clean up our map so it can be recreated
             devLog(`[Realtime] Channel closed for ${table}`);

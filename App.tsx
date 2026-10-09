@@ -24,6 +24,7 @@ import {
   type InAppNotifType,
 } from './src/components/system/InAppNotificationBanner';
 import { NotificationsProvider, useNotificationsContext } from './src/contexts/NotificationsContext';
+import { FleetDataProvider } from './src/contexts/FleetDataContext';
 import { useBookingNotifications } from './src/hooks/useBookingNotifications';
 import { useCRNotifications } from './src/hooks/useCRNotifications';
 import { useVehicleNotifications } from './src/hooks/useVehicleNotifications';
@@ -443,6 +444,7 @@ function MainTabNavigator() {
   }, [isRTL]);
 
   return (
+    <FleetDataProvider>
     <Tab.Navigator
       screenOptions={{
         headerShown:             false,
@@ -488,6 +490,7 @@ function MainTabNavigator() {
         />
       ))}
     </Tab.Navigator>
+    </FleetDataProvider>
   );
 }
 

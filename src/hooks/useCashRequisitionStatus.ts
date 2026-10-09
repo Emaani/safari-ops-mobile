@@ -13,6 +13,7 @@ import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { devError } from '../lib/devLog';
 import { getErrorMessage } from '../lib/errors';
+import { logEvent } from '../lib/eventLogger';
 
 export type CrStatusAction = 'Approved' | 'Declined' | 'Cancelled';
 
@@ -45,6 +46,9 @@ export function useCashRequisitionStatus() {
       if (error) {
         devError('[CashRequisitionStatus] update_cr_status error:', error.message);
         const alreadyFinished = /finished|already|cannot change/i.test(error.message);
+        if (!alreadyFinished) {
+          logEvent('cr_status_update_failed', error.message, { crId, newStatus });
+        }
         return { ok: false, error: getErrorMessage(error, 'Failed to update requisition status.'), alreadyFinished };
       }
 
@@ -52,6 +56,7 @@ export function useCashRequisitionStatus() {
       return { ok: true, status: row?.status };
     } catch (e: any) {
       devError('[CashRequisitionStatus] update_cr_status exception:', e);
+      logEvent('cr_status_update_exception', getErrorMessage(e, 'Unknown error'), { crId, newStatus });
       return { ok: false, error: getErrorMessage(e, 'Failed to update requisition status.') };
     } finally {
       setUpdating(false);
