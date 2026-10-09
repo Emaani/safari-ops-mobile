@@ -540,8 +540,9 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
 
     let paymentRows = '';
     try {
-      const { data: events } = await supabase.rpc('search_payment_events', { p_search: booking.id });
-      const completed = ((events || []) as any[]).filter(e => e.status !== 'reversed');
+      const { data: eventsResult } = await supabase.rpc('search_payment_events', { p_search: booking.id });
+      // search_payment_events returns a paginated wrapper {rows, total}, not a bare array.
+      const completed = ((eventsResult?.rows ?? []) as any[]).filter(e => e.status !== 'reversed');
       if (completed.length > 0) {
         paymentRows = completed.map(e => `
           <tr>

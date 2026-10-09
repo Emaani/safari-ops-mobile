@@ -55,12 +55,16 @@ export function usePaymentHistory({ sourceId, method, dateFrom, dateTo }: UsePay
       const { data, error: rpcError } = await supabase.rpc('search_payment_events', {
         p_search: sourceId,
         p_method: method && method !== 'all' ? method : null,
-        p_date_from: dateFrom || null,
-        p_date_to: dateTo || null,
+        p_from: dateFrom || null,
+        p_to: dateTo || null,
       });
 
       if (rpcError) throw rpcError;
-      setEvents((data || []) as PaymentEvent[]);
+      // The real RPC returns a paginated wrapper {rows, total}, not a bare
+      // array — confirmed directly against the live schema (the function
+      // also takes p_amount/p_offset, both optional, which this screen
+      // doesn't need yet).
+      setEvents(((data?.rows ?? []) as PaymentEvent[]));
     } catch (e: any) {
       devError('[PaymentHistory] search_payment_events error:', e);
       setError(e?.message || 'Failed to load payment history.');
