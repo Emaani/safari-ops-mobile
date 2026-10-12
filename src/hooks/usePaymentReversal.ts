@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useState } from 'react';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '../lib/supabase';
 import { devError } from '../lib/devLog';
 
@@ -24,9 +25,14 @@ export function usePaymentReversal() {
   const reversePayment = useCallback(async (paymentEventId: string, reason: string): Promise<ReversePaymentResult> => {
     setReversing(true);
     try {
+      // Real RPC param names confirmed against the live schema cache:
+      // p_transaction_id (not p_payment_event_id) and a REQUIRED p_request_id
+      // with no default — mobile wasn't sending one at all, so every
+      // reversal attempt was failing at routing before this fix.
       const { data, error } = await supabase.rpc('reverse_payment', {
-        p_payment_event_id: paymentEventId,
+        p_transaction_id: paymentEventId,
         p_reason: reason,
+        p_request_id: Crypto.randomUUID(),
       });
 
       if (error) {

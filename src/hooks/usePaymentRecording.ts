@@ -25,15 +25,19 @@ export function usePaymentRecording() {
     try {
       devLog('[PaymentRecording] record_payment', { source: params.source, sourceId: params.sourceId, requestId: params.requestId });
 
+      // Real RPC param names confirmed directly against the live PostgREST
+      // schema cache — p_details/p_date/p_notes, NOT p_payment_details/
+      // p_transaction_date/p_description (the latter were a guess that made
+      // every payment recording fail with PGRST202 "schema cache" errors).
       const { data, error } = await supabase.rpc('record_payment', {
         p_source: params.source,
         p_source_id: params.sourceId,
         p_amount: params.amount,
         p_method: params.method,
         p_reference: params.reference,
-        p_payment_details: params.paymentDetails,
-        p_transaction_date: params.transactionDate,
-        p_description: params.description,
+        p_details: params.paymentDetails,
+        p_date: params.transactionDate,
+        p_notes: params.description,
         p_request_id: params.requestId,
       });
 
