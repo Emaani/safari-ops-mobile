@@ -1,5 +1,5 @@
 import { devLog } from '../lib/devLog';
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,8 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { useFleetDataContext } from '../contexts/FleetDataContext';
-import { supabase } from '../lib/supabase';
-import { VehicleCard, VehicleDetailModal, MaintenanceTracker } from '../components/fleet';
+import { VehicleCard, VehicleDetailModal, MaintenanceTracker, DriverManagement } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
 import { FadeSlideIn, EmptyState, ListSkeleton } from '../components/ui';
 import { LoadingOverlay } from '../components/system/JackalLoader';
@@ -152,8 +151,6 @@ export function FleetScreen() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [viewMode, setViewMode] = useState<'vehicles' | 'drivers'>('vehicles');
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [driversLoading, setDriversLoading] = useState(false);
 
   // ========================================================================
   // HOOKS
@@ -162,21 +159,6 @@ export function FleetScreen() {
   // Shared across Fleet + Bookings tabs via FleetDataProvider — one fetch,
   // one realtime subscription, instead of each screen running its own.
   const { vehicles, repairs, loading, error, refetch } = useFleetDataContext();
-
-  // Fetch drivers lazily — only when the Drivers view is opened
-  useEffect(() => {
-    if (viewMode !== 'drivers' || drivers.length > 0) return;
-    let cancelled = false;
-    setDriversLoading(true);
-    (async () => {
-      const { data, error: fetchErr } = await supabase.from('drivers').select('*').order('full_name');
-      if (cancelled) return;
-      if (fetchErr) { devLog('[FleetScreen] Drivers fetch error:', fetchErr.message); setDrivers([]); }
-      else setDrivers(data || []);
-      setDriversLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [viewMode]);
 
   // ========================================================================
   // COMPUTED VALUES
@@ -248,22 +230,6 @@ export function FleetScreen() {
     return result;
   }, [vehicles, statusFilter, searchQuery]);
 
-  const vehicleByDriverId = useMemo(() => {
-    const map: Record<string, Vehicle> = {};
-    vehicles.forEach((v) => { if (v.current_driver_id) map[v.current_driver_id] = v; });
-    return map;
-  }, [vehicles]);
-
-  const filteredDrivers = useMemo(() => {
-    if (!searchQuery.trim()) return drivers;
-    const q = searchQuery.toLowerCase();
-    return drivers.filter((d) =>
-      (d.full_name || '').toLowerCase().includes(q) ||
-      (d.phone || '').toLowerCase().includes(q) ||
-      (d.license_number || '').toLowerCase().includes(q)
-    );
-  }, [drivers, searchQuery]);
-
   // ========================================================================
   // CALLBACKS
   // ========================================================================
@@ -319,13 +285,13 @@ export function FleetScreen() {
         </>
       )}
 
-      {/* Search Bar — shared between Vehicles and Drivers */}
+      {/* Search Bar — Vehicles only; Drivers view (DriverManagement) has its own */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
           <SearchIcon size={18} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder={viewMode === 'vehicles' ? 'Search vehicles...' : 'Search drivers...'}
+            placeholder="Search vehicles..."
             placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -404,11 +370,7 @@ export function FleetScreen() {
       )}
 
       {/* List Header */}
-      <Text style={styles.listHeader}>
-        {viewMode === 'vehicles'
-          ? `Vehicles (${filteredVehicles.length})`
-          : driversLoading ? 'Loading drivers…' : `Drivers (${filteredDrivers.length})`}
-      </Text>
+      <Text style={styles.listHeader}>Vehicles ({filteredVehicles.length})</Text>
     </>
   );
 
@@ -418,42 +380,7 @@ export function FleetScreen() {
     </FadeSlideIn>
   );
 
-  const renderDriver = ({ item, index }: { item: any; index: number }) => {
-    const assignedVehicle = vehicleByDriverId[item.id];
-    const initials = (item.full_name || '?').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase();
-    return (
-      <FadeSlideIn delay={Math.min(index * 50, 320)} distance={16}>
-        <View style={styles.driverCard}>
-          <View style={styles.driverAvatar}><Text style={styles.driverAvatarT}>{initials}</Text></View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.driverName} numberOfLines={1}>{item.full_name || 'Unnamed Driver'}</Text>
-            <Text style={styles.driverMeta} numberOfLines={1}>
-              {[item.phone, item.license_number ? `Lic. ${item.license_number}` : null].filter(Boolean).join(' · ') || 'No contact info on file'}
-            </Text>
-          </View>
-          {assignedVehicle && (
-            <View style={styles.driverVehiclePill}>
-              <Text style={styles.driverVehiclePillT}>{assignedVehicle.license_plate}</Text>
-            </View>
-          )}
-        </View>
-      </FadeSlideIn>
-    );
-  };
-
   const renderEmpty = () => {
-    if (viewMode === 'drivers') {
-      if (driversLoading) return null;
-      return (
-        <EmptyState
-          type="fleet"
-          title={searchQuery ? 'No drivers match' : 'No drivers on file'}
-          subtitle={searchQuery ? 'Try a different search.' : 'Drivers linked to vehicles will appear here.'}
-          secondaryLabel={searchQuery ? 'Clear Search' : undefined}
-          onSecondary={searchQuery ? () => setSearchQuery('') : undefined}
-        />
-      );
-    }
     return (
       <EmptyState
         type="fleet"
@@ -546,16 +473,7 @@ export function FleetScreen() {
           }
         />
       ) : (
-        <FlatList
-          keyboardShouldPersistTaps="handled"
-          data={filteredDrivers}
-          keyExtractor={(item) => item.id}
-          renderItem={renderDriver}
-          ListHeaderComponent={renderHeader}
-          ListEmptyComponent={renderEmpty}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        <DriverManagement vehicles={vehicles} onVehiclesChanged={refetch} />
       )}
 
       {/* Vehicle Detail Modal */}
@@ -832,52 +750,6 @@ const styles = StyleSheet.create({
   },
   segmentTOn: {
     color: '#1C1611',
-  },
-  driverCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 14,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 12,
-  },
-  driverAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F5E8D0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  driverAvatarT: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  driverName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  driverMeta: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  driverVehiclePill: {
-    backgroundColor: '#F5E8D0',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  driverVehiclePillT: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primary,
   },
 });
 

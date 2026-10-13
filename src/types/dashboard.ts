@@ -30,6 +30,46 @@ export interface Vehicle {
   };
 }
 
+// Columns confirmed directly against the live Supabase schema (drivers table) —
+// never guessed, since a wrong field name here would silently drop data on insert.
+export interface Driver {
+  id: string;
+  full_name: string;
+  phone?: string | null;
+  email?: string | null;
+  license_number?: string | null;
+  license_expiry?: string | null;
+  status?: string | null;
+  rating?: number | null;
+  total_trips?: number | null;
+  date_of_birth?: string | null;
+  hire_date?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DriverIncident {
+  id: string;
+  driver_id: string;
+  vehicle_id?: string | null;
+  incident_type?: string | null;
+  description?: string | null;
+  status?: string | null;
+  created_at: string;
+}
+
+export interface TripReview {
+  id: string;
+  driver_id: string;
+  vehicle_id?: string | null;
+  trip_id?: string | null;
+  rating: number;
+  client_name?: string | null;
+  created_at: string;
+}
+
 export interface Booking {
   id: string;
   booking_reference?: string;
