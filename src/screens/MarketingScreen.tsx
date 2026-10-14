@@ -26,6 +26,7 @@ import type { PortalVehicle, Promotion, SafariPackage } from '../types/safari';
 import { useGA4Analytics, type DatePreset } from '../hooks/useGA4Analytics';
 import { useBlogAnalytics } from '../hooks/useBlogAnalytics';
 import { useGoogleAds } from '../hooks/useGoogleAds';
+import { getErrorMessage } from '../lib/errors';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -193,7 +194,7 @@ function VehicleEditModal({ vehicle, visible, onClose, onSaved }: {
       }).eq('id', vehicle.id);
       if (error) throw error;
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [vehicle, category, description, imageUrl, dailyRate, onSaved, onClose]);
 
@@ -267,7 +268,7 @@ function VehicleCatalogTab() {
       if (error) throw error;
       setVehicles(prev => prev.map(x => x.id === v.id ? { ...x, portal_visible: newVal } : x));
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update visibility.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to update visibility.'));
     } finally {
       setToggling(t => { const n = { ...t }; delete n[v.id]; return n; });
     }
@@ -366,7 +367,7 @@ function PackageEditModal({ pkg, visible, onClose, onSaved }: {
       }).eq('id', pkg.id);
       if (error) throw error;
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [pkg, highlight, imageUrl, onSaved, onClose]);
 
@@ -430,7 +431,7 @@ function SafariCatalogTab() {
       if (error) throw error;
       setPackages(prev => prev.map(x => x.id === p.id ? { ...x, portal_visible: newVal } : x));
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update visibility.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to update visibility.'));
     } finally {
       setToggling(t => { const n = { ...t }; delete n[p.id]; return n; });
     }

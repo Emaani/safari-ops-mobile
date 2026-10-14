@@ -142,6 +142,12 @@ export function RecordPaymentSheet({
               <Text style={styles.confirmTitle}>
                 {confirmation.queuedOffline ? 'Saved — Will Submit When Online' : confirmation.replayed ? 'Payment Already Recorded' : 'Payment Recorded'}
               </Text>
+              {/* subjectLabel (e.g. "REF-00123 · Acme Safaris") was shown on the
+                  form but dropped once the confirmation replaced it — leaving
+                  the new Transaction ID with no client/booking context next to
+                  it. Carry it through so the ID is identifiable at a glance,
+                  same as it is on the form itself. */}
+              <Text style={styles.confirmSub}>{subjectLabel}</Text>
               {confirmation.queuedOffline && (
                 <Text style={styles.confirmSub}>No signal right now. This payment is saved on your device and will be submitted automatically the moment you're back online.</Text>
               )}

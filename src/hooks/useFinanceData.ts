@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { normalizeCashRequisition } from '../lib/cashRequisition';
 import type { FinancialTransaction, CashRequisition, Currency } from '../types/dashboard';
 import { devLog, devError } from '../lib/devLog';
-import { useExchangeRate } from './useExchangeRate';
+import { useExchangeRate, resolveDisplayAmount } from './useExchangeRate';
 
 // ─── Unified Revenue Item ─────────────────────────────────────────────────────
 // Represents any revenue entry regardless of source table
@@ -17,6 +17,10 @@ export interface RevenueItem {
   subtitle: string;      // description / client / dates
   status: string;
   reference?: string;
+  /** USD snapshot stored on the source row (safari_bookings.total_price_usd),
+   *  when available — takes priority over a live conversion. See
+   *  resolveDisplayAmount for why. */
+  amount_usd?: number | null;
 }
 
 // ─── Unified Expense Item ─────────────────────────────────────────────────────
@@ -30,6 +34,10 @@ export interface ExpenseItem {
   subtitle: string;
   status: string;
   reference?: string;
+  /** USD snapshot stored on the source row (cash_requisitions.amount_usd),
+   *  when available — takes priority over a live conversion. See
+   *  resolveDisplayAmount for why. */
+  amount_usd?: number | null;
 }
 
 interface FinanceDataState {
@@ -242,11 +250,11 @@ export function useFinanceData({ currency = 'USD', month, year }: UseFinanceData
 
   // ── Currency conversion ───────────────────────────────────────────────────
 
+  // Used only by the aggregate sums below — always the live rate, never a
+  // per-item snapshot (see the 14 Oct 2026 handover note above sumRevenue).
   const convertAmount = useCallback((amount: number, fromCurrency: string): number => {
     const rates = exchangeRates as unknown as Record<string, number>;
-    const fromRate = rates[fromCurrency] || 1;
-    const toRate   = rates[currency] || 1;
-    return (amount / fromRate) * toRate;
+    return resolveDisplayAmount(amount, fromCurrency, currency, rates);
   }, [currency, exchangeRates]);
 
   // ── Unified Revenue Items ─────────────────────────────────────────────────
@@ -295,6 +303,7 @@ export function useFinanceData({ currency = 'USD', month, year }: UseFinanceData
         title:    'Safari Booking',
         subtitle: date ? `Safari · ${new Date(date).toLocaleDateString()}` : 'Safari Booking',
         status,
+        amount_usd: amountUSD > 0 ? amountUSD : null,
       });
     });
 
@@ -339,6 +348,7 @@ export function useFinanceData({ currency = 'USD', month, year }: UseFinanceData
         subtitle:  cr.cr_number ? `CR ${cr.cr_number}` : (cr.description || ''),
         status:    cr.status,
         reference: cr.cr_number,
+        amount_usd: cr.amount_usd ?? null,
       });
     });
 
@@ -377,6 +387,12 @@ export function useFinanceData({ currency = 'USD', month, year }: UseFinanceData
       return new Date(dateStr).getFullYear() === currentYear;
     };
 
+    // Aggregate totals (MTD/YTD/etc.) — per the 14 Oct 2026 handover, convert
+    // with a single live rate for all items, not each item's own historical
+    // snapshot (which would mix rates from different dates into one sum).
+    // Per-item display elsewhere (CRCard, the detail modal) is the opposite —
+    // it must prefer the snapshot so a single record doesn't disagree with
+    // itself between list and detail.
     const sumRevenue = (items: RevenueItem[]) =>
       items.reduce((sum, i) => sum + convertAmount(i.amount, i.currency), 0);
     const sumExpense = (items: ExpenseItem[]) =>

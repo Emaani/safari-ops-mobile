@@ -23,6 +23,7 @@ import {
   getBookingStatusConfig,
 } from '../../constants/bookingStatus';
 import type { Booking, BookingStatus, Vehicle } from '../../types/dashboard';
+import { getErrorMessage } from '../../lib/errors';
 
 // ─── Vehicle status colours ───────────────────────────────────────────────────
 const VEHICLE_STATUS_COLOR: Record<string, string> = {
@@ -356,7 +357,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
       onClose();
       Alert.alert('Booking Updated', `${booking.booking_reference || booking.booking_number || 'Booking'} has been updated successfully.`);
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update booking. Please try again.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to update booking. Please try again.'));
     } finally {
       setSaving(false);
     }

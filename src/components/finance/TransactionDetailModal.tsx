@@ -21,9 +21,11 @@ import { sendCRNotificationToUser } from '../../services/notificationService';
 import { useCashRequisitionStatus, type CrStatusAction } from '../../hooks/useCashRequisitionStatus';
 import { useUserRole } from '../../hooks/useUserRole';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { resolveDisplayAmount, DEFAULT_RATES } from '../../hooks/useExchangeRate';
 import { enqueueCrAction } from '../../lib/crStatusQueue';
 import type { FinancialTransaction, CashRequisition } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
+import { getErrorMessage } from '../../lib/errors';
 
 // ─── Palette (matches app-wide branding) ─────────────────────────────────────
 const C = {
@@ -178,6 +180,12 @@ interface TransactionDetailModalProps {
   currentUserId?: string;
   /** Email of the currently signed-in user — admins can approve any CR */
   currentUserEmail?: string;
+  /** Live exchange rates — falls back to DEFAULT_RATES only if the caller
+   *  hasn't fetched them yet. Previously this modal carried its own
+   *  hardcoded, never-updated rate table, which is exactly why a CR's
+   *  "Requested Amount" here could disagree with the same CR's row in the
+   *  Finance list — two different numbers for two different rate sources. */
+  rates?: Record<string, number>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -190,6 +198,7 @@ export function TransactionDetailModal({
   onRefetch,
   currentUserId,
   currentUserEmail,
+  rates = DEFAULT_RATES,
 }: TransactionDetailModalProps) {
   const [actioning, setActioning] = useState(false);
   const [declinePromptOpen, setDeclinePromptOpen] = useState(false);
@@ -200,10 +209,8 @@ export function TransactionDetailModal({
 
   if (!item) return null;
 
-  const convertAmount = (amount: number, fromCurrency: string): number => {
-    const rates: Record<string, number> = { USD: 1, UGX: 3700, KES: 130 };
-    return (amount / (rates[fromCurrency] || 1)) * (rates[displayCurrency] || 1);
-  };
+  const convertAmount = (amount: number, fromCurrency: string, amountUsdSnapshot?: number | null): number =>
+    resolveDisplayAmount(amount, fromCurrency, displayCurrency, rates, amountUsdSnapshot);
 
   // ── CR status action (Approve / Decline / Cancel) ─────────────────────────
   const runCRAction = async (newStatus: CrStatusAction, reason: string | null) => {
@@ -249,7 +256,7 @@ export function TransactionDetailModal({
         `${cr.cr_number} has been ${newStatus.toLowerCase()}.`
       );
     } catch (e: any) {
-      Alert.alert('Error', e?.message || `Failed to update requisition.`);
+      Alert.alert('Error', getErrorMessage(e, 'Failed to update requisition.'));
     } finally {
       setActioning(false);
     }
@@ -342,10 +349,7 @@ export function TransactionDetailModal({
 
   // ── Cash Requisition view ─────────────────────────────────────────────────
   const cr = item as CashRequisition & { description?: string };
-  const displayAmt = convertAmount(
-    cr.amount_usd ?? cr.total_cost,
-    cr.amount_usd != null ? 'USD' : (cr.currency || 'USD')
-  );
+  const displayAmt = convertAmount(cr.total_cost, cr.currency || 'USD', cr.amount_usd);
   const createdDate  = cr.created_at  ? new Date(cr.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   const dateNeeded   = cr.date_needed ? new Date(cr.date_needed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   const isPending     = cr.status === 'Pending';

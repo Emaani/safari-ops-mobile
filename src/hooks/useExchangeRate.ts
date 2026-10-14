@@ -5,8 +5,11 @@ import { realtimeManager } from '../lib/realtimeManager';
 import { logEvent } from '../lib/eventLogger';
 import type { ExchangeRate, Currency } from '../types/dashboard';
 
-// Default fallback rates (only used if database fetch fails)
-const DEFAULT_RATES = {
+// Default fallback rates (only used if database fetch fails, or before the
+// live fetch resolves) — exported so every screen's default prop falls back
+// to this ONE constant instead of its own hand-copied numbers drifting out
+// of sync with each other.
+export const DEFAULT_RATES = {
   USD: 1,      // Base currency
   UGX: 3670,   // Fallback for Uganda Shilling
   KES: 130,    // Fallback for Kenya Shilling
@@ -142,6 +145,35 @@ export function useExchangeRate() {
     error,
     refresh: fetchExchangeRate,
   };
+}
+
+/**
+ * Resolves an amount for display in `toCurrency` — the single conversion
+ * path every screen should use, so the same record never shows two
+ * different dollar values depending on where it's rendered.
+ *
+ * Found in production: cash_requisitions.amount_usd is a USD snapshot taken
+ * when the requisition was raised (the value the web dashboard shows and
+ * never recalculates). One mobile screen was recomputing a CR's dollar
+ * value live from total_cost against TODAY's exchange rate on every
+ * render — so the exact same CR showed a different "requested amount" in
+ * the Finance list than in its own detail view, and that number silently
+ * drifted further every time the UGX/USD rate moved. A live rate must
+ * never override a stored historical snapshot; it only fills in when no
+ * snapshot exists for the requested currency.
+ */
+export function resolveDisplayAmount(
+  amount: number,
+  fromCurrency: string,
+  toCurrency: string,
+  rates: Record<string, number>,
+  usdSnapshot?: number | null,
+): number {
+  if (fromCurrency === toCurrency) return amount;
+  if (toCurrency === 'USD' && usdSnapshot != null) return usdSnapshot;
+  const fromRate = rates[fromCurrency] || 1;
+  const toRate   = rates[toCurrency] || 1;
+  return (amount / fromRate) * toRate;
 }
 
 /**

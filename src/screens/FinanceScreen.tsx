@@ -26,7 +26,7 @@ import { Svg, Path, Circle, Rect, Line, Text as SvgText, Defs, LinearGradient, S
 import { useFinanceData } from '../hooks/useFinanceData';
 import type { RevenueItem, ExpenseItem } from '../hooks/useFinanceData';
 import { useFinanceRealtimeSync } from '../hooks/useFinanceRealtimeSync';
-import { useExchangeRate } from '../hooks/useExchangeRate';
+import { useExchangeRate, resolveDisplayAmount, DEFAULT_RATES } from '../hooks/useExchangeRate';
 import { usePendingSyncStatus } from '../hooks/usePendingSyncStatus';
 import { TransactionDetailModal } from '../components/finance';
 import { AddExpenseModal } from '../components/forms';
@@ -155,11 +155,8 @@ function buildLastNDays(
   expenseItems: ExpenseItem[],
   currency: Currency,
   n = 7,
-  rates: Record<string, number> = { USD: 1, UGX: 3670, KES: 130 },
+  rates: Record<string, number> = DEFAULT_RATES,
 ): ChartPoint[] {
-  const toBase = (amount: number, cur: string) => amount / (rates[cur] || 1);
-  const fromBase = (amount: number) => amount * (rates[currency] || 1);
-
   const now = new Date();
   return Array.from({ length: n }, (_, i) => {
     const d = new Date(now);
@@ -167,13 +164,15 @@ function buildLastNDays(
     const dayStr = d.toISOString().slice(0, 10);
     const label  = d.toLocaleDateString('en-GB', { weekday: 'short' });
 
+    // Aggregate chart — per the 14 Oct 2026 handover, totals convert with a
+    // single live rate, not each item's own historical snapshot.
     const rev = revenueItems
       .filter(r => (r.date || '').slice(0, 10) === dayStr)
-      .reduce((s, r) => s + fromBase(toBase(r.amount, r.currency)), 0);
+      .reduce((s, r) => s + resolveDisplayAmount(r.amount, r.currency, currency, rates), 0);
 
     const exp = expenseItems
       .filter(e => (e.date || '').slice(0, 10) === dayStr)
-      .reduce((s, e) => s + fromBase(toBase(e.amount, e.currency)), 0);
+      .reduce((s, e) => s + resolveDisplayAmount(e.amount, e.currency, currency, rates), 0);
 
     return { label, revenue: rev, expense: exp };
   });
@@ -391,8 +390,8 @@ const SOURCE_LABELS: Record<string, string> = {
   transaction:    'Income',
 };
 
-function RevenueRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: { item: RevenueItem; displayCurrency: Currency; onPress: (item: RevenueItem) => void; rates?: Record<string, number> }) {
-  const displayed = (item.amount / (rates[item.currency] || 1)) * (rates[displayCurrency] || 1);
+function RevenueRow({ item, displayCurrency, onPress, rates = DEFAULT_RATES }: { item: RevenueItem; displayCurrency: Currency; onPress: (item: RevenueItem) => void; rates?: Record<string, number> }) {
+  const displayed = resolveDisplayAmount(item.amount, item.currency, displayCurrency, rates, item.amount_usd);
   const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const statusColor = item.status?.toLowerCase() === 'completed' || item.status?.toLowerCase() === 'confirmed'
     ? COLORS.success : COLORS.warning;
@@ -426,8 +425,8 @@ function RevenueRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 367
 // EXPENSE ROW
 // ============================================================================
 
-function ExpenseRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: { item: ExpenseItem; displayCurrency: Currency; onPress: (item: ExpenseItem) => void; rates?: Record<string, number> }) {
-  const displayed = (item.amount / (rates[item.currency] || 1)) * (rates[displayCurrency] || 1);
+function ExpenseRow({ item, displayCurrency, onPress, rates = DEFAULT_RATES }: { item: ExpenseItem; displayCurrency: Currency; onPress: (item: ExpenseItem) => void; rates?: Record<string, number> }) {
+  const displayed = resolveDisplayAmount(item.amount, item.currency, displayCurrency, rates, item.amount_usd);
   const date = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const sourceLabel = item.source === 'cash_requisition' ? 'Cash Req.' : 'Expense';
   const statusColor = item.status?.toLowerCase() === 'completed' || item.status?.toLowerCase() === 'resolved'
@@ -462,8 +461,8 @@ function ExpenseRow({ item, displayCurrency, onPress, rates = { USD: 1, UGX: 367
 // CASH REQUISITION CARD
 // ============================================================================
 
-function CRCard({ cr, displayCurrency, onPress, rates = { USD: 1, UGX: 3670, KES: 130 }, pendingSync = false }: { cr: CashRequisition; displayCurrency: Currency; onPress: (cr: CashRequisition) => void; rates?: Record<string, number>; pendingSync?: boolean }) {
-  const displayed = (cr.total_cost / (rates[cr.currency] || 1)) * (rates[displayCurrency] || 1);
+function CRCard({ cr, displayCurrency, onPress, rates = DEFAULT_RATES, pendingSync = false }: { cr: CashRequisition; displayCurrency: Currency; onPress: (cr: CashRequisition) => void; rates?: Record<string, number>; pendingSync?: boolean }) {
+  const displayed = resolveDisplayAmount(cr.total_cost, cr.currency, displayCurrency, rates, cr.amount_usd);
   const dateNeeded = cr.date_needed
     ? new Date(cr.date_needed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
@@ -574,7 +573,7 @@ function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => v
 // PETTY CASH TAB
 // ============================================================================
 
-function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress, rates = { USD: 1, UGX: 3670, KES: 130 } }: {
+function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress, rates = DEFAULT_RATES }: {
   expenseItems: ExpenseItem[];
   currency: Currency;
   refreshing: boolean;
@@ -588,16 +587,23 @@ function PettyCashTab({ expenseItems, currency, refreshing, onRefresh, onPress, 
     e.title?.toLowerCase().includes('petty')
   );
 
-  const toDisplay = (e: ExpenseItem) => (e.amount / (rates[e.currency] || 1)) * (rates[currency] || 1);
+  // Per-row display prefers each item's own stored USD snapshot, so a row
+  // here always agrees with that same CR's row in the Expenses tab.
+  const toDisplay = (e: ExpenseItem) => resolveDisplayAmount(e.amount, e.currency, currency, rates, e.amount_usd);
+  // Aggregate totals deliberately do NOT use the snapshot — per the 14 Oct
+  // 2026 handover, analytics totals convert with a single live rate (the
+  // same one the website's Financial Management view uses), not a mix of
+  // each item's own historical rate from whenever it was raised.
+  const toDisplayLive = (e: ExpenseItem) => resolveDisplayAmount(e.amount, e.currency, currency, rates);
 
-  const total = pettyCashItems.reduce((s, e) => s + toDisplay(e), 0);
+  const total = pettyCashItems.reduce((s, e) => s + toDisplayLive(e), 0);
 
   const thisMonth = pettyCashItems.filter(e => {
     const d = new Date(e.date || '');
     const now = new Date();
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const monthTotal = thisMonth.reduce((s, e) => s + toDisplay(e), 0);
+  const monthTotal = thisMonth.reduce((s, e) => s + toDisplayLive(e), 0);
 
   return (
     <FlatList
@@ -764,8 +770,8 @@ export function FinanceScreen() {
     [cashRequisitions]
   );
 
-  const toDisplayAmt = (amount: number, fromCurrency: string) =>
-    (amount / (exchangeRates[fromCurrency as Currency] || 1)) * (exchangeRates[currency] || 1);
+  const toDisplayAmt = (amount: number, fromCurrency: string, amountUsdSnapshot?: number | null) =>
+    resolveDisplayAmount(amount, fromCurrency, currency, exchangeRates as unknown as Record<string, number>, amountUsdSnapshot);
 
   // Approval workload, overdue, and department/category breakdowns — all
   // derived client-side from CRs the screen already fetched. No new query,
@@ -795,6 +801,7 @@ export function FinanceScreen() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3);
 
+    // Aggregate — single live rate for all CRs, not each one's own snapshot (see note above toDisplayAmt).
     const byCategory = new Map<string, number>();
     pending.forEach(cr => {
       const cat = cr.expense_category || 'Other';
@@ -813,6 +820,7 @@ export function FinanceScreen() {
   }, [cashRequisitions, user?.id, exchangeRates, currency]);
 
   const filteredTotals = useMemo(() => {
+    // Aggregate — single live rate, not each item's own snapshot.
     const totalIn  = filteredRevenue.reduce((s, i) => s + toDisplayAmt(i.amount, i.currency), 0);
     const totalOut = filteredExpenses.reduce((s, i) => s + toDisplayAmt(i.amount, i.currency), 0);
     return { totalIn, totalOut, net: totalIn - totalOut };
@@ -1299,6 +1307,7 @@ export function FinanceScreen() {
         onRefetch={refetch}
         currentUserId={user?.id}
         currentUserEmail={user?.email}
+        rates={exchangeRates as unknown as Record<string, number>}
       />
 
       <AddExpenseModal

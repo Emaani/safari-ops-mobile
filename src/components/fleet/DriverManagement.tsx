@@ -25,6 +25,7 @@ import { devError } from '../../lib/devLog';
 import { realtimeManager } from '../../lib/realtimeManager';
 import { EmptyState } from '../ui';
 import type { Vehicle, Driver, DriverIncident, TripReview } from '../../types/dashboard';
+import { getErrorMessage } from '../../lib/errors';
 
 const C = {
   primary: '#8B6B3E',
@@ -139,7 +140,7 @@ function AddEditDriverModal({ visible, driver, onClose, onSaved }: {
       onSaved(); onClose();
     } catch (e: any) {
       devError('[DriverManagement] save driver error:', e?.message);
-      Alert.alert('Error', e?.message || 'Failed to save driver.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to save driver.'));
     } finally { setSaving(false); }
   }, [name, phone, email, licenseNumber, licenseExpiry, driver, onSaved, onClose]);
 
@@ -332,7 +333,7 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
   const assignDriver = useCallback(async (vehicle: Vehicle, driver: Driver | null) => {
     const { error } = await supabase.from('vehicles').update({ current_driver_id: driver?.id || null }).eq('id', vehicle.id);
     setAssigningVehicle(null);
-    if (error) { Alert.alert('Error', error.message || 'Failed to update assignment.'); return; }
+    if (error) { Alert.alert('Error', getErrorMessage(error, 'Failed to update assignment.')); return; }
     onVehiclesChanged();
   }, [onVehiclesChanged]);
 

@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import type { Currency } from '../../types/dashboard';
+import { getErrorMessage } from '../../lib/errors';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -482,7 +483,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
       onSuccess();
       Alert.alert('Safari Created', `Safari booking ${booking_reference} has been successfully created.`);
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create safari booking. Please try again.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to create safari booking. Please try again.'));
     } finally {
       setSubmitting(false);
     }

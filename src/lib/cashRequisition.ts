@@ -41,6 +41,18 @@ export function normalizeCashRequisition(record: Record<string, unknown>): CashR
         : typeof record.amount_usd === 'string'
           ? Number(record.amount_usd)
           : undefined,
+    amount_ugx:
+      typeof record.amount_ugx === 'number'
+        ? record.amount_ugx
+        : typeof record.amount_ugx === 'string'
+          ? Number(record.amount_ugx)
+          : undefined,
+    exchange_rate:
+      typeof record.exchange_rate === 'number'
+        ? record.exchange_rate
+        : typeof record.exchange_rate === 'string'
+          ? Number(record.exchange_rate)
+          : undefined,
     description: pickFirstString(
       record.description,
       record.purpose,

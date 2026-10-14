@@ -27,6 +27,7 @@ import { useInAppNotification } from '../system/InAppNotificationBanner';
 import { notifySuccess } from '../../lib/haptics';
 import { usePaymentRecording, generateRequestId } from '../../hooks/usePaymentRecording';
 import type { PaymentDetails, PaymentMethod as RecordPaymentMethod } from '../../lib/paymentMethods';
+import { getErrorMessage } from '../../lib/errors';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -966,7 +967,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
       });
       onSuccess();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create booking. Please try again.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to create booking. Please try again.'));
     } finally {
       setSubmitting(false);
     }

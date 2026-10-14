@@ -35,6 +35,7 @@ import { clearAllNotifications } from '../services/notificationService';
 import { supabase } from '../lib/supabase';
 import { FadeSlideIn } from '../components/ui';
 import { clearCredentials } from '../lib/secureCredentials';
+import { getErrorMessage } from '../lib/errors';
 
 // ─── Language config ──────────────────────────────────────────────────────────
 
@@ -180,7 +181,7 @@ function ChangePasswordModal({
         { text: 'OK', onPress: () => { setNewPassword(''); setConfirm(''); onClose(); } },
       ]);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to update password. Please try again.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to update password. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -382,7 +383,7 @@ export default function MoreScreen() {
               await clearAllNotifications().catch(() => null);
               await signOut();
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to sign out. Please try again.');
+              Alert.alert('Error', getErrorMessage(error, 'Failed to sign out. Please try again.'));
               setIsLoggingOut(false);
             }
           },

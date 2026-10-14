@@ -144,7 +144,12 @@ export interface CashRequisition {
   expense_category: string;
   date_completed?: string;
   created_at: string;
+  /** Server-computed snapshots (rate on the date raised) — confirmed via the
+   *  14 Oct 2026 handover. Mobile must never compute or write these itself;
+   *  only read and display what the server already stored. */
   amount_usd?: number;
+  amount_ugx?: number;
+  exchange_rate?: number;
   description?: string;
   purpose?: string;
   department?: string;

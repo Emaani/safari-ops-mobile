@@ -8,8 +8,12 @@ const C = {
 };
 
 /**
- * Shows the permanent system transaction ID (e.g. JAA-PMT-20261007-000123), always
- * visually distinct from the external reference (MoMo ID / bank ref / cheque no.).
+ * Shows the permanent system transaction ID — always visually distinct from
+ * the external reference (MoMo ID / bank ref / cheque no.). The server
+ * generates two shapes (e.g. JAA-PMT-CL-2026-00122MPA-20261014-000671 when
+ * linked to a client/booking/safari, else JAA-PMT-20261014-000671) — this
+ * component just displays whatever string it's given verbatim. Never parse
+ * or assume a fixed position within `id`; the client segment is optional.
  */
 export function TransactionIdBadge({ id, size = 'default' }: { id: string; size?: 'default' | 'small' }) {
   return (

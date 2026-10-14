@@ -28,7 +28,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Print from 'expo-print';
 import { RecordPaymentSheet } from '../components/payments/RecordPaymentSheet';
 import { PaymentHistoryList } from '../components/payments/PaymentHistoryList';
-import { isSchemaError } from '../lib/errors';
+import { isSchemaError, getErrorMessage } from '../lib/errors';
 import { supabase } from '../lib/supabase';
 import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
@@ -384,7 +384,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
       setEditingItinerary(false);
       onRefetch();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to save itinerary.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to save itinerary.'));
     } finally {
       setSavingItinerary(false);
     }
@@ -469,7 +469,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
       if (complete) setChecklistMeta({ completed_by: payload.completed_by, completed_at: payload.completed_at });
       if (complete) Alert.alert('Checklist Complete', 'Pre-trip checklist signed off.');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to save checklist.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to save checklist.'));
     } finally {
       setSavingChecklist(false);
     }
@@ -513,7 +513,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
       Alert.alert('Saved', 'Booking assignments updated.');
       onRefetch(); onClose();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to save.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to save.'));
     } finally { setSaving(false); }
   }, [booking, selVehicle, selGuide, onRefetch, onClose]);
 
@@ -1894,7 +1894,7 @@ function AddEditGuideModal({ visible, guide, onClose, onSaved }: {
       if (error) throw error;
       Alert.alert('Saved', guide ? 'Guide updated.' : 'Guide added.');
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [name, phone, email, langs, status, rating, guide, onSaved, onClose]);
 
@@ -1975,7 +1975,7 @@ function AddEditPermitModal({ visible, permit, onClose, onSaved }: {
       if (error) throw error;
       Alert.alert('Saved', permit ? 'Permit updated.' : 'Permit added to catalog.');
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [name, type, costUsd, costUgx, validity, active, permit, onSaved, onClose]);
 
@@ -2257,7 +2257,7 @@ function PackageFormModal({ visible, pkg, onClose, onSaved }: {
       if (error) throw error;
       Alert.alert('Saved', pkg ? 'Package updated.' : 'Package created.');
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [name, code, cat, country, days, priceUsd, priceUgx, capMin, capMax, desc, active, pkg, onSaved, onClose]);
 
@@ -2409,14 +2409,18 @@ function AnalyticsTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This feeds revenue/profit totals, so truncating too aggressively would
-    // silently produce wrong numbers rather than just being slow — this cap is
-    // a safety net against a genuinely unbounded fetch, not a "recent window."
-    // Switch to year-scoping (like Dashboard/Finance already do) before this
-    // safari_bookings table approaches 2000 rows.
+    // Per the 10 Oct 2026 handover, this should call a get_safari_analytics
+    // RPC instead of fetching raw rows — that RPC doesn't exist yet on the
+    // live schema (confirmed directly: PGRST202, no near-name match either),
+    // so this is the interim fix: year-scope + a real limit, matching how
+    // Dashboard/Finance already bound their own queries, instead of the
+    // previous flat .limit(2000) with no date bound at all.
+    const yearStart = `${new Date().getFullYear()}-01-01T00:00:00.000Z`;
     supabase.from('safari_bookings')
       .select('id, status, total_price_usd, amount_paid, deposit_amount, profit_margin, created_at, safari_packages(name)')
-      .limit(2000)
+      .gte('created_at', yearStart)
+      .order('created_at', { ascending: false })
+      .limit(500)
       .then(({ data }) => { setBookings((data || []) as unknown as SafariBooking[]); setLoading(false); });
   }, []);
 
@@ -2586,7 +2590,7 @@ function AirportFormModal({ visible, airport, defaultCountry, onClose, onSaved }
       if (error) throw error;
       Alert.alert('Saved', airport ? 'Airport updated.' : 'Airport added.');
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [name, code, city, country, type, status, airport, onSaved, onClose]);
 
@@ -2802,7 +2806,7 @@ function LodgeFormModal({ visible, lodge, onClose, onSaved }: {
       if (error) throw error;
       Alert.alert('Saved', lodge ? 'Lodge updated.' : 'Lodge added.');
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [name, dest, type, pDouble, pSingle, pStoDouble, pStoSingle, lodge, onSaved, onClose]);
 
@@ -2992,7 +2996,7 @@ function NationalParksTab() {
       if (error) throw error;
       setParks(prev => prev.map(p => p.id === id ? { ...p, ...editValues } : p));
       setEditing(null); setEditValues({});
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [editValues]);
 
@@ -3299,7 +3303,7 @@ function ClientFormModal({ visible, client, onClose, onSaved }: {
       if (error) throw error;
       Alert.alert('Saved', client ? 'Client updated.' : 'Client added.');
       onSaved(); onClose();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to save.'); }
+    } catch (e: any) { Alert.alert('Error', getErrorMessage(e, 'Failed to save.')); }
     finally { setSaving(false); }
   }, [name, contact, phone, email, address, kyc, notes, client, onSaved, onClose]);
 
