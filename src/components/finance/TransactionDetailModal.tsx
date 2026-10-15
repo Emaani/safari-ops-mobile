@@ -15,6 +15,8 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { sendCRNotificationToUser } from '../../services/notificationService';
@@ -373,6 +375,10 @@ export function TransactionDetailModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      {/* Without this, the autoFocus'd decline-reason field pops the keyboard
+          up over the Confirm Decline/Back buttons right below it — same fix
+          as RecordPaymentSheet/ReversalSheet. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
@@ -566,6 +572,7 @@ export function TransactionDetailModal({
           <View style={{ height: 32 }} />
         </ScrollView>
       </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

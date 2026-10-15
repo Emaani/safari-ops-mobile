@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, Modal, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, ScrollView, Pressable,
+  ActivityIndicator, Alert, ScrollView, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { formatCurrency } from '../../lib/utils';
 import type { Currency } from '../../types/dashboard';
@@ -130,121 +130,133 @@ export function RecordPaymentSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={confirmation ? undefined : onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <View style={styles.handle} />
+      {/* Without this, the keyboard just overlaps the fixed-position sheet —
+          fields below whichever one is focused (e.g. Bank Name) become
+          unreachable. KeyboardAvoidingView pushes the whole sheet up by the
+          keyboard's height; the sheet's own maxHeight + the ScrollView's
+          flexShrink below mean it then shrinks and scrolls internally
+          instead of being pushed off the top of the screen. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={styles.backdrop} onPress={confirmation ? undefined : onClose}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.handle} />
 
-          {confirmation ? (
-            <View style={styles.confirmWrap}>
-              <View style={[styles.confirmIcon, confirmation.queuedOffline && styles.confirmIconQueued]}>
-                <Text style={{ fontSize: 28 }}>{confirmation.queuedOffline ? '📡' : '✓'}</Text>
-              </View>
-              <Text style={styles.confirmTitle}>
-                {confirmation.queuedOffline ? 'Saved — Will Submit When Online' : confirmation.replayed ? 'Payment Already Recorded' : 'Payment Recorded'}
-              </Text>
-              {/* subjectLabel (e.g. "REF-00123 · Acme Safaris") was shown on the
-                  form but dropped once the confirmation replaced it — leaving
-                  the new Transaction ID with no client/booking context next to
-                  it. Carry it through so the ID is identifiable at a glance,
-                  same as it is on the form itself. */}
-              <Text style={styles.confirmSub}>{subjectLabel}</Text>
-              {confirmation.queuedOffline && (
-                <Text style={styles.confirmSub}>No signal right now. This payment is saved on your device and will be submitted automatically the moment you're back online.</Text>
-              )}
-              {confirmation.replayed && (
-                <Text style={styles.confirmSub}>This matches an earlier submission — no duplicate was created.</Text>
-              )}
-              {confirmation.systemTransactionId && (
-                <View style={{ marginTop: 14 }}>
-                  <TransactionIdBadge id={confirmation.systemTransactionId} />
+            {confirmation ? (
+              <View style={styles.confirmWrap}>
+                <View style={[styles.confirmIcon, confirmation.queuedOffline && styles.confirmIconQueued]}>
+                  <Text style={{ fontSize: 28 }}>{confirmation.queuedOffline ? '📡' : '✓'}</Text>
                 </View>
-              )}
-              <TouchableOpacity style={styles.doneBtn} onPress={onClose}>
-                <Text style={styles.doneBtnT}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.title}>Record Payment</Text>
-              <Text style={styles.sub}>{subjectLabel}</Text>
-
-              <View style={styles.balanceRow}>
-                <Text style={styles.balanceLabel}>Current Balance Due</Text>
-                <Text style={styles.balanceValue}>{formatCurrency(balanceDue, currency)}</Text>
+                <Text style={styles.confirmTitle}>
+                  {confirmation.queuedOffline ? 'Saved — Will Submit When Online' : confirmation.replayed ? 'Payment Already Recorded' : 'Payment Recorded'}
+                </Text>
+                {/* subjectLabel (e.g. "REF-00123 · Acme Safaris") was shown on the
+                    form but dropped once the confirmation replaced it — leaving
+                    the new Transaction ID with no client/booking context next to
+                    it. Carry it through so the ID is identifiable at a glance,
+                    same as it is on the form itself. */}
+                <Text style={styles.confirmSub}>{subjectLabel}</Text>
+                {confirmation.queuedOffline && (
+                  <Text style={styles.confirmSub}>No signal right now. This payment is saved on your device and will be submitted automatically the moment you're back online.</Text>
+                )}
+                {confirmation.replayed && (
+                  <Text style={styles.confirmSub}>This matches an earlier submission — no duplicate was created.</Text>
+                )}
+                {confirmation.systemTransactionId && (
+                  <View style={{ marginTop: 14 }}>
+                    <TransactionIdBadge id={confirmation.systemTransactionId} />
+                  </View>
+                )}
+                <TouchableOpacity style={styles.doneBtn} onPress={onClose}>
+                  <Text style={styles.doneBtnT}>Done</Text>
+                </TouchableOpacity>
               </View>
+            ) : (
+              <>
+                <Text style={styles.title}>Record Payment</Text>
+                <Text style={styles.sub}>{subjectLabel}</Text>
 
-              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
-                <Text style={styles.label}>Amount Received ({currency}) *</Text>
-                <TextInput
-                  style={styles.amountInput}
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0.00"
-                  placeholderTextColor={C.textMuted}
-                  keyboardType="decimal-pad"
-                  autoFocus
-                />
-
-                <Text style={styles.label}>Payment Method *</Text>
-                <View style={styles.methodRow}>
-                  {PAYMENT_METHODS.map(m => (
-                    <TouchableOpacity
-                      key={m.value}
-                      style={[styles.methodChip, method === m.value && styles.methodChipOn]}
-                      onPress={() => { setMethod(m.value); setDetails({}); setReference(''); }}
-                    >
-                      <Text style={[styles.methodChipT, method === m.value && styles.methodChipTOn]}>{m.label}</Text>
-                    </TouchableOpacity>
-                  ))}
+                <View style={styles.balanceRow}>
+                  <Text style={styles.balanceLabel}>Current Balance Due</Text>
+                  <Text style={styles.balanceValue}>{formatCurrency(balanceDue, currency)}</Text>
                 </View>
 
-                <PaymentMethodFields
-                  method={method}
-                  details={details}
-                  onDetailsChange={handleDetailsChange}
-                  reference={reference}
-                  onReferenceChange={setReference}
-                />
+                {/* flexShrink (not a fixed maxHeight) lets this give up space to
+                    the keyboard gracefully — it's the only flexible child inside
+                    the height-capped sheet, so it shrinks and scrolls internally
+                    instead of pushing the submit button off-screen. */}
+                <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
+                  <Text style={styles.label}>Amount Received ({currency}) *</Text>
+                  <TextInput
+                    style={styles.amountInput}
+                    value={amount}
+                    onChangeText={setAmount}
+                    placeholder="0.00"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                  />
 
-                <Text style={styles.label}>Description / Note</Text>
-                <TextInput
-                  style={styles.input}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Optional"
-                  placeholderTextColor={C.textMuted}
-                />
+                  <Text style={styles.label}>Payment Method *</Text>
+                  <View style={styles.methodRow}>
+                    {PAYMENT_METHODS.map(m => (
+                      <TouchableOpacity
+                        key={m.value}
+                        style={[styles.methodChip, method === m.value && styles.methodChipOn]}
+                        onPress={() => { setMethod(m.value); setDetails({}); setReference(''); }}
+                      >
+                        <Text style={[styles.methodChipT, method === m.value && styles.methodChipTOn]}>{m.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-                <View style={{ height: 8 }} />
-              </ScrollView>
+                  <PaymentMethodFields
+                    method={method}
+                    details={details}
+                    onDetailsChange={handleDetailsChange}
+                    reference={reference}
+                    onReferenceChange={setReference}
+                  />
 
-              {!isOnline && (
-                <Text style={styles.offlineHint}>📡 No signal — this will be saved on your device and submitted automatically once you're back online.</Text>
-              )}
+                  <Text style={styles.label}>Description / Note</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Optional"
+                    placeholderTextColor={C.textMuted}
+                  />
 
-              <TouchableOpacity
-                style={[styles.submitBtn, (submitting || queueing) && { opacity: 0.6 }]}
-                onPress={handleSubmit}
-                disabled={submitting || queueing}
-              >
-                {(submitting || queueing)
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.submitBtnT}>{isOnline ? 'Save Payment' : 'Save Offline'}</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={submitting || queueing}>
-                <Text style={styles.cancelBtnT}>Cancel</Text>
-              </TouchableOpacity>
-            </>
-          )}
+                  <View style={{ height: 8 }} />
+                </ScrollView>
+
+                {!isOnline && (
+                  <Text style={styles.offlineHint}>📡 No signal — this will be saved on your device and submitted automatically once you're back online.</Text>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.submitBtn, (submitting || queueing) && { opacity: 0.6 }]}
+                  onPress={handleSubmit}
+                  disabled={submitting || queueing}
+                >
+                  {(submitting || queueing)
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={styles.submitBtnT}>{isOnline ? 'Save Payment' : 'Save Offline'}</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={submitting || queueing}>
+                  <Text style={styles.cancelBtnT}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  sheet: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, maxHeight: '90%' },
   handle: { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   title: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 4 },
   sub: { fontSize: 13, color: C.textMuted, marginBottom: 16 },

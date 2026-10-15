@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { formatCurrency, formatDateDDMMYY } from '../../lib/utils';
 import { PAYMENT_METHODS } from '../../lib/paymentMethods';
 import { usePaymentHistory, type PaymentEvent } from '../../hooks/usePaymentHistory';
@@ -41,29 +41,33 @@ function ReversalSheet({ event, visible, onClose, onReversed }: {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={rs.backdrop} onPress={onClose}>
-        <Pressable style={rs.sheet} onPress={() => {}}>
-          <View style={rs.handle} />
-          <Text style={rs.title}>Reverse Payment</Text>
-          <Text style={rs.sub}>{event.system_transaction_id} · {formatCurrency(event.amount, event.currency)}</Text>
-          <Text style={rs.warn}>This permanently reverses the payment and restores the balance due. It cannot be undone.</Text>
-          <Text style={rs.label}>Reason *</Text>
-          <TextInput
-            style={rs.input}
-            value={reason}
-            onChangeText={setReason}
-            placeholder="Why is this payment being reversed?"
-            placeholderTextColor={C.textMuted}
-            multiline
-          />
-          <TouchableOpacity style={[rs.submitBtn, reversing && { opacity: 0.6 }]} onPress={submit} disabled={reversing}>
-            {reversing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={rs.submitBtnT}>Confirm Reversal</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={rs.cancelBtn} onPress={onClose} disabled={reversing}>
-            <Text style={rs.cancelBtnT}>Cancel</Text>
-          </TouchableOpacity>
+      {/* Same fix as RecordPaymentSheet — without this the keyboard covers
+          the Confirm/Cancel buttons the moment the reason field autofocuses. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={rs.backdrop} onPress={onClose}>
+          <Pressable style={rs.sheet} onPress={() => {}}>
+            <View style={rs.handle} />
+            <Text style={rs.title}>Reverse Payment</Text>
+            <Text style={rs.sub}>{event.system_transaction_id} · {formatCurrency(event.amount, event.currency)}</Text>
+            <Text style={rs.warn}>This permanently reverses the payment and restores the balance due. It cannot be undone.</Text>
+            <Text style={rs.label}>Reason *</Text>
+            <TextInput
+              style={rs.input}
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Why is this payment being reversed?"
+              placeholderTextColor={C.textMuted}
+              multiline
+            />
+            <TouchableOpacity style={[rs.submitBtn, reversing && { opacity: 0.6 }]} onPress={submit} disabled={reversing}>
+              {reversing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={rs.submitBtnT}>Confirm Reversal</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={rs.cancelBtn} onPress={onClose} disabled={reversing}>
+              <Text style={rs.cancelBtnT}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -169,13 +173,13 @@ const styles = StyleSheet.create({
 
 const rs = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  sheet: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, maxHeight: '90%' },
   handle: { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   title: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 4 },
   sub: { fontSize: 13, color: C.textMuted, marginBottom: 14 },
   warn: { fontSize: 12, color: C.danger, backgroundColor: '#FFEEED', borderRadius: 10, padding: 10, marginBottom: 14, lineHeight: 16 },
   label: { fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  input: { backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: C.text, minHeight: 70, textAlignVertical: 'top' },
+  input: { backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: C.text, minHeight: 70, maxHeight: 140, textAlignVertical: 'top' },
   submitBtn: { backgroundColor: C.danger, borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 18 },
   submitBtnT: { fontSize: 15, fontWeight: '700', color: '#fff' },
   cancelBtn: { alignItems: 'center', paddingVertical: 14 },
