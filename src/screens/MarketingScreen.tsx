@@ -25,7 +25,6 @@ import { formatCurrency } from '../lib/utils';
 import type { PortalVehicle, Promotion, SafariPackage } from '../types/safari';
 import { useGA4Analytics, type DatePreset } from '../hooks/useGA4Analytics';
 import { useBlogAnalytics } from '../hooks/useBlogAnalytics';
-import { useGoogleAds } from '../hooks/useGoogleAds';
 import { getErrorMessage } from '../lib/errors';
 
 const { width: SW } = Dimensions.get('window');
@@ -1455,38 +1454,18 @@ const an = StyleSheet.create({
 
 function GoogleAdsTab() {
   const [period, setPeriod] = useState<DatePreset>('30d');
-  const { data, loading, refreshing, stale, error, unavailable, refresh } = useGoogleAds(period);
+  // No Google Ads API credentials here — the website doesn't use a developer
+  // token, customer ID, client ID/secret or refresh token either. Ads
+  // numbers come from Google Ads via its GA4 link, through the same
+  // ga4-analytics dashboard service the website calls. Confirmed the real
+  // response shape directly against the live function before wiring this.
+  const { data, loading, refreshing, stale, error, refresh } = useGA4Analytics(period);
+  const ads = data?.ads;
 
   const fmt$ = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(2)}`;
   const fmtN = (n: number) => n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 
-  if (loading) return <LoadingView label="Loading Google Ads data…" />;
-
-  if (unavailable) {
-    return (
-      <ScrollView
-        keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 80 }}>
-        <View style={ga.unavailCard}>
-          <Text style={{ fontSize: 32, marginBottom: 12 }}>📢</Text>
-          <Text style={ga.unavailTitle}>Google Ads Not Connected</Text>
-          <Text style={ga.unavailSub}>
-            Add the following secrets to your Supabase Edge Function environment to enable Google Ads analytics:
-          </Text>
-          <View style={ga.codeBox}>
-            <Text style={ga.codeText}>{`GOOGLE_ADS_DEVELOPER_TOKEN\nGOOGLE_ADS_CUSTOMER_ID\nGOOGLE_ADS_CLIENT_ID\nGOOGLE_ADS_CLIENT_SECRET\nGOOGLE_ADS_REFRESH_TOKEN`}</Text>
-          </View>
-          <Text style={[ga.unavailSub, { marginTop: 8 }]}>
-            Optional: GOOGLE_ADS_LOGIN_CUSTOMER_ID (MCC manager account)
-          </Text>
-          <TouchableOpacity style={ga.retryBtn} onPress={refresh}>
-            <Text style={ga.retryBtnT}>Retry Connection</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    );
-  }
-
-  const s = data?.summary;
+  if (loading) return <LoadingView label="Loading Ads data…" />;
 
   return (
     <ScrollView
@@ -1496,10 +1475,10 @@ function GoogleAdsTab() {
     >
       {/* Period selector */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {(['7d', '30d', '90d'] as DatePreset[]).map(p => (
+        {(['7d', '30d', '90d', '12m'] as DatePreset[]).map(p => (
           <TouchableOpacity key={p} style={[cc.periodBtn, period === p && cc.periodBtnOn]} onPress={() => setPeriod(p)}>
             <Text style={[cc.periodT, period === p && cc.periodTOn]}>
-              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : '12 Months'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1517,22 +1496,33 @@ function GoogleAdsTab() {
         </View>
       )}
 
-      {/* ── KPI Summary ─────────────────────────────────────────────────────── */}
-      {s && (
+      {!ads ? (
+        <EmptyView title="No Ads data available" sub="Pull to refresh." />
+      ) : !ads.costDataAvailable ? (
+        // Same flag and message the website uses — never show 0s when cost
+        // data genuinely isn't linked, since that reads as "no ad spend"
+        // rather than "we can't see ad spend."
+        <View style={ga.unavailCard}>
+          <Text style={{ fontSize: 32, marginBottom: 12 }}>📢</Text>
+          <Text style={ga.unavailTitle}>Ad cost data not available</Text>
+          <Text style={ga.unavailSub}>{ads.costNote || "Google Ads isn't linked to Analytics for this property yet."}</Text>
+        </View>
+      ) : (
         <>
+          {/* ── KPI Summary ──────────────────────────────────────────────────── */}
           <Text style={cc.sectionHeader}>
-            📢 Google Ads Performance  <Text style={cc.sourceTag}>Google Ads</Text>
+            📢 Ads Performance  <Text style={cc.sourceTag}>Google Ads via GA4</Text>
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
             {[
-              { label: 'Total Spend',    value: fmt$(s.totalSpend),                color: C.danger   },
-              { label: 'Impressions',    value: fmtN(s.totalImpressions),          color: C.primary  },
-              { label: 'Clicks',         value: fmtN(s.totalClicks),               color: C.gold     },
-              { label: 'CTR',            value: `${s.ctr.toFixed(2)}%`,            color: '#7c3aed'  },
-              { label: 'Avg CPC',        value: fmt$(s.avgCpc),                    color: '#0891b2'  },
-              { label: 'Conversions',    value: fmtN(s.totalConversions),          color: C.success  },
-              { label: 'Conv Rate',      value: `${s.convRate.toFixed(2)}%`,       color: C.gold     },
-              { label: 'Cost / Conv',    value: s.totalConversions > 0 ? fmt$(s.costPerConv) : '—', color: C.textMuted },
+              { label: 'Spend',       value: fmt$(ads.totals.cost),                color: C.danger   },
+              { label: 'Impressions', value: fmtN(ads.totals.impressions),         color: C.primary  },
+              { label: 'Clicks',      value: fmtN(ads.totals.clicks),              color: C.gold     },
+              { label: 'CTR',         value: `${ads.totals.ctr.toFixed(2)}%`,      color: '#7c3aed'  },
+              { label: 'Avg CPC',     value: fmt$(ads.totals.cpc),                 color: '#0891b2'  },
+              { label: 'Visits',      value: fmtN(ads.totals.sessions),            color: C.success  },
+              { label: 'Conversions', value: fmtN(ads.totals.conversions),         color: C.gold     },
+              { label: 'Cost / Conv', value: ads.totals.conversions > 0 ? fmt$(ads.totals.costPerConversion) : '—', color: C.textMuted },
             ].map(k => (
               <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
                 <Text style={cc.kpiLabel}>{k.label}</Text>
@@ -1541,95 +1531,33 @@ function GoogleAdsTab() {
             ))}
           </View>
 
-          {/* Campaigns summary pill */}
-          <View style={[cc.sect, { flexDirection: 'row', gap: 14, justifyContent: 'center' }]}>
-            <View style={{ alignItems: 'center' }}>
-              <Text style={[cc.kpiVal, { color: C.success, fontSize: 24 }]}>{s.activeCampaigns}</Text>
-              <Text style={cc.kpiLabel}>Active Campaigns</Text>
+          {/* ── Campaigns list ───────────────────────────────────────────────── */}
+          {ads.campaigns.length > 0 && (
+            <View style={cc.sect}>
+              <Text style={cc.sectTitle}>Campaign Performance  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
+              {ads.campaigns.map((c, i) => {
+                const pctOfSpend = ads.totals.cost > 0 ? Math.round((c.cost / ads.totals.cost) * 100) : 0;
+                return (
+                  <View key={`${c.campaign}-${i}`} style={ga.campRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={ga.campName} numberOfLines={1}>{c.campaign}</Text>
+                      <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginTop: 4, marginBottom: 4 }}>
+                        <Text style={ga.campMeta}>{fmt$(c.cost)}</Text>
+                        <Text style={[ga.campMeta, { color: C.primary }]}>{fmtN(c.clicks)} clicks</Text>
+                        <Text style={[ga.campMeta, { color: C.success }]}>{fmtN(c.sessions)} visits</Text>
+                        {c.conversions > 0 && <Text style={[ga.campMeta, { color: C.gold }]}>{fmtN(c.conversions)} conv</Text>}
+                      </View>
+                      <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2 }}>
+                        <View style={{ height: 4, width: `${Math.min(pctOfSpend, 100)}%` as any, backgroundColor: C.danger + '80', borderRadius: 2 }} />
+                      </View>
+                    </View>
+                    <Text style={[ga.campMeta, { minWidth: 36, textAlign: 'right', fontWeight: '700', color: C.danger }]}>{pctOfSpend}%</Text>
+                  </View>
+                );
+              })}
             </View>
-            <View style={{ width: 1, backgroundColor: C.border, alignSelf: 'stretch' }} />
-            <View style={{ alignItems: 'center' }}>
-              <Text style={[cc.kpiVal, { color: C.textMuted, fontSize: 24 }]}>{s.totalCampaigns}</Text>
-              <Text style={cc.kpiLabel}>Total Campaigns</Text>
-            </View>
-          </View>
+          )}
         </>
-      )}
-
-      {/* ── Campaigns list ──────────────────────────────────────────────────── */}
-      {data && data.campaigns.length > 0 && (
-        <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Campaign Performance  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
-          {data.campaigns.map((c, i) => (
-            <View key={c.id ?? i} style={ga.campRow}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <View style={[ga.statusDot, { backgroundColor: c.status === 'ENABLED' ? C.success + '25' : C.textMuted + '20' }]}>
-                    <Text style={{ fontSize: 8, fontWeight: '800', color: c.status === 'ENABLED' ? C.success : C.textMuted }}>{c.status === 'ENABLED' ? 'ON' : 'OFF'}</Text>
-                  </View>
-                  <Text style={ga.campName} numberOfLines={1}>{c.name}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-                  <Text style={ga.campMeta}>{fmt$(c.spend)}</Text>
-                  <Text style={[ga.campMeta, { color: C.primary }]}>{fmtN(c.clicks)} clicks</Text>
-                  <Text style={[ga.campMeta, { color: '#7c3aed' }]}>{c.ctr.toFixed(2)}% CTR</Text>
-                  {c.conversions > 0 && <Text style={[ga.campMeta, { color: C.success }]}>{fmtN(c.conversions)} conv</Text>}
-                </View>
-                <View style={{ height: 4, backgroundColor: C.border, borderRadius: 2 }}>
-                  <View style={{ height: 4, width: `${Math.min(c.pctOfSpend, 100)}%` as any, backgroundColor: C.danger + '80', borderRadius: 2 }} />
-                </View>
-              </View>
-              <Text style={[ga.campMeta, { minWidth: 36, textAlign: 'right', fontWeight: '700', color: C.danger }]}>{c.pctOfSpend}%</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* ── Daily Trend ─────────────────────────────────────────────────────── */}
-      {data && data.trend.length > 0 && (
-        <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Daily Spend Trend  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
-          {(() => {
-            const maxSpend = Math.max(...data.trend.map(t => t.spend), 0.01);
-            return data.trend.slice(-30).map((t, i) => {
-              const barPct = Math.round((t.spend / maxSpend) * 100);
-              return (
-                <View key={t.date} style={[cc.funnelRow, { paddingVertical: 3 }]}>
-                  <Text style={[cc.kpiSub, { minWidth: 54, fontSize: 9 }]}>{t.date.slice(5)}</Text>
-                  <View style={{ flex: 1, height: 10, backgroundColor: C.border, borderRadius: 5, overflow: 'hidden', marginHorizontal: 8 }}>
-                    <View style={{ height: 10, width: `${barPct}%` as any, backgroundColor: C.danger + '80', borderRadius: 5 }} />
-                  </View>
-                  <Text style={[cc.kpiSub, { minWidth: 50, textAlign: 'right', fontWeight: '600' }]}>{fmt$(t.spend)}</Text>
-                </View>
-              );
-            });
-          })()}
-        </View>
-      )}
-
-      {/* ── Ad Groups ───────────────────────────────────────────────────────── */}
-      {data && data.adGroups.length > 0 && (
-        <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Top Ad Groups  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
-          {data.adGroups.map((ag, i) => (
-            <View key={i} style={[ga.campRow, { paddingVertical: 10 }]}>
-              <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
-              <View style={{ flex: 1, paddingLeft: 10 }}>
-                <Text style={ga.campName} numberOfLines={1}>{ag.name}</Text>
-                <Text style={[ga.campMeta, { color: C.textMuted }]} numberOfLines={1}>{ag.campaign}</Text>
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 3 }}>
-                  <Text style={[ga.campMeta, { color: C.danger }]}>{fmt$(ag.spend)}</Text>
-                  <Text style={[ga.campMeta, { color: C.primary }]}>{fmtN(ag.clicks)} clicks</Text>
-                  <Text style={[ga.campMeta, { color: '#7c3aed' }]}>{ag.ctr.toFixed(2)}% CTR</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {!data && !loading && !error && (
-        <EmptyView title="No Ads data available" sub="Pull to refresh or check your Google Ads account configuration." />
       )}
     </ScrollView>
   );
@@ -1639,14 +1567,9 @@ const ga = StyleSheet.create({
   unavailCard: { backgroundColor: C.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   unavailTitle: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 10, textAlign: 'center' },
   unavailSub: { fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
-  codeBox: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, width: '100%', marginBottom: 12 },
-  codeText: { fontSize: 10.5, color: '#7ec8a0', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 18 },
-  retryBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 28, alignItems: 'center' },
-  retryBtnT: { fontSize: 14, fontWeight: '700', color: '#fff' },
   campRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border + '60' },
   campName: { fontSize: 13, fontWeight: '700', color: C.text, flex: 1 },
   campMeta: { fontSize: 11, color: C.textMuted, fontVariant: ['tabular-nums'] },
-  statusDot: { width: 28, height: 20, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -29,6 +29,7 @@ import * as Print from 'expo-print';
 import { RecordPaymentSheet } from '../components/payments/RecordPaymentSheet';
 import { PaymentHistoryList } from '../components/payments/PaymentHistoryList';
 import { isSchemaError, getErrorMessage } from '../lib/errors';
+import { devError } from '../lib/devLog';
 import { supabase } from '../lib/supabase';
 import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
@@ -2404,61 +2405,92 @@ const pgStyles = StyleSheet.create({
 // ANALYTICS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function AnalyticsTab() {
-  const [bookings, setBookings] = useState<SafariBooking[]>([]);
-  const [loading, setLoading] = useState(true);
+interface SafariAnalyticsSummary {
+  total_bookings: number;
+  confirmed: number;
+  completed: number;
+  pending: number;
+  total_revenue: number;
+  total_expenses: number;
+  total_profit: number;
+  profit_margin: number;
+}
+interface SafariAnalyticsMonth {
+  month: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  bookings: number;
+}
 
-  useEffect(() => {
-    // Per the 10 Oct 2026 handover, this should call a get_safari_analytics
-    // RPC instead of fetching raw rows — that RPC doesn't exist yet on the
-    // live schema (confirmed directly: PGRST202, no near-name match either),
-    // so this is the interim fix: year-scope + a real limit, matching how
-    // Dashboard/Finance already bound their own queries, instead of the
-    // previous flat .limit(2000) with no date bound at all.
-    const yearStart = `${new Date().getFullYear()}-01-01T00:00:00.000Z`;
-    supabase.from('safari_bookings')
-      .select('id, status, total_price_usd, amount_paid, deposit_amount, profit_margin, created_at, safari_packages(name)')
-      .gte('created_at', yearStart)
-      .order('created_at', { ascending: false })
-      .limit(500)
-      .then(({ data }) => { setBookings((data || []) as unknown as SafariBooking[]); setLoading(false); });
+function AnalyticsTab() {
+  const [summary, setSummary] = useState<SafariAnalyticsSummary | null>(null);
+  const [monthly, setMonthly] = useState<SafariAnalyticsMonth[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const now = new Date();
+    const startDate = `${now.getFullYear()}-01-01`;
+    const endDate = now.toISOString().slice(0, 10);
+    // The shared get_safari_analytics RPC — confirmed live on this project
+    // (it was reachable all along; an earlier probe just used the wrong
+    // param names). Using the same function the website calls means these
+    // totals always match the dashboard instead of a separate client-side
+    // computation silently drifting from it.
+    const { data, error: rpcError } = await supabase.rpc('get_safari_analytics', {
+      p_currency: 'USD',
+      p_start_date: startDate,
+      p_end_date: endDate,
+    });
+    if (rpcError) {
+      devError('[AnalyticsTab] get_safari_analytics error:', rpcError.message);
+      setError(getErrorMessage(rpcError, 'Failed to load analytics.'));
+      setSummary(null);
+      setMonthly([]);
+    } else {
+      setSummary((data?.summary ?? null) as SafariAnalyticsSummary | null);
+      setMonthly((data?.monthly ?? []) as SafariAnalyticsMonth[]);
+    }
+    setLoading(false);
   }, []);
 
-  const stats = useMemo(() => {
-    const total = bookings.length;
-    const active = bookings.filter(b => b.status === 'active').length;
-    const confirmed = bookings.filter(b => b.status === 'confirmed').length;
-    const completed = bookings.filter(b => b.status === 'completed').length;
-    const pending = bookings.filter(b => b.status === 'pending').length;
-    const revenue = bookings.reduce((s, b) => s + (b.total_price_usd || 0), 0);
-    const paid = bookings.reduce((s, b) => s + (b.amount_paid || 0), 0);
-    const pendingDeposit = bookings.filter(b => (b.amount_paid || 0) < (b.deposit_amount || 0) && b.status !== 'cancelled').length;
-    const avgMargin = bookings.filter(b => b.profit_margin != null).reduce((s, b, _, a) => s + ((b.profit_margin || 0) / a.length), 0);
-
-    const statusCounts: Record<string, number> = {};
-    STATUS_KEYS.slice(1).forEach(s => { statusCounts[s] = bookings.filter(b => b.status === s).length; });
-    const maxCount = Math.max(...Object.values(statusCounts), 1);
-
-    return { total, active, confirmed, completed, pending, revenue, paid, pendingDeposit, avgMargin, statusCounts, maxCount };
-  }, [bookings]);
+  useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
   if (loading) return <LoadingView label="Computing analytics…" />;
+
+  if (error || !summary) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 6 }}>Couldn't load analytics</Text>
+        <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', marginBottom: 16 }}>{error || 'No data returned.'}</Text>
+        <TouchableOpacity style={{ backgroundColor: C.primary, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 28 }} onPress={fetchAnalytics}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const maxMonthlyRevenue = Math.max(...monthly.map(m => m.revenue), 1);
 
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-      {/* KPI Grid */}
-      <Text style={an.sectionTitle}>Key Performance Indicators</Text>
+      {/* KPI Grid — every field here is exactly what get_safari_analytics
+          returns, the same function the website's own analytics use. */}
+      <Text style={an.sectionTitle}>Key Performance Indicators (Year to Date)</Text>
       <View style={an.kpiGrid}>
         {[
-          { l: 'Total Bookings', v: stats.total.toString(), c: C.primary },
-          { l: 'Active Now', v: stats.active.toString(), c: C.success },
-          { l: 'Confirmed', v: stats.confirmed.toString(), c: '#1a5a8f' },
-          { l: 'Completed', v: stats.completed.toString(), c: C.textMuted },
-          { l: 'Total Revenue', v: formatCurrency(stats.revenue, 'USD'), c: C.primary },
-          { l: 'Total Collected', v: formatCurrency(stats.paid, 'USD'), c: C.success },
-          { l: 'Pending Deposit', v: stats.pendingDeposit.toString(), c: C.gold },
-          { l: 'Avg. Margin', v: `${stats.avgMargin.toFixed(1)}%`, c: stats.avgMargin >= 0 ? C.success : C.danger },
+          { l: 'Total Bookings', v: summary.total_bookings.toString(), c: C.primary },
+          { l: 'Confirmed', v: summary.confirmed.toString(), c: '#1a5a8f' },
+          { l: 'Completed', v: summary.completed.toString(), c: C.textMuted },
+          { l: 'Pending', v: summary.pending.toString(), c: C.gold },
+          { l: 'Total Revenue', v: formatCurrency(summary.total_revenue, 'USD'), c: C.primary },
+          { l: 'Total Expenses', v: formatCurrency(summary.total_expenses, 'USD'), c: C.danger },
+          { l: 'Total Profit', v: formatCurrency(summary.total_profit, 'USD'), c: C.success },
+          { l: 'Profit Margin', v: `${summary.profit_margin.toFixed(1)}%`, c: summary.profit_margin >= 0 ? C.success : C.danger },
         ].map((k, i) => (
           <View key={i} style={an.kpiCard}>
             <Text style={an.kpiLabel}>{k.l}</Text>
@@ -2467,48 +2499,23 @@ function AnalyticsTab() {
         ))}
       </View>
 
-      {/* Status Breakdown */}
-      <Text style={[an.sectionTitle, { marginTop: 20 }]}>Bookings by Status</Text>
+      {/* Monthly performance */}
+      <Text style={[an.sectionTitle, { marginTop: 20 }]}>Monthly Performance</Text>
       <View style={an.chartCard}>
-        {STATUS_KEYS.slice(1).map(s => {
-          const cfg = STATUS_CFG[s];
-          const count = stats.statusCounts[s] || 0;
-          const pct = stats.maxCount > 0 ? (count / stats.maxCount) * 100 : 0;
+        {monthly.length === 0 ? (
+          <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingVertical: 8 }}>No bookings in this period yet.</Text>
+        ) : monthly.map(m => {
+          const pct = (m.revenue / maxMonthlyRevenue) * 100;
           return (
-            <View key={s} style={an.barRow}>
-              <Text style={an.barLabel}>{cfg.label}</Text>
+            <View key={m.month} style={an.barRow}>
+              <Text style={an.barLabel}>{m.month}</Text>
               <View style={an.barTrack}>
-                <View style={[an.barFill, { width: `${Math.max(pct, 2)}%`, backgroundColor: cfg.text }]} />
+                <View style={[an.barFill, { width: `${Math.max(pct, 2)}%`, backgroundColor: C.success }]} />
               </View>
-              <Text style={[an.barCount, { color: cfg.text }]}>{count}</Text>
+              <Text style={[an.barCount, { width: 90, color: C.text }]}>{formatCurrency(m.revenue, 'USD')}</Text>
             </View>
           );
         })}
-      </View>
-
-      {/* Revenue summary */}
-      <Text style={[an.sectionTitle, { marginTop: 20 }]}>Revenue Summary</Text>
-      <View style={an.revCard}>
-        <View style={an.revRow}>
-          <Text style={an.revLabel}>Total Billed</Text>
-          <Text style={an.revValue}>{formatCurrency(stats.revenue, 'USD')}</Text>
-        </View>
-        <View style={an.revRow}>
-          <Text style={an.revLabel}>Collected</Text>
-          <Text style={[an.revValue, { color: C.success }]}>{formatCurrency(stats.paid, 'USD')}</Text>
-        </View>
-        <View style={an.revRow}>
-          <Text style={an.revLabel}>Outstanding</Text>
-          <Text style={[an.revValue, { color: stats.revenue - stats.paid > 0 ? C.danger : C.success }]}>
-            {formatCurrency(Math.max(0, stats.revenue - stats.paid), 'USD')}
-          </Text>
-        </View>
-        <View style={[an.revRow, { borderBottomWidth: 0 }]}>
-          <Text style={an.revLabel}>Collection Rate</Text>
-          <Text style={[an.revValue, { color: C.primary }]}>
-            {stats.revenue > 0 ? `${((stats.paid / stats.revenue) * 100).toFixed(0)}%` : '—'}
-          </Text>
-        </View>
       </View>
     </ScrollView>
   );

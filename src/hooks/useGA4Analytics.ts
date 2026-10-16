@@ -82,6 +82,41 @@ export interface GA4Channels {
   Other: number;
 }
 
+// Ads performance — sourced from Google Ads via GA4's own link, the same way
+// the website gets these numbers. No Google Ads API credentials involved;
+// confirmed against the live ga4-analytics response shape directly.
+export interface GA4AdsCampaign {
+  campaign: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  sessions: number;
+  users: number;
+  conversions: number;
+  engagedSessions: number;
+}
+export interface GA4AdsTotals {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  sessions: number;
+  users: number;
+  conversions: number;
+  ctr: number;
+  cpc: number;
+  costPerConversion: number;
+}
+export interface GA4Ads {
+  /** False when Google Ads isn't linked to this GA4 property — cost/cpc/
+   *  costPerConversion should read "Ad cost data not available" instead of
+   *  0 in that case, same as the website. Clicks/impressions/sessions still
+   *  come from GA4 itself and remain meaningful either way. */
+  costDataAvailable: boolean;
+  costNote?: string;
+  totals: GA4AdsTotals;
+  campaigns: GA4AdsCampaign[];
+}
+
 export interface GA4Report {
   ok: boolean;
   dateRange: { startDate: string; endDate: string };
@@ -98,9 +133,10 @@ export interface GA4Report {
   };
   engagement?: GA4Engagement;
   browserData?: Array<{ browser: string; sessions: number }>;
+  ads?: GA4Ads;
 }
 
-export type DatePreset = '7d' | '30d' | '90d';
+export type DatePreset = '7d' | '30d' | '90d' | '12m';
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
@@ -135,6 +171,7 @@ export function presetToDateRange(preset: DatePreset): { startDate: string; endD
     '7d':  '7daysAgo',
     '30d': '30daysAgo',
     '90d': '90daysAgo',
+    '12m': '365daysAgo',
   };
   return { startDate: map[preset], endDate: 'today' };
 }
@@ -246,6 +283,7 @@ function transformWebResponse(d: any): GA4Report {
     audience:     { countries, devices },
     engagement,
     browserData:  d.browserData ?? [],
+    ads:          d.ads ?? undefined,
   };
 }
 
