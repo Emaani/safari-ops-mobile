@@ -23,6 +23,7 @@ import { Svg, Path, Circle } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import { devError } from '../../lib/devLog';
 import { realtimeManager } from '../../lib/realtimeManager';
+import { logEvent } from '../../lib/eventLogger';
 import { EmptyState } from '../ui';
 import type { Vehicle, Driver, DriverIncident, TripReview } from '../../types/dashboard';
 import { getErrorMessage } from '../../lib/errors';
@@ -239,6 +240,7 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
   const [search, setSearch] = useState('');
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
+  const [driversError, setDriversError] = useState<string | null>(null);
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [assigningVehicle, setAssigningVehicle] = useState<Vehicle | null>(null);
@@ -254,8 +256,20 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
       .from('drivers')
       .select('id, full_name, phone, email, license_number, license_expiry, status, rating, total_trips, created_at')
       .order('full_name');
-    if (error) devError('[DriverManagement] fetch drivers error:', error.message);
-    setDrivers((data || []) as Driver[]);
+    if (error) {
+      // A permission/RLS failure here previously looked identical to a
+      // genuinely empty roster ("No drivers yet") — surfacing the real
+      // error distinguishes "the table has no rows" from "I'm not allowed
+      // to read it," which otherwise looks exactly like drivers added on
+      // the web never reached mobile.
+      devError('[DriverManagement] fetch drivers error:', error.message);
+      logEvent('driver_roster_fetch_failed', error.message);
+      setDriversError(getErrorMessage(error, 'Failed to load drivers.'));
+      setDrivers([]);
+    } else {
+      setDriversError(null);
+      setDrivers((data || []) as Driver[]);
+    }
     setLoading(false);
   }, []);
 
@@ -395,7 +409,11 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
             </View>
           )}
           ListEmptyComponent={!loading ? (
-            <EmptyState type="fleet" title={search ? 'No drivers match' : 'No drivers yet'} subtitle={search ? 'Try a different search.' : 'Add your first driver using the + button.'} />
+            driversError ? (
+              <EmptyState type="fleet" title="Couldn't load drivers" subtitle={driversError} secondaryLabel="Retry" onSecondary={fetchDrivers} />
+            ) : (
+              <EmptyState type="fleet" title={search ? 'No drivers match' : 'No drivers yet'} subtitle={search ? 'Try a different search.' : 'Add your first driver using the + button.'} />
+            )
           ) : null}
           contentContainerStyle={s.listContent}
         />

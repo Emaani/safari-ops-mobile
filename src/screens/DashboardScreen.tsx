@@ -16,6 +16,7 @@ import { tapLight, selectionTick } from '../lib/haptics';
 import { useNavigation } from '@react-navigation/native';
 import { Svg, Path, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppPreferences } from '../contexts/AppPreferencesContext';
 import { devLog } from '../lib/devLog';
 import { supabase } from '../lib/supabase';
 import { RecordPaymentSheet } from '../components/payments/RecordPaymentSheet';
@@ -436,6 +437,7 @@ export function DashboardScreen() {
   // ========================================================================
 
   const { user } = useAuth();
+  const { t } = useAppPreferences();
   const navigation = useNavigation<any>();
 
   // ========================================================================
@@ -767,8 +769,8 @@ export function DashboardScreen() {
             <View style={styles.heroTextBlock}>
               <Text style={styles.heroTitle}>
                 {dashboardMonthFilter === 'all'
-                  ? 'All months at a glance'
-                  : `${MONTHS.find((month) => month.value === dashboardMonthFilter)?.label} pulse`}
+                  ? t('dashboard.allMonthsAtGlance')
+                  : t('dashboard.pulse', { month: MONTHS.find((month) => month.value === dashboardMonthFilter)?.label || '' })}
               </Text>
               <Text style={styles.heroSubtitle}>{filterDisplayText}</Text>
             </View>
@@ -778,22 +780,22 @@ export function DashboardScreen() {
           </View>
 
           <Text style={styles.heroValue}>{formatCurrency(kpiData.totalRevenue, currency)}</Text>
-          <Text style={styles.heroCaption}>Revenue in focus for the selected period</Text>
+          <Text style={styles.heroCaption}>{t('dashboard.revenueFocus')}</Text>
 
           <View style={styles.heroStatsRow}>
             <HeroStat
-              label="Costs"
+              label={t('dashboard.costs')}
               value={formatCurrency(kpiData.totalExpenses, currency)}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             />
             <HeroStat
-              label="Due"
+              label={t('dashboard.due')}
               value={formatCurrency(kpiData.outstandingPaymentsTotal, currency)}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             />
             <HeroStat
-              label="Fleet"
-              value={`${kpiData.vehiclesHired} Hired`}
+              label={t('dashboard.fleet')}
+              value={`${kpiData.vehiclesHired} ${t('dashboard.hired')}`}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             />
           </View>
@@ -805,25 +807,25 @@ export function DashboardScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primarySoft }]}>
               <AddBookingIcon size={22} color={COLORS.primary} />
             </View>
-            <Text style={styles.quickActionLabel}>New Booking</Text>
+            <Text style={styles.quickActionLabel}>{t('dashboard.newBooking')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); navigation.navigate('MainTabs', { screen: 'Fleet' }); }}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#FEF0DC' }]}>
               <TruckIcon size={22} color={COLORS.primary} />
             </View>
-            <Text style={styles.quickActionLabel}>Fleet</Text>
+            <Text style={styles.quickActionLabel}>{t('dashboard.fleet')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); setShowAddExpense(true); }}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#FDE8C0' }]}>
               <AddExpenseIcon size={22} color={COLORS.warning} />
             </View>
-            <Text style={styles.quickActionLabel}>Cash Req.</Text>
+            <Text style={styles.quickActionLabel}>{t('dashboard.cashReq')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} activeOpacity={0.8} onPress={() => { tapLight(); setShowCreateSafari(true); }}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#FDE8C0' }]}>
               <AddSafariIcon size={22} color={COLORS.gold} />
             </View>
-            <Text style={styles.quickActionLabel}>New Safari</Text>
+            <Text style={styles.quickActionLabel}>{t('dashboard.newSafari')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -833,13 +835,13 @@ export function DashboardScreen() {
         <View style={styles.controlsCard}>
           <View style={styles.controlsHeader}>
             <View>
-              <Text style={styles.controlsEyebrow}>Filters</Text>
-              <Text style={styles.controlsTitle}>Refine the snapshot</Text>
+              <Text style={styles.controlsEyebrow}>{t('dashboard.filters')}</Text>
+              <Text style={styles.controlsTitle}>{t('dashboard.refine')}</Text>
             </View>
-            <Text style={styles.controlsHint}>Tap to switch</Text>
+            <Text style={styles.controlsHint}>{t('dashboard.tapToSwitch')}</Text>
           </View>
 
-          <Text style={styles.filterLabel}>Month</Text>
+          <Text style={styles.filterLabel}>{t('dashboard.month')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -848,14 +850,14 @@ export function DashboardScreen() {
             {MONTHS.map((month) => (
               <FilterChip
                 key={String(month.value)}
-                label={month.label}
+                label={month.value === 'all' ? t('dashboard.allMonths') : month.label}
                 selected={dashboardMonthFilter === month.value}
                 onPress={() => handleMonthChange(month.value)}
               />
             ))}
           </ScrollView>
 
-          <Text style={styles.filterLabel}>Year</Text>
+          <Text style={styles.filterLabel}>{t('dashboard.year')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -889,7 +891,7 @@ export function DashboardScreen() {
         </View>
 
         {/* KPI Cards - 2x2 Grid */}
-        <SectionHeader eyebrow="At a glance" title="Key Metrics" />
+        <SectionHeader eyebrow={t('dashboard.atAGlance')} title={t('dashboard.keyMetrics')} />
         {loading && !refreshing ? (
           <>
             <KpiRowSkeleton />
@@ -900,7 +902,7 @@ export function DashboardScreen() {
           <FadeSlideIn style={styles.kpiGrid}>
             <View style={styles.kpiRow}>
               <KPICard
-                title="Total Revenue"
+                title={t('dashboard.totalRevenue')}
                 value={formatCurrency(kpiData.totalRevenue, currency)}
                 subtitle={revenueSubtitle}
                 icon={<DollarSignIcon size={20} color={COLORS.success} />}
@@ -909,7 +911,7 @@ export function DashboardScreen() {
                 onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
               />
               <KPICard
-                title="Total Expenses"
+                title={t('dashboard.totalExpenses')}
                 value={formatCurrency(kpiData.totalExpenses, currency)}
                 subtitle={`${currency === 'USD' ? formatCurrency(kpiData.totalExpensesUGX, 'UGX') : formatCurrency(kpiData.totalExpensesUSD, 'USD')}`}
                 icon={<CreditCardIcon size={20} color={COLORS.danger} />}
@@ -920,7 +922,7 @@ export function DashboardScreen() {
             </View>
             <View style={styles.kpiRow}>
               <KPICard
-                title="Fleet Utilization"
+                title={t('dashboard.fleetUtilization')}
                 value={`${kpiData.fleetUtilization}%`}
                 subtitle={fleetSubtitle}
                 icon={<TruckIcon size={20} color={COLORS.primary} />}
@@ -929,9 +931,9 @@ export function DashboardScreen() {
                 onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
               />
               <KPICard
-                title="Active Bookings"
+                title={t('dashboard.activeBookings')}
                 value={String(kpiData.activeBookings)}
-                subtitle={`${kpiData.confirmedBookings} confirmed | ${kpiData.pendingBookings} pending`}
+                subtitle={t('dashboard.confirmedPendingSubtitle', { confirmed: kpiData.confirmedBookings, pending: kpiData.pendingBookings })}
                 icon={<CalendarIcon size={20} color={COLORS.purple} />}
                 iconColor={COLORS.purple}
                 style={styles.kpiCard}
@@ -945,7 +947,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Finance"
-            title="Outstanding Payments"
+            title={t('dashboard.outstandingPayments')}
             onPress={() => setShowOutstandingModal(true)}
             actionLabel="View all"
           />
@@ -962,7 +964,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Bookings"
-            title="Recent Bookings"
+            title={t('dashboard.recentBookings')}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Bookings' })}
             actionLabel="View all"
           />
@@ -976,7 +978,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Fleet"
-            title="Fleet Status"
+            title={t('dashboard.fleetStatus')}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             actionLabel="Manage"
           />
@@ -990,7 +992,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Finance"
-            title="Revenue vs Expenses"
+            title={t('dashboard.revenueVsExpenses')}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             actionLabel="Details"
           />
@@ -1007,7 +1009,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Finance"
-            title="Expense Categories"
+            title={t('dashboard.expenseCategories')}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Finance' })}
             actionLabel="Details"
           />
@@ -1022,7 +1024,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Fleet"
-            title="Top Revenue Vehicles"
+            title={t('dashboard.topVehicles')}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             actionLabel="View all"
           />
@@ -1037,7 +1039,7 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             eyebrow="Fleet"
-            title="Capacity Comparison"
+            title={t('dashboard.capacityComparison')}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Fleet' })}
             actionLabel="Details"
           />
@@ -1087,8 +1089,8 @@ export function DashboardScreen() {
           {/* Header */}
           <View style={styles.opHeader}>
             <View>
-              <Text style={styles.opHeaderEyebrow}>FINANCE</Text>
-              <Text style={styles.opHeaderTitle}>Outstanding Payments</Text>
+              <Text style={styles.opHeaderEyebrow}>{t('dashboard.financeEyebrow').toUpperCase()}</Text>
+              <Text style={styles.opHeaderTitle}>{t('dashboard.outstandingPayments')}</Text>
             </View>
             <TouchableOpacity style={styles.opCloseBtn} onPress={() => setShowOutstandingModal(false)}>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#6C6C70" strokeWidth={2.5} strokeLinecap="round">
@@ -1100,12 +1102,12 @@ export function DashboardScreen() {
           {/* Summary bar */}
           <View style={styles.opSummary}>
             <View style={styles.opSummaryItem}>
-              <Text style={styles.opSummaryLabel}>Total Outstanding</Text>
+              <Text style={styles.opSummaryLabel}>{t('dashboard.totalOutstanding')}</Text>
               <Text style={styles.opSummaryValue}>{formatCurrency(kpiData.outstandingPaymentsTotal, currency)}</Text>
             </View>
             <View style={styles.opSummaryDivider} />
             <View style={styles.opSummaryItem}>
-              <Text style={styles.opSummaryLabel}>Bookings</Text>
+              <Text style={styles.opSummaryLabel}>{t('dashboard.bookingsLabel')}</Text>
               <Text style={[styles.opSummaryValue, { color: COLORS.danger }]}>{kpiData.outstandingPaymentsCount}</Text>
             </View>
           </View>
@@ -1117,7 +1119,7 @@ export function DashboardScreen() {
             contentContainerStyle={styles.opList}
             ListEmptyComponent={
               <View style={styles.opEmpty}>
-                <Text style={styles.opEmptyText}>No outstanding payments</Text>
+                <Text style={styles.opEmptyText}>{t('dashboard.noOutstandingPayments')}</Text>
               </View>
             }
             renderItem={({ item }) => {
@@ -1139,31 +1141,39 @@ export function DashboardScreen() {
                   </View>
                   <View style={styles.opRowRight}>
                     <Text style={styles.opRowBalance}>{formatCurrency(item.balance_due, item.currency)}</Text>
-                    <Text style={styles.opRowLabel}>Balance Due</Text>
-                    <Text style={styles.opRowPaid}>Paid: {formatCurrency(item.amount_paid, item.currency)}</Text>
+                    <Text style={styles.opRowLabel}>{t('dashboard.balanceDue')}</Text>
+                    <Text style={styles.opRowPaid}>{t('dashboard.paidLabel', { amount: formatCurrency(item.amount_paid, item.currency) })}</Text>
                     <TouchableOpacity style={styles.recordPayBtn} onPress={() => openRecordPayment(item)}>
-                      <Text style={styles.recordPayBtnT}>Record Payment</Text>
+                      <Text style={styles.recordPayBtnT}>{t('dashboard.recordPayment')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               );
             }}
           />
+
+          {/* Record Payment — routed through record_payment RPC, never a direct
+              write. Must be nested INSIDE this Modal's own JSX tree, not a
+              sibling rendered after </Modal> — React Native presents a second
+              top-level Modal opened while another is still visible unreliably
+              on iOS (it can fail to appear while still swallowing touches on
+              the first one, which is exactly why this button looked broken/
+              hung). Nesting it here matches the working pattern already used
+              for every other screen's Record Payment button (e.g.
+              SafariManagementScreen's BookingDetailModal). */}
+          {payingBooking && (
+            <RecordPaymentSheet
+              visible={payingBooking != null}
+              onClose={() => { setPayingBooking(null); refetch(); }}
+              source="booking"
+              sourceId={payingBooking.id}
+              balanceDue={payingBooking.balance_due}
+              currency={payingBooking.currency}
+              subjectLabel={`${payingBooking.booking_number || payingBooking.id.slice(0, 10).toUpperCase()} · ${payingBooking.client_name}`}
+            />
+          )}
         </SafeAreaView>
       </Modal>
-
-      {/* Record Payment — routed through record_payment RPC, never a direct write */}
-      {payingBooking && (
-        <RecordPaymentSheet
-          visible={payingBooking != null}
-          onClose={() => { setPayingBooking(null); refetch(); }}
-          source="booking"
-          sourceId={payingBooking.id}
-          balanceDue={payingBooking.balance_due}
-          currency={payingBooking.currency}
-          subjectLabel={`${payingBooking.booking_number || payingBooking.id.slice(0, 10).toUpperCase()} · ${payingBooking.client_name}`}
-        />
-      )}
     </SafeAreaView>
   );
 }

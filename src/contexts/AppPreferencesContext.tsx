@@ -178,6 +178,14 @@ const translations: Record<AppLanguage, TranslationTree> = {
       expenseCategories: 'Makundi ya gharama', topVehicles: 'Magari yenye mapato makubwa',
       capacityComparison: 'Ulinganisho wa uwezo', allMonths: 'Miezi yote',
       allMonthsAtGlance: 'Muhtasari wa miezi yote', pulse: 'Mapitio ya {{month}}',
+      hired: 'Imekodishwa', newBooking: 'Uhifadhi Mpya', cashReq: 'Ombi la Fedha', newSafari: 'Safari Mpya',
+      financeEyebrow: 'Fedha', totalOutstanding: 'Jumla Inayosubiri', bookingsLabel: 'Uhifadhi',
+      noOutstandingPayments: 'Hakuna malipo yanayosubiri', balanceDue: 'Kiasi Kinachodaiwa',
+      paidLabel: 'Imelipwa: {{amount}}', recordPayment: 'Rekodi Malipo',
+      atAGlance: 'Kwa muhtasari', keyMetrics: 'Vipimo Muhimu',
+      totalRevenue: 'Jumla ya Mapato', totalExpenses: 'Jumla ya Gharama',
+      fleetUtilization: 'Utumiaji wa Msafara', activeBookings: 'Uhifadhi Unaoendelea',
+      confirmedPendingSubtitle: '{{confirmed}} imethibitishwa | {{pending}} inasubiri',
     },
     finance: {
       title: 'Usimamizi wa fedha', subtitle: 'Fuatilia miamala, mahitaji na harakati za pesa.',
@@ -188,6 +196,14 @@ const translations: Record<AppLanguage, TranslationTree> = {
       noTransactions: 'Hakuna miamala inayolingana na vichujio vya sasa.',
       noRequisitions: 'Hakuna mahitaji yanayolingana na vichujio vya sasa.',
       filterIncome: 'Mapato', filterExpense: 'Gharama', filterAll: 'Yote',
+      operationsEyebrow: 'Shughuli', cashRequisitionsSub: 'Mahitaji ya Pesa Taslimu',
+      revenueExpensesSub: 'Mapato na Gharama', revenueTab: 'Mapato ({{count}})',
+      expensesTab: 'Gharama ({{count}})', cashReqsTab: 'Mahitaji ({{count}})',
+      pettyCashTab: 'Pesa Ndogo ({{count}})', pendingBadge: '{{count}} Inasubiri',
+      totalIn: 'Jumla Iliyoingia', totalOut: 'Jumla Iliyotoka',
+      syncing: 'Inasawazisha…', retryNow: 'Jaribu Tena',
+      searchRevenuePlaceholder: 'Tafuta mapato...', searchExpensesPlaceholder: 'Tafuta gharama...',
+      searchCrPlaceholder: 'Tafuta CR#, mwombaji, idara, mlipwaji...',
     },
     bookings: {
       title: 'Uhifadhi', subtitle: 'Simamia safari zilizothibitishwa, zinazosubiri na zinazoendelea.',
@@ -456,6 +472,24 @@ const translations: Record<AppLanguage, TranslationTree> = {
       allMonths: 'All Months',
       allMonthsAtGlance: 'All months at a glance',
       pulse: '{{month}} pulse',
+      hired: 'Hired',
+      newBooking: 'New Booking',
+      cashReq: 'Cash Req.',
+      newSafari: 'New Safari',
+      financeEyebrow: 'Finance',
+      totalOutstanding: 'Total Outstanding',
+      bookingsLabel: 'Bookings',
+      noOutstandingPayments: 'No outstanding payments',
+      balanceDue: 'Balance Due',
+      paidLabel: 'Paid: {{amount}}',
+      recordPayment: 'Record Payment',
+      atAGlance: 'At a glance',
+      keyMetrics: 'Key Metrics',
+      totalRevenue: 'Total Revenue',
+      totalExpenses: 'Total Expenses',
+      fleetUtilization: 'Fleet Utilization',
+      activeBookings: 'Active Bookings',
+      confirmedPendingSubtitle: '{{confirmed}} confirmed | {{pending}} pending',
     },
     finance: {
       title: 'Financial Management',
@@ -474,6 +508,21 @@ const translations: Record<AppLanguage, TranslationTree> = {
       filterIncome: 'Income',
       filterExpense: 'Expense',
       filterAll: 'All',
+      operationsEyebrow: 'Operations',
+      cashRequisitionsSub: 'Cash Requisitions',
+      revenueExpensesSub: 'Revenue & Expenses',
+      revenueTab: 'Revenue ({{count}})',
+      expensesTab: 'Expenses ({{count}})',
+      cashReqsTab: 'Cash Reqs ({{count}})',
+      pettyCashTab: 'Petty Cash ({{count}})',
+      pendingBadge: '{{count}} Pending',
+      totalIn: 'Total In',
+      totalOut: 'Total Out',
+      syncing: 'Syncing…',
+      retryNow: 'Retry Now',
+      searchRevenuePlaceholder: 'Search revenue...',
+      searchExpensesPlaceholder: 'Search expenses...',
+      searchCrPlaceholder: 'Search CR#, requester, department, payee...',
     },
     bookings: {
       title: 'Reservations',
@@ -705,18 +754,30 @@ function getDeviceLanguage(): AppLanguage {
   return 'en';
 }
 
-function getTranslationValue(language: AppLanguage, key: string): string {
+function lookupTranslation(language: AppLanguage, key: string): string | undefined {
   const segments = key.split('.');
   let current: TranslationLeaf | TranslationTree | undefined = translations[language];
 
   for (const segment of segments) {
     if (!current || typeof current === 'string') {
-      return key;
+      return undefined;
     }
     current = current[segment];
   }
 
-  return typeof current === 'string' ? current : key;
+  return typeof current === 'string' ? current : undefined;
+}
+
+/**
+ * Falls back to English, then the raw key, when a translation is missing.
+ * Without this, adding a new key for only English + Swahili (the two
+ * languages actually maintained screen-by-screen so far) would regress
+ * every other selectable language from "untranslated screen, readable in
+ * English" to "untranslated screen, showing raw dotted keys like
+ * dashboard.totalFleet" — worse than not translating anything at all.
+ */
+function getTranslationValue(language: AppLanguage, key: string): string {
+  return lookupTranslation(language, key) ?? lookupTranslation('en', key) ?? key;
 }
 
 function formatMessage(template: string, params?: Record<string, string | number>): string {

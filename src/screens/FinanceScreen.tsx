@@ -32,6 +32,7 @@ import { TransactionDetailModal } from '../components/finance';
 import { AddExpenseModal } from '../components/forms';
 import { LoadingOverlay } from '../components/system/JackalLoader';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppPreferences } from '../contexts/AppPreferencesContext';
 import { supabase } from '../lib/supabase';
 import type { FinancialTransaction, CashRequisition, CRStatus, Currency } from '../types/dashboard';
 import { formatCurrency } from '../lib/utils';
@@ -680,6 +681,7 @@ type ActiveTab = 'revenue' | 'expenses' | 'requisitions' | 'petty_cash';
 
 export function FinanceScreen() {
   const { user } = useAuth();
+  const { t } = useAppPreferences();
   const [currency,       setCurrency]       = useState<Currency>('USD');
   const [activeTab,      setActiveTab]      = useState<ActiveTab>('revenue');
   const [searchQuery,    setSearchQuery]    = useState('');
@@ -973,7 +975,7 @@ export function FinanceScreen() {
         <SearchIcon size={17} />
         <TextInput
           style={styles.searchInput}
-          placeholder={activeTab === 'revenue' ? 'Search revenue...' : 'Search expenses...'}
+          placeholder={activeTab === 'revenue' ? t('finance.searchRevenuePlaceholder') : t('finance.searchExpensesPlaceholder')}
           placeholderTextColor={COLORS.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -1083,7 +1085,7 @@ export function FinanceScreen() {
         <SearchIcon size={17} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search CR#, requester, department, payee..."
+          placeholder={t('finance.searchCrPlaceholder')}
           placeholderTextColor={COLORS.textMuted}
           value={crSearchQuery}
           onChangeText={setCrSearchQuery}
@@ -1151,12 +1153,12 @@ export function FinanceScreen() {
       {/* Hero header */}
       <FadeSlideIn delay={0} distance={-10}>
         <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>Operations</Text>
+          <Text style={styles.heroEyebrow}>{t('finance.operationsEyebrow')}</Text>
           <View style={styles.heroRow}>
             <View>
-              <Text style={styles.heroTitle}>Finance</Text>
+              <Text style={styles.heroTitle}>{t('common.finance')}</Text>
               <Text style={styles.heroSub}>
-                {activeTab === 'requisitions' ? 'Cash Requisitions' : 'Revenue & Expenses'}
+                {activeTab === 'requisitions' ? t('finance.cashRequisitionsSub') : t('finance.revenueExpensesSub')}
               </Text>
             </View>
             {activeTab !== 'requisitions' ? (
@@ -1165,7 +1167,7 @@ export function FinanceScreen() {
               </View>
             ) : pendingCount > 0 ? (
               <View style={[styles.heroBadge, { backgroundColor: COLORS.warning }]}>
-                <Text style={styles.heroBadgeText}>{pendingCount} Pending</Text>
+                <Text style={styles.heroBadgeText}>{t('finance.pendingBadge', { count: pendingCount })}</Text>
               </View>
             ) : null}
           </View>
@@ -1174,21 +1176,21 @@ export function FinanceScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.heroTabsScroll}>
             <View style={styles.heroTabs}>
               {([
-                { key: 'revenue',      label: `Revenue (${revenueItems.length})` },
-                { key: 'expenses',     label: `Expenses (${expenseItems.length})` },
-                { key: 'requisitions', label: `Cash Reqs (${cashRequisitions.length})` },
-                { key: 'petty_cash',   label: `Petty Cash (${expenseItems.filter(e => e.subtitle?.toLowerCase().includes('petty') || e.title?.toLowerCase().includes('petty')).length})` },
-              ] as { key: ActiveTab; label: string }[]).map(t => (
+                { key: 'revenue',      label: t('finance.revenueTab', { count: revenueItems.length }) },
+                { key: 'expenses',     label: t('finance.expensesTab', { count: expenseItems.length }) },
+                { key: 'requisitions', label: t('finance.cashReqsTab', { count: cashRequisitions.length }) },
+                { key: 'petty_cash',   label: t('finance.pettyCashTab', { count: expenseItems.filter(e => e.subtitle?.toLowerCase().includes('petty') || e.title?.toLowerCase().includes('petty')).length }) },
+              ] as { key: ActiveTab; label: string }[]).map(tab => (
                 <TouchableOpacity
-                  key={t.key}
-                  style={[styles.heroTab, activeTab === t.key && styles.heroTabActive]}
-                  onPress={() => handleTabChange(t.key)}
+                  key={tab.key}
+                  style={[styles.heroTab, activeTab === tab.key && styles.heroTabActive]}
+                  onPress={() => handleTabChange(tab.key)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.heroTabText, activeTab === t.key && styles.heroTabTextActive]}>
-                    {t.label}
+                  <Text style={[styles.heroTabText, activeTab === tab.key && styles.heroTabTextActive]}>
+                    {tab.label}
                   </Text>
-                  {t.key === 'requisitions' && pendingCount > 0 && (
+                  {tab.key === 'requisitions' && pendingCount > 0 && (
                     <View style={styles.heroTabDot} />
                   )}
                 </TouchableOpacity>
@@ -1216,7 +1218,7 @@ export function FinanceScreen() {
               disabled={retrying}
               activeOpacity={0.8}
             >
-              <Text style={styles.pendingSyncRetryText}>{retrying ? 'Syncing…' : 'Retry Now'}</Text>
+              <Text style={styles.pendingSyncRetryText}>{retrying ? t('finance.syncing') : t('finance.retryNow')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1226,17 +1228,17 @@ export function FinanceScreen() {
       {(activeTab === 'revenue' || activeTab === 'expenses') && (
         <View style={styles.totalsBar}>
           <View style={styles.totalsItem}>
-            <Text style={styles.totalsLabel}>Total In</Text>
+            <Text style={styles.totalsLabel}>{t('finance.totalIn')}</Text>
             <Text style={[styles.totalsValue, { color: COLORS.income }]}>{formatCurrency(filteredTotals.totalIn, currency)}</Text>
           </View>
           <View style={styles.totalsDivider} />
           <View style={styles.totalsItem}>
-            <Text style={styles.totalsLabel}>Total Out</Text>
+            <Text style={styles.totalsLabel}>{t('finance.totalOut')}</Text>
             <Text style={[styles.totalsValue, { color: COLORS.expense }]}>{formatCurrency(filteredTotals.totalOut, currency)}</Text>
           </View>
           <View style={styles.totalsDivider} />
           <View style={styles.totalsItem}>
-            <Text style={styles.totalsLabel}>Net</Text>
+            <Text style={styles.totalsLabel}>{t('finance.netProfit')}</Text>
             <Text style={[styles.totalsValue, { color: filteredTotals.net >= 0 ? COLORS.income : COLORS.expense }]}>
               {filteredTotals.net >= 0 ? '+' : ''}{formatCurrency(filteredTotals.net, currency)}
             </Text>
