@@ -11,6 +11,7 @@ import {
   Modal,
   FlatList,
   Animated,
+  TextInput,
 } from 'react-native';
 import { tapLight, selectionTick } from '../lib/haptics';
 import { useNavigation } from '@react-navigation/native';
@@ -117,6 +118,15 @@ const COLORS = {
 // ============================================================================
 // ICON COMPONENTS
 // ============================================================================
+
+function SearchIcon({ size = 20, color = COLORS.textMuted }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="11" cy="11" r="8" />
+      <Path d="M21 21l-4.35-4.35" />
+    </Svg>
+  );
+}
 
 function DollarSignIcon({ size = 24, color = COLORS.success }: { size?: number; color?: string }) {
   return (
@@ -431,6 +441,8 @@ export function DashboardScreen() {
   const [showCreateSafari,     setShowCreateSafari]     = useState(false);
   const [showOutstandingModal, setShowOutstandingModal] = useState(false);
   const [payingBooking,        setPayingBooking]        = useState<OutstandingPaymentData | null>(null);
+  const [outstandingSearch,       setOutstandingSearch]       = useState('');
+  const [outstandingStatusFilter, setOutstandingStatusFilter] = useState<'all' | string>('all');
 
   // ========================================================================
   // AUTH
@@ -489,6 +501,30 @@ export function DashboardScreen() {
     revenueExpenseTimeFilter: 'year',
     selectedRevenueExpenseYear: dashboardFilterYear,
   });
+
+  // Outstanding Payments modal's own search/status filter — independent of
+  // the Dashboard's month/year filter, which intentionally no longer scopes
+  // this list (a balance owed is owed regardless of what period you're
+  // viewing elsewhere on the screen).
+  const filteredOutstandingPayments = useMemo(() => {
+    let list = calculations.outstandingPayments;
+    if (outstandingStatusFilter !== 'all') {
+      list = list.filter(p => p.status === outstandingStatusFilter);
+    }
+    if (outstandingSearch.trim()) {
+      const q = outstandingSearch.trim().toLowerCase();
+      list = list.filter(p =>
+        (p.booking_number || '').toLowerCase().includes(q) ||
+        (p.client_name || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [calculations.outstandingPayments, outstandingStatusFilter, outstandingSearch]);
+
+  const outstandingStatusOptions = useMemo(() => {
+    const statuses = Array.from(new Set(calculations.outstandingPayments.map(p => p.status).filter(Boolean))) as string[];
+    return ['all', ...statuses];
+  }, [calculations.outstandingPayments]);
 
   const loading = dataLoading || exchangeRateLoading;
 
@@ -1083,7 +1119,7 @@ export function DashboardScreen() {
         visible={showOutstandingModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowOutstandingModal(false)}
+        onRequestClose={() => { setShowOutstandingModal(false); setOutstandingSearch(''); setOutstandingStatusFilter('all'); }}
       >
         <SafeAreaView style={styles.opModal}>
           {/* Header */}
@@ -1092,14 +1128,15 @@ export function DashboardScreen() {
               <Text style={styles.opHeaderEyebrow}>{t('dashboard.financeEyebrow').toUpperCase()}</Text>
               <Text style={styles.opHeaderTitle}>{t('dashboard.outstandingPayments')}</Text>
             </View>
-            <TouchableOpacity style={styles.opCloseBtn} onPress={() => setShowOutstandingModal(false)}>
+            <TouchableOpacity style={styles.opCloseBtn} onPress={() => { setShowOutstandingModal(false); setOutstandingSearch(''); setOutstandingStatusFilter('all'); }}>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#6C6C70" strokeWidth={2.5} strokeLinecap="round">
                 <Path d="M18 6L6 18" /><Path d="M6 6l12 12" />
               </Svg>
             </TouchableOpacity>
           </View>
 
-          {/* Summary bar */}
+          {/* Summary bar — always the full, unfiltered total/count, even
+              while the list below is narrowed by search/status */}
           <View style={styles.opSummary}>
             <View style={styles.opSummaryItem}>
               <Text style={styles.opSummaryLabel}>{t('dashboard.totalOutstanding')}</Text>
@@ -1112,14 +1149,54 @@ export function DashboardScreen() {
             </View>
           </View>
 
+          {/* Search */}
+          <View style={styles.opSearchWrap}>
+            <SearchIcon size={16} color={COLORS.textMuted} />
+            <TextInput
+              style={styles.opSearchInput}
+              value={outstandingSearch}
+              onChangeText={setOutstandingSearch}
+              placeholder="Search by booking # or client..."
+              placeholderTextColor={COLORS.textMuted}
+              autoCorrect={false}
+              autoCapitalize="none"
+              blurOnSubmit={false}
+              returnKeyType="search"
+            />
+          </View>
+
+          {/* Status filter chips */}
+          {outstandingStatusOptions.length > 2 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.opFilterScroll} contentContainerStyle={styles.opFilterContent}>
+              {outstandingStatusOptions.map(s => {
+                const active = outstandingStatusFilter === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.filterChip, { marginRight: 8 }, active && styles.filterChipActive]}
+                    onPress={() => setOutstandingStatusFilter(s)}
+                  >
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                      {s === 'all' ? 'All' : s}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
           {/* List */}
           <FlatList<OutstandingPaymentData>
-            data={calculations.outstandingPayments}
+            data={filteredOutstandingPayments}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.opList}
             ListEmptyComponent={
               <View style={styles.opEmpty}>
-                <Text style={styles.opEmptyText}>{t('dashboard.noOutstandingPayments')}</Text>
+                <Text style={styles.opEmptyText}>
+                  {(outstandingSearch.trim() || outstandingStatusFilter !== 'all')
+                    ? 'No outstanding payments match your search or filter.'
+                    : t('dashboard.noOutstandingPayments')}
+                </Text>
               </View>
             }
             renderItem={({ item }) => {
@@ -1803,8 +1880,33 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.5,
   },
+  opSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginTop: 14,
+  },
+  opSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  opFilterScroll: {
+    marginTop: 10,
+    flexGrow: 0,
+  },
+  opFilterContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
   opList: {
     paddingHorizontal: 20,
+    paddingTop: 10,
     paddingBottom: 32,
   },
   opRow: {

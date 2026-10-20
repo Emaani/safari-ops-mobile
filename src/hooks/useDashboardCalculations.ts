@@ -458,15 +458,27 @@ export function useDashboardCalculations(
     );
 
 
-    // Outstanding Payments — any non-cancelled booking with balance_due > 0 (matches web dashboard)
-    // Uses the DB balance_due column when available, falls back to total_amount - amount_paid
-    const getBalanceDue = (b: (typeof dashboardFilteredBookings)[0]): number => {
+    // Outstanding Payments — any non-cancelled booking with balance_due > 0.
+    // Uses the DB balance_due column when available, falls back to total_amount - amount_paid.
+    //
+    // Deliberately uses ALL bookings, NOT dashboardFilteredBookings — same
+    // reasoning as Active Bookings above. A balance owed from a booking
+    // that started last March is still owed today; scoping this to
+    // whatever month/year the user has the revenue chart set to would make
+    // real outstanding debt disappear from the tile the moment they change
+    // an unrelated filter, which doesn't match a balance-due/AR figure's
+    // actual semantics (a snapshot of the present, not of a period) and
+    // breaks web-dashboard parity. A prior change here deliberately scoped
+    // this to dashboardFilteredBookings — reverted; flag with the web team
+    // if the website genuinely does scope this by period, since that would
+    // be surprising for an AR-style metric.
+    const getBalanceDue = (b: (typeof bookings)[0]): number => {
       if (typeof b.balance_due === 'number' && b.balance_due > 0) return b.balance_due;
       const totalAmt = b.total_amount || b.total_cost || 0;
       return Math.max(0, totalAmt - b.amount_paid);
     };
 
-    const outstandingBookings = dashboardFilteredBookings.filter(
+    const outstandingBookings = bookings.filter(
       (b) => !['Cancelled', 'cancelled'].includes(b.status) && getBalanceDue(b) > 0
     );
 
@@ -997,7 +1009,8 @@ export function useDashboardCalculations(
     // ========================================================================
     // CALCULATE OUTSTANDING PAYMENTS (Widget)
     // ========================================================================
-    // FIXED: Use dashboardFilteredBookings to respect month/year filters
+    // outstandingBookings is built from ALL bookings (see above) — the list
+    // shown in the modal always matches the card's total.
 
     const outstandingPayments: OutstandingPaymentData[] = outstandingBookings
       .map((b) => {
