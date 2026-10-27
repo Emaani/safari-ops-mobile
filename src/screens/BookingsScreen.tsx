@@ -25,6 +25,7 @@ import { useBookingsData } from '../hooks/useBookingsData';
 import { useBookingsRealtimeSync } from '../hooks/useBookingsRealtimeSync';
 import { useFleetDataContext } from '../contexts/FleetDataContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppPreferences } from '../contexts/AppPreferencesContext';
 import { BookingCard, BookingDetailModal, EditBookingModal } from '../components/bookings';
 import { NewBookingModal } from '../components/forms';
 import { EmptyState, ListSkeleton } from '../components/ui';
@@ -49,24 +50,26 @@ const COLORS = {
   border:     '#E5E5EA',
 };
 
-const STATUS_FILTERS: { label: string; value: BookingStatus | 'all' }[] = [
-  { label: 'All',          value: 'all'         },
-  { label: 'Confirmed',    value: 'Confirmed'   },
-  { label: 'In-Progress',  value: 'In-Progress' },
-  { label: 'Completed',    value: 'Completed'   },
-  { label: 'Pending',      value: 'Pending'     },
-  { label: 'Cancelled',    value: 'Cancelled'   },
+// Labels resolved via t() inside the component (statusLabel()/sortLabel())
+// since module-level constants can't call hooks.
+const STATUS_FILTERS: { value: BookingStatus | 'all' }[] = [
+  { value: 'all' },
+  { value: 'Confirmed' },
+  { value: 'In-Progress' },
+  { value: 'Completed' },
+  { value: 'Pending' },
+  { value: 'Cancelled' },
 ];
 
 type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc' | 'client-asc' | 'client-desc';
 
-const SORT_OPTIONS: { label: string; value: SortOption }[] = [
-  { label: 'Newest First', value: 'date-desc' },
-  { label: 'Oldest First', value: 'date-asc' },
-  { label: 'Amount (High-Low)', value: 'amount-desc' },
-  { label: 'Amount (Low-High)', value: 'amount-asc' },
-  { label: 'Client (A-Z)', value: 'client-asc' },
-  { label: 'Client (Z-A)', value: 'client-desc' },
+const SORT_OPTIONS: { value: SortOption }[] = [
+  { value: 'date-desc' },
+  { value: 'date-asc' },
+  { value: 'amount-desc' },
+  { value: 'amount-asc' },
+  { value: 'client-asc' },
+  { value: 'client-desc' },
 ];
 
 // ============================================================================
@@ -299,6 +302,31 @@ export function BookingsScreen() {
   const { user } = useAuth();
   const { bookings, loading, error, refetch } = useBookingsData();
   const { vehicles } = useFleetDataContext();
+  const { t } = useAppPreferences();
+
+  const statusLabel = useCallback((value: BookingStatus | 'all'): string => {
+    switch (value) {
+      case 'all': return t('bookings.statusAll');
+      case 'Confirmed': return t('bookings.confirmed');
+      case 'In-Progress': return t('bookings.statusInProgress');
+      case 'Completed': return t('bookings.statusCompleted');
+      case 'Pending': return t('bookings.pending');
+      case 'Cancelled': return t('bookings.statusCancelled');
+      default: return value;
+    }
+  }, [t]);
+
+  const sortLabel = useCallback((value: SortOption): string => {
+    switch (value) {
+      case 'date-desc': return t('bookings.sortNewest');
+      case 'date-asc': return t('bookings.sortOldest');
+      case 'amount-desc': return t('bookings.sortAmountHigh');
+      case 'amount-asc': return t('bookings.sortAmountLow');
+      case 'client-asc': return t('bookings.sortClientAsc');
+      case 'client-desc': return t('bookings.sortClientDesc');
+      default: return value;
+    }
+  }, [t]);
 
   // Real-time sync
   useBookingsRealtimeSync(refetch);
@@ -433,10 +461,10 @@ export function BookingsScreen() {
 
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
-        <StatCard title="Total"     value={stats.total}     color={COLORS.purple}  bgColor="#ede8f9" delay={0}   />
-        <StatCard title="Active"    value={stats.active}    color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
-        <StatCard title="Confirmed" value={stats.confirmed} color={COLORS.primary} bgColor="#F5E8D0" delay={120} />
-        <StatCard title="Pending"   value={stats.pending}   color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
+        <StatCard title={t('bookings.total')}     value={stats.total}     color={COLORS.purple}  bgColor="#ede8f9" delay={0}   />
+        <StatCard title={t('bookings.active')}    value={stats.active}    color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
+        <StatCard title={t('bookings.confirmed')} value={stats.confirmed} color={COLORS.primary} bgColor="#F5E8D0" delay={120} />
+        <StatCard title={t('bookings.pending')}   value={stats.pending}   color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
       </View>
 
       {/* Search Bar */}
@@ -445,7 +473,7 @@ export function BookingsScreen() {
           <SearchIcon size={18} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by booking #, client, package, status..."
+            placeholder={t('bookings.searchPlaceholder')}
             placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -504,7 +532,7 @@ export function BookingsScreen() {
                     statusFilter === item.value && styles.filterPillTextActive,
                   ]}
                 >
-                  {item.label}
+                  {statusLabel(item.value)}
                 </Text>
               </TouchableOpacity>
             )}
@@ -515,7 +543,7 @@ export function BookingsScreen() {
       {selectedDate && (
         <TouchableOpacity style={styles.dateFilterChip} onPress={() => setSelectedDate(null)}>
           <Text style={styles.dateFilterChipT}>
-            {new Date(selectedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} · Clear ✕
+            {new Date(selectedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} · {t('bookings.clearDate')} ✕
           </Text>
         </TouchableOpacity>
       )}
@@ -523,7 +551,7 @@ export function BookingsScreen() {
       {/* Bookings List Header with Sort */}
       <View style={styles.listHeaderRow}>
         <Text style={styles.listHeader}>
-          Bookings ({filteredBookings.length})
+          {t('bookings.listCount', { count: filteredBookings.length })}
         </Text>
         <TouchableOpacity
           style={styles.sortButton}
@@ -531,7 +559,7 @@ export function BookingsScreen() {
         >
           <SortIcon size={18} color={COLORS.primary} />
           <Text style={styles.sortButtonText}>
-            {SORT_OPTIONS.filter(o => o.value === sortOption)[0]?.label || 'Sort'}
+            {sortLabel(sortOption) || t('bookings.sortLabel')}
           </Text>
           <ChevronDownIcon size={14} color={COLORS.primary} />
         </TouchableOpacity>
@@ -558,7 +586,7 @@ export function BookingsScreen() {
                   sortOption === option.value && styles.sortMenuItemTextActive,
                 ]}
               >
-                {option.label}
+                {sortLabel(option.value)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -589,15 +617,15 @@ export function BookingsScreen() {
   const renderEmpty = () => (
     <EmptyState
       type="bookings"
-      title={searchQuery || statusFilter !== 'all' ? 'No results found' : 'No bookings yet'}
+      title={searchQuery || statusFilter !== 'all' ? t('bookings.emptyNoResults') : t('bookings.emptyNoBookings')}
       subtitle={
         searchQuery || statusFilter !== 'all'
-          ? 'Try adjusting your search or filters to find what you\'re looking for.'
-          : 'Create your first booking to start managing safari trips for your clients.'
+          ? t('bookings.emptyNoResultsSub')
+          : t('bookings.emptyNoBookingsSub')
       }
-      actionLabel={searchQuery || statusFilter !== 'all' ? undefined : 'Create Booking'}
+      actionLabel={searchQuery || statusFilter !== 'all' ? undefined : t('bookings.createBooking')}
       onAction={searchQuery || statusFilter !== 'all' ? undefined : () => setShowNewBooking(true)}
-      secondaryLabel={searchQuery || statusFilter !== 'all' ? 'Clear Filters' : undefined}
+      secondaryLabel={searchQuery || statusFilter !== 'all' ? t('fleet.clearFilters') : undefined}
       onSecondary={searchQuery || statusFilter !== 'all' ? () => {
         setSearchQuery('');
         setStatusFilter('all');
@@ -620,8 +648,8 @@ export function BookingsScreen() {
           <Text style={styles.heroEyebrow}>Operations</Text>
           <View style={styles.heroRow}>
             <View>
-              <Text style={styles.heroTitle}>Bookings</Text>
-              <Text style={styles.heroSub}>{stats.total} total · {stats.active} active</Text>
+              <Text style={styles.heroTitle}>{t('bookings.title')}</Text>
+              <Text style={styles.heroSub}>{t('bookings.heroSubtitle', { total: stats.total, active: stats.active })}</Text>
             </View>
             {stats.active > 0 && (
               <View style={styles.heroBadge}>
@@ -639,7 +667,7 @@ export function BookingsScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
-                  {f.label}
+                  {statusLabel(f.value)}
                 </Text>
               </TouchableOpacity>
             ))}

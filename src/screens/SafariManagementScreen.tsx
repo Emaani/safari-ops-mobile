@@ -37,6 +37,7 @@ import type {
   SafariBooking, SafariGuide, PermitCatalog, SafariPackage, SafariBookingPermit,
   SafariFieldReport, SafariItineraryDay,
 } from '../types/safari';
+import { useAppPreferences } from '../contexts/AppPreferencesContext';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -67,6 +68,16 @@ const STATUS_CFG: Record<string, { bg: string; text: string; label: string }> = 
   cancelled: { bg: '#FFEEED', text: '#CC1400', label: 'Cancelled' },
 };
 const STATUS_KEYS = ['all', 'draft', 'pending', 'confirmed', 'active', 'completed', 'cancelled'];
+
+type TFn = (key: string, params?: Record<string, any>) => string;
+function statusLabel(key: string, t: TFn): string {
+  const map: Record<string, string> = {
+    draft: 'safari.statusDraft', pending: 'safari.statusPending', confirmed: 'safari.statusConfirmed',
+    active: 'safari.statusActive', completed: 'safari.statusCompleted', cancelled: 'safari.statusCancelled',
+  };
+  const k = map[key];
+  return k ? t(k) : (STATUS_CFG[key]?.label || key);
+}
 
 const COUNTRIES = ['All', 'Uganda', 'Rwanda', 'Kenya', 'Tanzania', 'Multi-Country'];
 const PERMIT_TYPES = ['Park Entry', 'Gorilla Permit', 'Chimp Permit', 'Activity Permit', 'Vehicle Entry', 'Other'];
@@ -191,12 +202,12 @@ function calcDays(start?: string, end?: string) {
   const d = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
   return `${d} day${d !== 1 ? 's' : ''}`;
 }
-function getPaymentLabel(paid = 0, total = 0, deposit = 0): { label: string; color: string; pct: number } {
+function getPaymentLabel(paid = 0, total = 0, deposit = 0, t?: TFn): { label: string; color: string; pct: number } {
   const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
-  if (paid <= 0) return { label: 'Unpaid', color: C.danger, pct: 0 };
-  if (paid >= total) return { label: 'Fully Paid', color: C.success, pct: 100 };
-  if (paid >= deposit) return { label: `${pct}% Paid`, color: C.gold, pct };
-  return { label: `${pct}% – Deposit Due`, color: C.gold, pct };
+  if (paid <= 0) return { label: t ? t('safari.unpaid') : 'Unpaid', color: C.danger, pct: 0 };
+  if (paid >= total) return { label: t ? t('safari.fullyPaid') : 'Fully Paid', color: C.success, pct: 100 };
+  if (paid >= deposit) return { label: t ? t('safari.pctPaid', { pct }) : `${pct}% Paid`, color: C.gold, pct };
+  return { label: t ? t('safari.pctDepositDue', { pct }) : `${pct}% – Deposit Due`, color: C.gold, pct };
 }
 
 // ─── Shared tiny components ───────────────────────────────────────────────────
@@ -274,16 +285,17 @@ const fStyles = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function BookingCard({ b, onPress }: { b: SafariBooking; onPress: () => void }) {
+  const { t } = useAppPreferences();
   const st = STATUS_CFG[b.status] || STATUS_CFG.pending;
   const client = b.clients?.company_name || b.customer_name || 'Unknown Client';
-  const pay = getPaymentLabel(b.amount_paid, b.total_price_usd, b.deposit_amount);
+  const pay = getPaymentLabel(b.amount_paid, b.total_price_usd, b.deposit_amount, t);
   return (
     <TouchableOpacity style={bc.card} onPress={onPress} activeOpacity={0.78}>
       <View style={[bc.accent, { backgroundColor: st.text }]} />
       <View style={{ flex: 1, padding: 14 }}>
         <View style={bc.row}>
           <Text style={bc.ref}>{b.booking_reference || b.id.slice(0, 10).toUpperCase()}</Text>
-          <View style={[bc.badge, { backgroundColor: st.bg }]}><Text style={[bc.badgeT, { color: st.text }]}>{st.label}</Text></View>
+          <View style={[bc.badge, { backgroundColor: st.bg }]}><Text style={[bc.badgeT, { color: st.text }]}>{statusLabel(b.status, t)}</Text></View>
         </View>
         <Text style={bc.client} numberOfLines={1}>{client}</Text>
         <View style={[bc.row, { marginTop: 10 }]}>
@@ -324,6 +336,7 @@ interface GuideOpt { id: string; full_name: string; status?: string }
 function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
   booking: SafariBooking | null; visible: boolean; onClose: () => void; onRefetch: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [subTab, setSubTab] = useState<'overview' | 'ops' | 'permits' | 'documents' | 'checklist' | 'payments'>('overview');
   const [showRecordPayment, setShowRecordPayment] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleOpt[]>([]);
@@ -520,7 +533,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
 
   if (!booking || !visible) return null;
   const st = STATUS_CFG[booking.status] || STATUS_CFG.pending;
-  const pay = getPaymentLabel(booking.amount_paid, booking.total_price_usd, booking.deposit_amount);
+  const pay = getPaymentLabel(booking.amount_paid, booking.total_price_usd, booking.deposit_amount, t);
   const balance = (booking.total_price_usd || 0) - (booking.amount_paid || 0);
 
   // Accurate profit margin: always compute from raw cost fields
@@ -621,7 +634,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
 
         {/* Status row */}
         <View style={dm.statusRow}>
-          <View style={[dm.stBadge, { backgroundColor: st.bg }]}><Text style={[dm.stText, { color: st.text }]}>{st.label}</Text></View>
+          <View style={[dm.stBadge, { backgroundColor: st.bg }]}><Text style={[dm.stText, { color: st.text }]}>{statusLabel(booking.status, t)}</Text></View>
           <Text style={dm.duration}>{calcDays(booking.start_date, booking.end_date)}</Text>
           <View style={[dm.payBadge, { backgroundColor: pay.color + '20' }]}><Text style={[dm.payText, { color: pay.color }]}>{pay.label}</Text></View>
         </View>
@@ -629,12 +642,12 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
         {/* Sub-tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
           <View style={dm.subBar}>
-            {(['overview', 'ops', 'permits', 'payments', 'checklist', 'documents'] as const).map(t => (
-              <TouchableOpacity key={t} style={[dm.subTab, subTab === t && dm.subTabOn]} onPress={() => setSubTab(t)}>
-                <Text style={[dm.subTabT, subTab === t && dm.subTabTOn]}>
-                  {t === 'overview' ? 'Overview' : t === 'ops' ? 'Operations' : t === 'permits' ? 'Permits' : t === 'payments' ? 'Payments' : t === 'checklist' ? 'Pre-Trip' : 'Documents'}
-                  {t === 'documents' && docReports.length > 0 ? ` (${docReports.length})` : ''}
-                  {t === 'checklist' && checklistMeta?.completed_at ? ' ✓' : ''}
+            {(['overview', 'ops', 'permits', 'payments', 'checklist', 'documents'] as const).map(st2 => (
+              <TouchableOpacity key={st2} style={[dm.subTab, subTab === st2 && dm.subTabOn]} onPress={() => setSubTab(st2)}>
+                <Text style={[dm.subTabT, subTab === st2 && dm.subTabTOn]}>
+                  {st2 === 'overview' ? t('safari.subOverview') : st2 === 'ops' ? t('safari.tabOps') : st2 === 'permits' ? t('safari.subPermits') : st2 === 'payments' ? t('safari.subPayments') : st2 === 'checklist' ? t('safari.subPreTrip') : t('safari.subDocuments')}
+                  {st2 === 'documents' && docReports.length > 0 ? ` (${docReports.length})` : ''}
+                  {st2 === 'checklist' && checklistMeta?.completed_at ? ' ✓' : ''}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -646,7 +659,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
           {/* Overview */}
           {subTab === 'overview' && <>
             <View style={dm.sect}>
-              <Text style={dm.sectTitle}>Financial Summary</Text>
+              <Text style={dm.sectTitle}>{t('safari.financialSummary')}</Text>
               {[
                 { l: 'Total Revenue', v: formatCurrency(totalRevenue, 'USD'), big: true },
                 totalCosts > 0 ? { l: 'Total Costs', v: formatCurrency(totalCosts, 'USD'), c: C.danger } : null,
@@ -663,12 +676,12 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
               ))}
               {balance > 0 && (
                 <TouchableOpacity style={dm.recordPayBtn} onPress={() => setShowRecordPayment(true)}>
-                  <Text style={dm.recordPayBtnT}>Record Payment</Text>
+                  <Text style={dm.recordPayBtnT}>{t('safari.recordPayment')}</Text>
                 </TouchableOpacity>
               )}
             </View>
             <View style={dm.sect}>
-              <Text style={dm.sectTitle}>Trip Details</Text>
+              <Text style={dm.sectTitle}>{t('safari.tripDetails')}</Text>
               {[
                 { l: 'Start Date', v: fmtDate(booking.start_date) },
                 { l: 'End Date', v: fmtDate(booking.end_date) },
@@ -690,14 +703,14 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
             {/* Day-by-Day Itinerary */}
             <View style={dm.sect}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <Text style={[dm.sectTitle, { marginBottom: 0 }]}>Itinerary</Text>
+                <Text style={[dm.sectTitle, { marginBottom: 0 }]}>{t('safari.itineraryLabel')}</Text>
                 <TouchableOpacity onPress={() => setEditingItinerary(e => !e)}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: C.primary }}>{editingItinerary ? 'Done' : itinerary.length > 0 ? 'Edit' : '+ Add Days'}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: C.primary }}>{editingItinerary ? t('safari.doneLabel') : itinerary.length > 0 ? t('safari.editLabel') : t('safari.addDays')}</Text>
                 </TouchableOpacity>
               </View>
 
               {itinerary.length === 0 && !editingItinerary && (
-                <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingVertical: 12 }}>No itinerary added yet</Text>
+                <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingVertical: 12 }}>{t('safari.noItineraryYet')}</Text>
               )}
 
               {itinerary.map((d, idx) => (
@@ -740,10 +753,10 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
               {editingItinerary && (
                 <>
                   <TouchableOpacity style={dm.itinAddBtn} onPress={addItineraryDay}>
-                    <Text style={dm.itinAddBtnT}>+ Add Day</Text>
+                    <Text style={dm.itinAddBtnT}>{t('safari.addDay')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[dm.saveBtn, savingItinerary && { opacity: 0.6 }]} onPress={saveItinerary} disabled={savingItinerary}>
-                    {savingItinerary ? <ActivityIndicator size="small" color="#fff" /> : <Text style={dm.saveBtnT}>Save Itinerary</Text>}
+                    {savingItinerary ? <ActivityIndicator size="small" color="#fff" /> : <Text style={dm.saveBtnT}>{t('safari.saveItinerary')}</Text>}
                   </TouchableOpacity>
                 </>
               )}
@@ -752,35 +765,35 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
 
           {/* Operations */}
           {subTab === 'ops' && <View style={dm.sect}>
-            <Text style={dm.sectTitle}>Assign Vehicle & Guide</Text>
+            <Text style={dm.sectTitle}>{t('safari.assignVehicleGuide')}</Text>
             {loadingOps ? <LoadingView label="Loading resources…" /> : <>
-              <FieldLabel label="Vehicle" />
+              <FieldLabel label={t('safari.fieldVehicle')} />
               <TouchableOpacity style={dm.selector} onPress={() => setShowVPicker(true)}>
                 <Ico.Car s={16} c={C.primary} />
                 <Text style={dm.selectorT} numberOfLines={1}>
-                  {selVehicle ? `${selVehicle.license_plate}${selVehicle.make ? ` – ${selVehicle.make} ${selVehicle.model || ''}` : ''}` : 'Select vehicle…'}
+                  {selVehicle ? `${selVehicle.license_plate}${selVehicle.make ? ` – ${selVehicle.make} ${selVehicle.model || ''}` : ''}` : t('safari.selectVehicle')}
                 </Text>
                 <Ico.ChevDown s={16} c={C.textMuted} />
               </TouchableOpacity>
 
-              <FieldLabel label="Safari Guide" />
+              <FieldLabel label={t('safari.fieldSafariGuide')} />
               <TouchableOpacity style={dm.selector} onPress={() => setShowGPicker(true)}>
                 <Ico.User s={16} c={C.primary} />
-                <Text style={dm.selectorT} numberOfLines={1}>{selGuide ? selGuide.full_name : 'Select guide…'}</Text>
+                <Text style={dm.selectorT} numberOfLines={1}>{selGuide ? selGuide.full_name : t('safari.selectGuide')}</Text>
                 <Ico.ChevDown s={16} c={C.textMuted} />
               </TouchableOpacity>
 
               <TouchableOpacity style={[dm.saveBtn, saving && { opacity: 0.6 }]} onPress={saveOps} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={dm.saveBtnT}>Save Assignments</Text>}
+                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={dm.saveBtnT}>{t('safari.saveAssignments')}</Text>}
               </TouchableOpacity>
             </>}
           </View>}
 
           {/* Permits */}
           {subTab === 'permits' && <View style={dm.sect}>
-            <Text style={dm.sectTitle}>Booking Permits</Text>
+            <Text style={dm.sectTitle}>{t('safari.bookingPermits')}</Text>
             {permits.length === 0
-              ? <Text style={{ color: C.textMuted, textAlign: 'center', paddingVertical: 20, fontSize: 13 }}>No permits recorded for this booking</Text>
+              ? <Text style={{ color: C.textMuted, textAlign: 'center', paddingVertical: 20, fontSize: 13 }}>{t('safari.noPermitsRecorded')}</Text>
               : permits.map(p => {
                 const typeLower = (p.safari_permits?.permit_type || p.safari_permits?.permit_name || '').toLowerCase();
                 const highStakes = typeLower.includes('gorilla') || typeLower.includes('chimp');
@@ -804,13 +817,13 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
 
                     {unconfirmed && (
                       <View style={dm.permitWarnBanner}>
-                        <Text style={dm.permitWarnText}>⚠ Not yet confirmed by the authority — trek is at risk without confirmation</Text>
+                        <Text style={dm.permitWarnText}>{t('safari.permitNotConfirmedWarning')}</Text>
                       </View>
                     )}
 
                     <View style={dm.permitFooter}>
                       <View style={{ flex: 1 }}>
-                        <Text style={dm.permitFooterLabel}>Authority Reference</Text>
+                        <Text style={dm.permitFooterLabel}>{t('safari.authorityReference')}</Text>
                         {isEditing ? (
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
                             <TextInput
@@ -822,16 +835,16 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
                               autoCapitalize="characters"
                               autoCorrect={false}
                             />
-                            <TouchableOpacity onPress={() => savePermitRef(p.id)}><Text style={dm.permitRefSave}>Save</Text></TouchableOpacity>
+                            <TouchableOpacity onPress={() => savePermitRef(p.id)}><Text style={dm.permitRefSave}>{t('common.save')}</Text></TouchableOpacity>
                           </View>
                         ) : (
                           <TouchableOpacity onPress={() => { setEditingPermitId(p.id); setRefInput(p.external_reference || ''); }}>
-                            <Text style={dm.permitFooterValue}>{p.external_reference || 'Tap to add reference…'}</Text>
+                            <Text style={dm.permitFooterValue}>{p.external_reference || t('safari.tapToAddReference')}</Text>
                           </TouchableOpacity>
                         )}
                       </View>
                       <View style={{ alignItems: 'center', gap: 4 }}>
-                        <Text style={dm.permitFooterLabel}>Confirmed</Text>
+                        <Text style={dm.permitFooterLabel}>{t('safari.confirmedLabel')}</Text>
                         <Switch
                           value={!!p.authority_confirmed}
                           onValueChange={() => toggleAuthorityConfirmed(p)}
@@ -849,7 +862,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
           {/* Payments */}
           {subTab === 'payments' && (
             <View style={dm.sect}>
-              <Text style={dm.sectTitle}>Payment History</Text>
+              <Text style={dm.sectTitle}>{t('safari.paymentHistory')}</Text>
               <PaymentHistoryList sourceId={booking.id} />
             </View>
           )}
@@ -858,7 +871,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
           {subTab === 'checklist' && (
             loadingChecklist ? <LoadingView label="Loading checklist…" /> : (
               <View style={dm.sect}>
-                <Text style={dm.sectTitle}>Pre-Trip Vehicle Checklist</Text>
+                <Text style={dm.sectTitle}>{t('safari.preTripChecklist')}</Text>
                 {checklistMeta?.completed_at ? (
                   <View style={dm.checklistDoneBanner}>
                     <Text style={dm.checklistDoneText}>
@@ -883,7 +896,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
                   {savingChecklist
                     ? <ActivityIndicator size="small" color="#fff" />
                     : <Text style={dm.saveBtnT}>
-                        {PRETRIP_CHECKLIST_ITEMS.every(i => checklist[i.key]) ? 'Sign & Complete Checklist' : 'Save Progress'}
+                        {PRETRIP_CHECKLIST_ITEMS.every(i => checklist[i.key]) ? t('safari.signCompleteChecklist') : t('safari.saveProgress')}
                       </Text>}
                 </TouchableOpacity>
               </View>
@@ -898,9 +911,9 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
                 <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
                   <Ico.FileText s={24} c={C.textMuted} />
                 </View>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 6 }}>No Field Reports</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 6 }}>{t('safari.noFieldReports')}</Text>
                 <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingHorizontal: 24, lineHeight: 18 }}>
-                  Upload post-safari field reports from the Operations tab in Safari Management.
+                  {t('safari.noFieldReportsSubDetail')}
                 </Text>
               </View>
             ) : docReports.map(r => {
@@ -928,10 +941,10 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
           )}
         </ScrollView>
 
-        <PickerModal visible={showVPicker} title="Select Vehicle"
+        <PickerModal visible={showVPicker} title={t('safari.selectVehicleTitle')}
           options={vehicles.map(v => ({ value: v.id, label: v.license_plate, sub: `${v.make || ''} ${v.model || ''} · ${v.status || ''}`.trim() }))}
           selected={selVehicle?.id} onSelect={o => setSelVehicle(vehicles.find(v => v.id === o.value) || null)} onClose={() => setShowVPicker(false)} />
-        <PickerModal visible={showGPicker} title="Select Safari Guide"
+        <PickerModal visible={showGPicker} title={t('safari.selectGuideTitle')}
           options={guides.map(g => ({ value: g.id, label: g.full_name, sub: g.status }))}
           selected={selGuide?.id} onSelect={o => setSelGuide(guides.find(g => g.id === o.value) || null)} onClose={() => setShowGPicker(false)} />
         <ReportPreviewModal report={previewDoc} visible={previewDoc != null} onClose={() => setPreviewDoc(null)} />
@@ -1050,17 +1063,18 @@ function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClo
   onApply: (f: FilterState) => void;
   onClose: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [local, setLocal] = useState<FilterState>(filters);
   const set = (patch: Partial<FilterState>) => setLocal(prev => ({ ...prev, ...patch }));
 
   useEffect(() => { if (visible) setLocal(filters); }, [visible, filters]);
 
   const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-    { key: 'all',   label: 'All Dates' },
-    { key: 'today', label: 'Today' },
-    { key: 'week',  label: 'Next 7 Days' },
-    { key: 'month', label: 'Next 30 Days' },
-    { key: 'custom',label: 'Custom Range' },
+    { key: 'all',   label: t('safari.datePresetAll') },
+    { key: 'today', label: t('safari.datePresetToday') },
+    { key: 'week',  label: t('safari.datePresetWeek') },
+    { key: 'month', label: t('safari.datePresetMonth') },
+    { key: 'custom',label: t('safari.datePresetCustom') },
   ];
 
   const activeFilterCount = [
@@ -1076,29 +1090,29 @@ function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClo
         <View style={fs.sheet}>
           <View style={fs.handle} />
           <View style={fs.header}>
-            <Text style={fs.title}>Filter Bookings</Text>
+            <Text style={fs.title}>{t('safari.filterBookings')}</Text>
             <TouchableOpacity onPress={() => set(DEFAULT_FILTERS)}>
-              <Text style={fs.reset}>Reset All</Text>
+              <Text style={fs.reset}>{t('safari.resetAll')}</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
             {/* Status */}
-            <Text style={fs.sectionLabel}>Status</Text>
+            <Text style={fs.sectionLabel}>{t('safari.statusLabel')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
               {STATUS_KEYS.map(s => {
                 const on = local.status === s;
                 const col = s === 'all' ? C.primary : (STATUS_CFG[s]?.text || C.textMuted);
                 return (
                   <TouchableOpacity key={s} style={[fs.chip, on && { backgroundColor: col, borderColor: col }]} onPress={() => set({ status: s })}>
-                    <Text style={[fs.chipT, on && { color: '#fff' }]}>{s === 'all' ? 'All' : STATUS_CFG[s]?.label}</Text>
+                    <Text style={[fs.chipT, on && { color: '#fff' }]}>{s === 'all' ? t('safari.statusAll') : statusLabel(s, t)}</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
             {/* Date Range */}
-            <Text style={fs.sectionLabel}>Date Range</Text>
+            <Text style={fs.sectionLabel}>{t('safari.dateRangeLabel')}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               {DATE_PRESETS.map(p => (
                 <TouchableOpacity key={p.key}
@@ -1111,13 +1125,13 @@ function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClo
             {local.datePreset === 'custom' && (
               <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={fs.inputLabel}>From (YYYY-MM-DD)</Text>
+                  <Text style={fs.inputLabel}>{t('safari.fromLabel')}</Text>
                   <TextInput style={fs.dateInput} value={local.dateFrom}
                     onChangeText={v => set({ dateFrom: v })} placeholder="2025-01-01"
                     placeholderTextColor={C.textMuted} keyboardType="numbers-and-punctuation" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={fs.inputLabel}>To (YYYY-MM-DD)</Text>
+                  <Text style={fs.inputLabel}>{t('safari.toLabel')}</Text>
                   <TextInput style={fs.dateInput} value={local.dateTo}
                     onChangeText={v => set({ dateTo: v })} placeholder="2025-12-31"
                     placeholderTextColor={C.textMuted} keyboardType="numbers-and-punctuation" />
@@ -1126,11 +1140,11 @@ function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClo
             )}
 
             {/* Guide */}
-            <Text style={fs.sectionLabel}>Assigned Guide</Text>
+            <Text style={fs.sectionLabel}>{t('safari.assignedGuide')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
               <TouchableOpacity style={[fs.chip, !local.guideId && { backgroundColor: C.primary, borderColor: C.primary }]}
                 onPress={() => set({ guideId: '' })}>
-                <Text style={[fs.chipT, !local.guideId && { color: '#fff' }]}>Any Guide</Text>
+                <Text style={[fs.chipT, !local.guideId && { color: '#fff' }]}>{t('safari.anyGuide')}</Text>
               </TouchableOpacity>
               {guides.map(g => (
                 <TouchableOpacity key={g.id}
@@ -1142,11 +1156,11 @@ function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClo
             </ScrollView>
 
             {/* Vehicle */}
-            <Text style={fs.sectionLabel}>Assigned Vehicle</Text>
+            <Text style={fs.sectionLabel}>{t('safari.assignedVehicle')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
               <TouchableOpacity style={[fs.chip, !local.vehicleId && { backgroundColor: C.primary, borderColor: C.primary }]}
                 onPress={() => set({ vehicleId: '' })}>
-                <Text style={[fs.chipT, !local.vehicleId && { color: '#fff' }]}>Any Vehicle</Text>
+                <Text style={[fs.chipT, !local.vehicleId && { color: '#fff' }]}>{t('safari.anyVehicle')}</Text>
               </TouchableOpacity>
               {vehicles.map(v => (
                 <TouchableOpacity key={v.id}
@@ -1159,7 +1173,7 @@ function BookingFilterSheet({ visible, filters, guides, vehicles, onApply, onClo
           </ScrollView>
 
           <TouchableOpacity style={fs.applyBtn} onPress={() => { onApply(local); onClose(); }}>
-            <Text style={fs.applyT}>Apply Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</Text>
+            <Text style={fs.applyT}>{activeFilterCount > 0 ? t('safari.applyFiltersCount', { count: activeFilterCount }) : t('safari.applyFilters')}</Text>
           </TouchableOpacity>
         </View>
       </Pressable>
@@ -1184,6 +1198,7 @@ const fs = StyleSheet.create({
 
 // ─── Bookings Tab ──────────────────────────────────────────────────────────────
 function BookingsTab() {
+  const { t } = useAppPreferences();
   const [bookings, setBookings] = useState<SafariBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1324,7 +1339,7 @@ function BookingsTab() {
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
           <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-            placeholder="Search ref, client, email…" placeholderTextColor={C.textMuted}
+            placeholder={t('safari.searchBookingsPlaceholder')} placeholderTextColor={C.textMuted}
               autoCorrect={false}
               autoCapitalize="none"
               blurOnSubmit={false}
@@ -1348,7 +1363,7 @@ function BookingsTab() {
           {filters.status !== 'all' && (
             <View style={[ts.activeBadge, { backgroundColor: STATUS_CFG[filters.status]?.bg || C.input }]}>
               <Text style={[ts.activeBadgeT, { color: STATUS_CFG[filters.status]?.text || C.textMuted }]}>
-                {STATUS_CFG[filters.status]?.label}
+                {statusLabel(filters.status, t)}
               </Text>
             </View>
           )}
@@ -1356,37 +1371,37 @@ function BookingsTab() {
             <View style={ts.activeBadge}>
               <Text style={ts.activeBadgeT}>
                 {filters.datePreset === 'custom' ? `${filters.dateFrom} → ${filters.dateTo}` :
-                 filters.datePreset === 'today' ? 'Today' :
-                 filters.datePreset === 'week' ? 'Next 7 Days' : 'Next 30 Days'}
+                 filters.datePreset === 'today' ? t('safari.datePresetToday') :
+                 filters.datePreset === 'week' ? t('safari.datePresetWeek') : t('safari.datePresetMonth')}
               </Text>
             </View>
           )}
           {filters.guideId && (
             <View style={ts.activeBadge}>
-              <Text style={ts.activeBadgeT}>{guides.find(g => g.id === filters.guideId)?.full_name || 'Guide'}</Text>
+              <Text style={ts.activeBadgeT}>{guides.find(g => g.id === filters.guideId)?.full_name || t('safari.guideFallback')}</Text>
             </View>
           )}
           {filters.vehicleId && (
             <View style={ts.activeBadge}>
-              <Text style={ts.activeBadgeT}>{vehicles.find(v => v.id === filters.vehicleId)?.license_plate || 'Vehicle'}</Text>
+              <Text style={ts.activeBadgeT}>{vehicles.find(v => v.id === filters.vehicleId)?.license_plate || t('safari.vehicleFallback')}</Text>
             </View>
           )}
           <TouchableOpacity style={[ts.activeBadge, { backgroundColor: C.danger + '18', borderColor: C.danger + '30' }]}
             onPress={() => setFilters(DEFAULT_FILTERS)}>
-            <Text style={[ts.activeBadgeT, { color: C.danger }]}>Clear All</Text>
+            <Text style={[ts.activeBadgeT, { color: C.danger }]}>{t('safari.clearAll')}</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
 
       {/* Results count */}
-      <Text style={ts.resultCount}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</Text>
+      <Text style={ts.resultCount}>{t('safari.bookingCount', { count: filtered.length, plural: filtered.length !== 1 ? 's' : '' })}</Text>
 
       <FlatList
         keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={i => i.id}
         renderItem={({ item }) => <BookingCard b={item} onPress={() => { setSelected(item); setShowDetail(true); }} />}
-        ListEmptyComponent={<EmptyView title="No bookings found" sub="Try adjusting your filters or search." />}
+        ListEmptyComponent={<EmptyView title={t('safari.emptyNoBookingsFound')} sub={t('safari.emptyAdjustFilters')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
@@ -1436,6 +1451,7 @@ function fmtBytes(n?: number) {
 function UploadReportModal({ visible, onClose, onUploaded }: {
   visible: boolean; onClose: () => void; onUploaded: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [bookings, setBookings] = useState<SafariBooking[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<SafariBooking | null>(null);
   const [notes, setNotes] = useState('');
@@ -1505,21 +1521,21 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
 
   const bookingLabel = selectedBooking
     ? `${selectedBooking.booking_reference || selectedBooking.id.slice(0, 8)} — ${(selectedBooking as any).clients?.company_name || selectedBooking.customer_name || 'Client'}`
-    : 'Select completed safari…';
+    : t('safari.selectCompletedSafari');
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>Upload Field Report</Text>
+            <Text style={gm.title}>{t('safari.uploadFieldReport')}</Text>
             <TouchableOpacity onPress={() => { onClose(); reset(); }} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
 
             {/* Booking selector */}
-            <FieldLabel label="Safari Booking *" />
+            <FieldLabel label={t('safari.fieldSafariBooking')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowBookingPicker(true)}>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 14, color: selectedBooking ? C.text : C.textMuted }} numberOfLines={1}>{bookingLabel}</Text>
@@ -1528,13 +1544,13 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
             </TouchableOpacity>
 
             {/* File picker */}
-            <FieldLabel label="Document *" />
+            <FieldLabel label={t('safari.fieldDocument')} />
             <TouchableOpacity style={[gm.selector, { justifyContent: 'space-between' }]} onPress={pickFile}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 {pickedFile ? (
                   <Text style={{ fontSize: 13, color: C.text, fontWeight: '600' }} numberOfLines={2}>{pickedFile.name}</Text>
                 ) : (
-                  <Text style={{ fontSize: 14, color: C.textMuted }}>Tap to choose PDF / Word / Excel…</Text>
+                  <Text style={{ fontSize: 14, color: C.textMuted }}>{t('safari.tapToChooseFile')}</Text>
                 )}
                 {pickedFile?.size ? <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{fmtBytes(pickedFile.size)}</Text> : null}
               </View>
@@ -1542,7 +1558,7 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
             </TouchableOpacity>
 
             {/* Notes */}
-            <FieldLabel label="Notes (optional)" />
+            <FieldLabel label={t('safari.fieldNotesOptional')} />
             <TextF value={notes} onChange={setNotes} placeholder="Summary observations, incidents, highlights…" multiline />
 
             <TouchableOpacity style={[gm.saveBtn, uploading && { opacity: 0.6 }]} onPress={upload} disabled={uploading}>
@@ -1551,7 +1567,7 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
                 : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Ico.Upload s={18} c="#fff" />
-                    <Text style={gm.saveBtnT}>Upload Report</Text>
+                    <Text style={gm.saveBtnT}>{t('safari.uploadReportBtn')}</Text>
                   </View>
                 )}
             </TouchableOpacity>
@@ -1559,7 +1575,7 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
 
           <PickerModal
             visible={showBookingPicker}
-            title="Select Safari Booking"
+            title={t('safari.selectSafariBookingTitle')}
             options={bookings.map(b => ({
               value: b.id,
               label: `${b.booking_reference || b.id.slice(0, 8)} · ${(b as any).clients?.company_name || b.customer_name || 'Client'}`,
@@ -1579,6 +1595,7 @@ function UploadReportModal({ visible, onClose, onUploaded }: {
 function ReportPreviewModal({ report, visible, onClose }: {
   report: SafariFieldReport | null; visible: boolean; onClose: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [downloading, setDownloading] = useState(false);
   if (!report) return null;
 
@@ -1653,7 +1670,7 @@ function ReportPreviewModal({ report, visible, onClose }: {
           {/* Safari context */}
           {booking && (
             <View style={rp.contextCard}>
-              <Text style={rp.contextLabel}>SAFARI</Text>
+              <Text style={rp.contextLabel}>{t('safari.safariLabel')}</Text>
               <Text style={rp.contextVal}>{booking.booking_reference}</Text>
               {(booking.clients?.company_name || booking.customer_name) && (
                 <Text style={rp.contextSub}>{booking.clients?.company_name || booking.customer_name}</Text>
@@ -1667,7 +1684,7 @@ function ReportPreviewModal({ report, visible, onClose }: {
           {/* Notes */}
           {report.notes ? (
             <View style={rp.contextCard}>
-              <Text style={rp.contextLabel}>NOTES</Text>
+              <Text style={rp.contextLabel}>{t('safari.notesLabel')}</Text>
               <Text style={{ fontSize: 14, color: C.text, lineHeight: 20, marginTop: 4 }}>{report.notes}</Text>
             </View>
           ) : null}
@@ -1676,7 +1693,7 @@ function ReportPreviewModal({ report, visible, onClose }: {
           <View style={{ gap: 12, marginTop: 8 }}>
             <TouchableOpacity style={rp.previewBtn} onPress={openPreview}>
               <Ico.Eye s={18} c={C.primary} />
-              <Text style={rp.previewBtnT}>Preview Document</Text>
+              <Text style={rp.previewBtnT}>{t('safari.previewDocument')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[rp.downloadBtn, downloading && { opacity: 0.6 }]} onPress={download} disabled={downloading}>
               {downloading
@@ -1684,7 +1701,7 @@ function ReportPreviewModal({ report, visible, onClose }: {
                 : (
                   <>
                     <Ico.Download s={18} c="#fff" />
-                    <Text style={rp.downloadBtnT}>Download & Share</Text>
+                    <Text style={rp.downloadBtnT}>{t('safari.downloadShare')}</Text>
                   </>
                 )}
             </TouchableOpacity>
@@ -1712,6 +1729,7 @@ const rp = StyleSheet.create({
 
 // ── Field Reports list sub-tab ────────────────────────────────────────────────
 function FieldReportsSubTab() {
+  const { t } = useAppPreferences();
   const [reports, setReports] = useState<SafariFieldReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -1763,7 +1781,7 @@ function FieldReportsSubTab() {
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
           <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-            placeholder="Search by booking, client, file…" placeholderTextColor={C.textMuted}
+            placeholder={t('safari.searchFieldReportsPlaceholder')} placeholderTextColor={C.textMuted}
               autoCorrect={false}
               autoCapitalize="none"
               blurOnSubmit={false}
@@ -1820,9 +1838,9 @@ function FieldReportsSubTab() {
             <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
               <Ico.ClipboardCheck s={28} c={C.textMuted} />
             </View>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 6 }}>No Field Reports</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 6 }}>{t('safari.noFieldReports')}</Text>
             <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingHorizontal: 32, lineHeight: 18 }}>
-              Upload post-safari field reports using the + button. Reports are linked to completed bookings.
+              {t('safari.noFieldReportsSubUpload')}
             </Text>
           </View>
         }
@@ -1861,6 +1879,7 @@ const fr = StyleSheet.create({
 function AddEditGuideModal({ visible, guide, onClose, onSaved }: {
   visible: boolean; guide: SafariGuide | null; onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -1904,26 +1923,26 @@ function AddEditGuideModal({ visible, guide, onClose, onSaved }: {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>{guide ? 'Edit Guide' : 'Add Safari Guide'}</Text>
+            <Text style={gm.title}>{guide ? t('safari.editGuideTitle') : t('safari.addGuideTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-            <FieldLabel label="Full Name *" /><TextF value={name} onChange={setName} placeholder="e.g. John Musoke" />
-            <FieldLabel label="Phone" /><TextF value={phone} onChange={setPhone} placeholder="+256 700 000000" keyboardType="phone-pad" />
-            <FieldLabel label="Email" /><TextF value={email} onChange={setEmail} placeholder="guide@example.com" keyboardType="email-address" />
-            <FieldLabel label="Languages (comma separated)" /><TextF value={langs} onChange={setLangs} placeholder="English, Swahili, French" />
-            <FieldLabel label="Status" />
+            <FieldLabel label={t('driverMgmt.fieldFullName')} /><TextF value={name} onChange={setName} placeholder="e.g. John Musoke" />
+            <FieldLabel label={t('driverMgmt.fieldPhone')} /><TextF value={phone} onChange={setPhone} placeholder="+256 700 000000" keyboardType="phone-pad" />
+            <FieldLabel label={t('driverMgmt.fieldEmail')} /><TextF value={email} onChange={setEmail} placeholder="guide@example.com" keyboardType="email-address" />
+            <FieldLabel label={t('safari.fieldLanguages')} /><TextF value={langs} onChange={setLangs} placeholder="English, Swahili, French" />
+            <FieldLabel label={t('safari.fieldStatus')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowStatusPicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{status}</Text>
               <Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <FieldLabel label="Rating (0–5)" /><TextF value={rating} onChange={setRating} placeholder="4.5" keyboardType="decimal-pad" />
+            <FieldLabel label={t('safari.fieldRating')} /><TextF value={rating} onChange={setRating} placeholder="4.5" keyboardType="decimal-pad" />
             <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{guide ? 'Update Guide' : 'Add Guide'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{guide ? t('safari.updateGuideBtn') : t('safari.addGuideBtn')}</Text>}
             </TouchableOpacity>
           </ScrollView>
-          <PickerModal visible={showStatusPicker} title="Guide Status"
+          <PickerModal visible={showStatusPicker} title={t('safari.guideStatusTitle')}
             options={GUIDE_STATUSES.map(s => ({ value: s, label: s.replace('_', ' ') }))}
             selected={status} onSelect={o => setStatus(o.value)} onClose={() => setShowStatusPicker(false)} />
         </SafeAreaView>
@@ -1944,6 +1963,7 @@ const gm = StyleSheet.create({
 function AddEditPermitModal({ visible, permit, onClose, onSaved }: {
   visible: boolean; permit: PermitCatalog | null; onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [type, setType] = useState('Park Entry');
   const [costUsd, setCostUsd] = useState('');
@@ -1985,29 +2005,29 @@ function AddEditPermitModal({ visible, permit, onClose, onSaved }: {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>{permit ? 'Edit Permit' : 'Add Permit'}</Text>
+            <Text style={gm.title}>{permit ? t('safari.editPermitTitle') : t('safari.addPermitTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-            <FieldLabel label="Permit Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Gorilla Permit" />
-            <FieldLabel label="Permit Type" />
+            <FieldLabel label={t('safari.fieldPermitName')} /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Gorilla Permit" />
+            <FieldLabel label={t('safari.fieldPermitType')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowTypePicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{type}</Text>
               <Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <FieldLabel label="Cost (USD)" /><TextF value={costUsd} onChange={setCostUsd} placeholder="700.00" keyboardType="decimal-pad" />
-            <FieldLabel label="Cost (UGX)" /><TextF value={costUgx} onChange={setCostUgx} placeholder="2600000" keyboardType="number-pad" />
-            <FieldLabel label="Validity (days)" /><TextF value={validity} onChange={setValidity} placeholder="1" keyboardType="number-pad" />
+            <FieldLabel label={t('safari.fieldCostUsd')} /><TextF value={costUsd} onChange={setCostUsd} placeholder="700.00" keyboardType="decimal-pad" />
+            <FieldLabel label={t('safari.fieldCostUgx')} /><TextF value={costUgx} onChange={setCostUgx} placeholder="2600000" keyboardType="number-pad" />
+            <FieldLabel label={t('safari.fieldValidity')} /><TextF value={validity} onChange={setValidity} placeholder="1" keyboardType="number-pad" />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-              <Text style={{ fontSize: 14, color: C.text, fontWeight: '600' }}>Active</Text>
+              <Text style={{ fontSize: 14, color: C.text, fontWeight: '600' }}>{t('safari.activeLabel')}</Text>
               <Switch value={active} onValueChange={setActive} trackColor={{ true: C.primary }} />
             </View>
             <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{permit ? 'Update Permit' : 'Add to Catalog'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{permit ? t('safari.updatePermitBtn') : t('safari.addToCatalogBtn')}</Text>}
             </TouchableOpacity>
           </ScrollView>
-          <PickerModal visible={showTypePicker} title="Permit Type"
+          <PickerModal visible={showTypePicker} title={t('safari.permitTypeTitle')}
             options={PERMIT_TYPES.map(t => ({ value: t, label: t }))}
             selected={type} onSelect={o => setType(o.value)} onClose={() => setShowTypePicker(false)} />
         </SafeAreaView>
@@ -2017,6 +2037,7 @@ function AddEditPermitModal({ visible, permit, onClose, onSaved }: {
 }
 
 function OperationsTab() {
+  const { t } = useAppPreferences();
   const [subTab, setSubTab] = useState<'guides' | 'permits' | 'reports'>('guides');
   const [guides, setGuides] = useState<SafariGuide[]>([]);
   const [permits, setPermits] = useState<PermitCatalog[]>([]);
@@ -2043,7 +2064,7 @@ function OperationsTab() {
   }, [fetchGuides, fetchPermits]);
 
   const deleteGuide = useCallback((g: SafariGuide) => {
-    Alert.alert('Delete Guide', `Remove ${g.full_name} from the system?`, [
+    Alert.alert(t('safari.deleteGuideTitle'), t('safari.deleteGuideMsg', { name: g.full_name }), [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await supabase.from('safari_guides').delete().eq('id', g.id);
@@ -2072,13 +2093,13 @@ function OperationsTab() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
         <View style={op.subBar}>
           <TouchableOpacity style={[op.subBtn, subTab === 'guides' && op.subBtnOn]} onPress={() => { setSubTab('guides'); setSearch(''); }}>
-            <Text style={[op.subBtnT, subTab === 'guides' && op.subBtnTOn]}>Guides ({guides.length})</Text>
+            <Text style={[op.subBtnT, subTab === 'guides' && op.subBtnTOn]}>{t('safari.subGuidesCount', { count: guides.length })}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[op.subBtn, subTab === 'permits' && op.subBtnOn]} onPress={() => { setSubTab('permits'); setSearch(''); }}>
-            <Text style={[op.subBtnT, subTab === 'permits' && op.subBtnTOn]}>Permit Catalog ({permits.length})</Text>
+            <Text style={[op.subBtnT, subTab === 'permits' && op.subBtnTOn]}>{t('safari.subPermitCatalogCount', { count: permits.length })}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[op.subBtn, subTab === 'reports' && op.subBtnOn]} onPress={() => { setSubTab('reports'); setSearch(''); }}>
-            <Text style={[op.subBtnT, subTab === 'reports' && op.subBtnTOn]}>Field Reports</Text>
+            <Text style={[op.subBtnT, subTab === 'reports' && op.subBtnTOn]}>{t('safari.subFieldReports')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -2092,7 +2113,7 @@ function OperationsTab() {
           <View style={ts.searchBox}>
             <Ico.Search s={15} c={C.textMuted} />
             <TextInput style={ts.searchInput} value={search} onChangeText={setSearch}
-              placeholder={subTab === 'guides' ? 'Search guides…' : 'Search permits…'} placeholderTextColor={C.textMuted}
+              placeholder={subTab === 'guides' ? t('safari.searchGuidesPlaceholder') : t('safari.searchPermitsPlaceholder')} placeholderTextColor={C.textMuted}
                 autoCorrect={false}
                 autoCapitalize="none"
                 blurOnSubmit={false}
@@ -2122,7 +2143,7 @@ function OperationsTab() {
                   </View>
                 ) : null}
                 <View style={[op.stDot, { backgroundColor: g.status === 'available' ? C.success + '20' : C.gold + '20' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '700', color: g.status === 'available' ? C.success : C.gold }}>{g.status || 'unknown'}</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: g.status === 'available' ? C.success : C.gold }}>{g.status || t('safari.statusUnknown')}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   <TouchableOpacity style={op.iconBtn} onPress={() => { setEditGuide(g); setShowGuideModal(true); }}>
@@ -2135,7 +2156,7 @@ function OperationsTab() {
               </View>
             </View>
           )}
-          ListEmptyComponent={<EmptyView title="No guides found" sub="Add safari guides using the + button." />}
+          ListEmptyComponent={<EmptyView title={t('safari.noGuidesFound')} sub={t('safari.noGuidesSub')} />}
           contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         />
       )}
@@ -2157,7 +2178,7 @@ function OperationsTab() {
               </View>
               <View style={{ alignItems: 'flex-end', gap: 8 }}>
                 <View style={[op.stDot, { backgroundColor: p.is_active ? C.success + '20' : C.danger + '20' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '700', color: p.is_active ? C.success : C.danger }}>{p.is_active ? 'Active' : 'Inactive'}</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: p.is_active ? C.success : C.danger }}>{p.is_active ? t('safari.activeLabel') : t('safari.inactiveLabel')}</Text>
                 </View>
                 <TouchableOpacity style={op.iconBtn} onPress={() => { setEditPermit(p); setShowPermitModal(true); }}>
                   <Ico.Edit s={14} c={C.primary} />
@@ -2165,7 +2186,7 @@ function OperationsTab() {
               </View>
             </View>
           )}
-          ListEmptyComponent={<EmptyView title="No permits in catalog" sub="Add permit types using the + button." />}
+          ListEmptyComponent={<EmptyView title={t('safari.noPermitsInCatalog')} sub={t('safari.noPermitsSub')} />}
           contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         />
       )}
@@ -2214,6 +2235,7 @@ const op = StyleSheet.create({
 function PackageFormModal({ visible, pkg, onClose, onSaved }: {
   visible: boolean; pkg: SafariPackage | null; onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [cat, setCat] = useState('Wildlife Safari');
@@ -2267,37 +2289,37 @@ function PackageFormModal({ visible, pkg, onClose, onSaved }: {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>{pkg ? 'Edit Package' : 'New Safari Package'}</Text>
+            <Text style={gm.title}>{pkg ? t('safari.editPackageTitle') : t('safari.newPackageTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-            <FieldLabel label="Package Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Uganda Gorilla Safari" />
-            <FieldLabel label="Package Code" /><TextF value={code} onChange={setCode} placeholder="e.g. UG-GOR-3D" />
-            <FieldLabel label="Category" />
+            <FieldLabel label={t('safari.fieldPackageName')} /><TextF value={name} onChange={setName} placeholder="e.g. Uganda Gorilla Safari" />
+            <FieldLabel label={t('safari.fieldPackageCode')} /><TextF value={code} onChange={setCode} placeholder="e.g. UG-GOR-3D" />
+            <FieldLabel label={t('safari.fieldCategory')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowCatPicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{cat}</Text><Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <FieldLabel label="Country" />
+            <FieldLabel label={t('safari.fieldCountry')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowCountryPicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{country}</Text><Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <FieldLabel label="Duration (days)" /><TextF value={days} onChange={setDays} placeholder="3" keyboardType="number-pad" />
-            <FieldLabel label="Price (USD)" /><TextF value={priceUsd} onChange={setPriceUsd} placeholder="1500.00" keyboardType="decimal-pad" />
-            <FieldLabel label="Price (UGX)" /><TextF value={priceUgx} onChange={setPriceUgx} placeholder="5500000" keyboardType="number-pad" />
-            <FieldLabel label="Capacity Min" /><TextF value={capMin} onChange={setCapMin} placeholder="2" keyboardType="number-pad" />
-            <FieldLabel label="Capacity Max" /><TextF value={capMax} onChange={setCapMax} placeholder="12" keyboardType="number-pad" />
-            <FieldLabel label="Description" /><TextF value={desc} onChange={setDesc} placeholder="Brief description of the package…" multiline />
+            <FieldLabel label={t('safari.fieldDuration')} /><TextF value={days} onChange={setDays} placeholder="3" keyboardType="number-pad" />
+            <FieldLabel label={t('safari.fieldPriceUsd')} /><TextF value={priceUsd} onChange={setPriceUsd} placeholder="1500.00" keyboardType="decimal-pad" />
+            <FieldLabel label={t('safari.fieldPriceUgx')} /><TextF value={priceUgx} onChange={setPriceUgx} placeholder="5500000" keyboardType="number-pad" />
+            <FieldLabel label={t('safari.fieldCapMin')} /><TextF value={capMin} onChange={setCapMin} placeholder="2" keyboardType="number-pad" />
+            <FieldLabel label={t('safari.fieldCapMax')} /><TextF value={capMax} onChange={setCapMax} placeholder="12" keyboardType="number-pad" />
+            <FieldLabel label={t('safari.fieldDescription')} /><TextF value={desc} onChange={setDesc} placeholder="Brief description of the package…" multiline />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-              <Text style={{ fontSize: 14, color: C.text, fontWeight: '600' }}>Active</Text>
+              <Text style={{ fontSize: 14, color: C.text, fontWeight: '600' }}>{t('safari.activeLabel')}</Text>
               <Switch value={active} onValueChange={setActive} trackColor={{ true: C.primary }} />
             </View>
             <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{pkg ? 'Update Package' : 'Create Package'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{pkg ? t('safari.updatePackageBtn') : t('safari.createPackageBtn')}</Text>}
             </TouchableOpacity>
           </ScrollView>
-          <PickerModal visible={showCatPicker} title="Category" options={PACKAGE_CATS.map(c => ({ value: c, label: c }))} selected={cat} onSelect={o => setCat(o.value)} onClose={() => setShowCatPicker(false)} />
-          <PickerModal visible={showCountryPicker} title="Country" options={COUNTRIES.filter(c => c !== 'All').map(c => ({ value: c, label: c }))} selected={country} onSelect={o => setCountry(o.value)} onClose={() => setShowCountryPicker(false)} />
+          <PickerModal visible={showCatPicker} title={t('safari.categoryTitle')} options={PACKAGE_CATS.map(c => ({ value: c, label: c }))} selected={cat} onSelect={o => setCat(o.value)} onClose={() => setShowCatPicker(false)} />
+          <PickerModal visible={showCountryPicker} title={t('safari.countryTitle')} options={COUNTRIES.filter(c => c !== 'All').map(c => ({ value: c, label: c }))} selected={country} onSelect={o => setCountry(o.value)} onClose={() => setShowCountryPicker(false)} />
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
@@ -2305,6 +2327,7 @@ function PackageFormModal({ visible, pkg, onClose, onSaved }: {
 }
 
 function PackagesTab() {
+  const { t } = useAppPreferences();
   const [packages, setPackages] = useState<SafariPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [countryFilter, setCountryFilter] = useState('All');
@@ -2321,7 +2344,7 @@ function PackagesTab() {
   useEffect(() => { setLoading(true); fetchPkgs().finally(() => setLoading(false)); }, [fetchPkgs]);
 
   const deletePkg = useCallback((p: SafariPackage) => {
-    Alert.alert('Delete Package', `Remove "${p.name}"?`, [
+    Alert.alert(t('safari.deletePackageTitle'), t('safari.removeQuotedConfirm', { name: p.name }), [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await supabase.from('safari_packages').delete().eq('id', p.id);
@@ -2361,7 +2384,7 @@ function PackagesTab() {
                 {p.category ? <View style={pgStyles.tag}><Text style={pgStyles.tagT}>{p.category}</Text></View> : null}
                 {p.country ? <View style={[pgStyles.tag, { backgroundColor: C.goldSoft }]}><Text style={[pgStyles.tagT, { color: C.gold }]}>{p.country}</Text></View> : null}
                 <View style={[pgStyles.tag, { backgroundColor: p.is_active ? C.primarySoft : C.input }]}>
-                  <Text style={[pgStyles.tagT, { color: p.is_active ? C.primary : C.textMuted }]}>{p.is_active ? 'Active' : 'Inactive'}</Text>
+                  <Text style={[pgStyles.tagT, { color: p.is_active ? C.primary : C.textMuted }]}>{p.is_active ? t('safari.activeLabel') : t('safari.inactiveLabel')}</Text>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 16 }}>
@@ -2380,7 +2403,7 @@ function PackagesTab() {
             </View>
           </View>
         )}
-        ListEmptyComponent={<EmptyView title="No packages found" sub="Create safari packages using the + button." />}
+        ListEmptyComponent={<EmptyView title={t('safari.noPackagesFoundSafari')} sub={t('safari.noPackagesSubSafari')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
       />
       <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditPkg(null); setShowPkgModal(true); }}>
@@ -2424,6 +2447,7 @@ interface SafariAnalyticsMonth {
 }
 
 function AnalyticsTab() {
+  const { t } = useAppPreferences();
   const [summary, setSummary] = useState<SafariAnalyticsSummary | null>(null);
   const [monthly, setMonthly] = useState<SafariAnalyticsMonth[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2464,10 +2488,10 @@ function AnalyticsTab() {
   if (error || !summary) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 6 }}>Couldn't load analytics</Text>
+        <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 6 }}>{t('safari.couldntLoadAnalytics')}</Text>
         <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', marginBottom: 16 }}>{error || 'No data returned.'}</Text>
         <TouchableOpacity style={{ backgroundColor: C.primary, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 28 }} onPress={fetchAnalytics}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Retry</Text>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -2480,17 +2504,17 @@ function AnalyticsTab() {
       keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
       {/* KPI Grid — every field here is exactly what get_safari_analytics
           returns, the same function the website's own analytics use. */}
-      <Text style={an.sectionTitle}>Key Performance Indicators (Year to Date)</Text>
+      <Text style={an.sectionTitle}>{t('safari.kpiTitle')}</Text>
       <View style={an.kpiGrid}>
         {[
-          { l: 'Total Bookings', v: summary.total_bookings.toString(), c: C.primary },
-          { l: 'Confirmed', v: summary.confirmed.toString(), c: '#1a5a8f' },
-          { l: 'Completed', v: summary.completed.toString(), c: C.textMuted },
-          { l: 'Pending', v: summary.pending.toString(), c: C.gold },
-          { l: 'Total Revenue', v: formatCurrency(summary.total_revenue, 'USD'), c: C.primary },
-          { l: 'Total Expenses', v: formatCurrency(summary.total_expenses, 'USD'), c: C.danger },
-          { l: 'Total Profit', v: formatCurrency(summary.total_profit, 'USD'), c: C.success },
-          { l: 'Profit Margin', v: `${summary.profit_margin.toFixed(1)}%`, c: summary.profit_margin >= 0 ? C.success : C.danger },
+          { l: t('safari.kpiTotalBookings'), v: summary.total_bookings.toString(), c: C.primary },
+          { l: t('safari.kpiConfirmed'), v: summary.confirmed.toString(), c: '#1a5a8f' },
+          { l: t('safari.kpiCompleted'), v: summary.completed.toString(), c: C.textMuted },
+          { l: t('safari.kpiPending'), v: summary.pending.toString(), c: C.gold },
+          { l: t('safari.kpiTotalRevenue'), v: formatCurrency(summary.total_revenue, 'USD'), c: C.primary },
+          { l: t('safari.kpiTotalExpenses'), v: formatCurrency(summary.total_expenses, 'USD'), c: C.danger },
+          { l: t('safari.kpiTotalProfit'), v: formatCurrency(summary.total_profit, 'USD'), c: C.success },
+          { l: t('safari.kpiProfitMargin'), v: `${summary.profit_margin.toFixed(1)}%`, c: summary.profit_margin >= 0 ? C.success : C.danger },
         ].map((k, i) => (
           <View key={i} style={an.kpiCard}>
             <Text style={an.kpiLabel}>{k.l}</Text>
@@ -2500,10 +2524,10 @@ function AnalyticsTab() {
       </View>
 
       {/* Monthly performance */}
-      <Text style={[an.sectionTitle, { marginTop: 20 }]}>Monthly Performance</Text>
+      <Text style={[an.sectionTitle, { marginTop: 20 }]}>{t('safari.monthlyPerformance')}</Text>
       <View style={an.chartCard}>
         {monthly.length === 0 ? (
-          <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingVertical: 8 }}>No bookings in this period yet.</Text>
+          <Text style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', paddingVertical: 8 }}>{t('safari.noBookingsThisPeriod')}</Text>
         ) : monthly.map(m => {
           const pct = (m.revenue / maxMonthlyRevenue) * 100;
           return (
@@ -2562,6 +2586,7 @@ function AirportFormModal({ visible, airport, defaultCountry, onClose, onSaved }
   visible: boolean; airport: Airport | null; defaultCountry: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [city, setCity] = useState('');
@@ -2606,30 +2631,30 @@ function AirportFormModal({ visible, airport, defaultCountry, onClose, onSaved }
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>{airport ? 'Edit Airport' : 'Add Airport'}</Text>
+            <Text style={gm.title}>{airport ? t('safari.editAirportTitle') : t('safari.addAirportTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-            <FieldLabel label="Airport Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Entebbe International Airport" />
-            <FieldLabel label="IATA Code" /><TextF value={code} onChange={setCode} placeholder="EBB" />
-            <FieldLabel label="City" /><TextF value={city} onChange={setCity} placeholder="Entebbe" />
-            <FieldLabel label="Country" />
+            <FieldLabel label={t('safari.fieldAirportName')} /><TextF value={name} onChange={setName} placeholder="e.g. Entebbe International Airport" />
+            <FieldLabel label={t('safari.fieldIataCode')} /><TextF value={code} onChange={setCode} placeholder="EBB" />
+            <FieldLabel label={t('safari.fieldCity')} /><TextF value={city} onChange={setCity} placeholder="Entebbe" />
+            <FieldLabel label={t('safari.fieldCountry')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowStatusPicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{country}</Text><Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <FieldLabel label="Type" />
+            <FieldLabel label={t('safari.fieldType')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowTypePicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{type}</Text><Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{airport ? 'Update' : 'Add Airport'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{airport ? t('safari.updateBtn') : t('safari.addAirportBtn')}</Text>}
             </TouchableOpacity>
           </ScrollView>
-          <PickerModal visible={showTypePicker} title="Airport Type"
+          <PickerModal visible={showTypePicker} title={t('safari.airportTypeTitle')}
             options={['International', 'Domestic', 'Regional'].map(t => ({ value: t, label: t }))}
             selected={type} onSelect={o => setType(o.value)} onClose={() => setShowTypePicker(false)} />
-          <PickerModal visible={showStatusPicker} title="Country"
+          <PickerModal visible={showStatusPicker} title={t('safari.fieldCountry')}
             options={['Uganda', 'Kenya', 'Tanzania', 'Rwanda'].map(c => ({ value: c, label: c }))}
             selected={country} onSelect={o => setCountry(o.value)} onClose={() => setShowStatusPicker(false)} />
         </SafeAreaView>
@@ -2645,6 +2670,7 @@ const TYPE_BADGE: Record<string, { bg: string; text: string }> = {
 };
 
 function AirportsTab() {
+  const { t } = useAppPreferences();
   const [airports, setAirports] = useState<Airport[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -2660,7 +2686,7 @@ function AirportsTab() {
   useEffect(() => { setLoading(true); fetchAirports().finally(() => setLoading(false)); }, [fetchAirports]);
 
   const deleteAirport = useCallback((a: Airport) => {
-    Alert.alert('Delete Airport', `Remove ${a.airport_name}?`, [
+    Alert.alert(t('safari.deleteAirportTitle'), t('safari.removeQuotedConfirm', { name: a.airport_name }), [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await supabase.from('safari_airports').delete().eq('id', a.id);
@@ -2686,7 +2712,7 @@ function AirportsTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search airports, cities, codes…" placeholderTextColor={C.textMuted}
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder={t('safari.searchAirportsPlaceholder')} placeholderTextColor={C.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
             blurOnSubmit={false}
@@ -2718,7 +2744,7 @@ function AirportsTab() {
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                   {a.type ? <View style={[apStyle.typeBadge, { backgroundColor: typeCfg.bg }]}><Text style={[apStyle.typeText, { color: typeCfg.text }]}>{a.type}</Text></View> : null}
                   <View style={[apStyle.typeBadge, { backgroundColor: a.status === 'Active' ? C.primarySoft : C.input }]}>
-                    <Text style={[apStyle.typeText, { color: a.status === 'Active' ? C.primary : C.textMuted }]}>{a.status || 'Active'}</Text>
+                    <Text style={[apStyle.typeText, { color: a.status === 'Active' ? C.primary : C.textMuted }]}>{a.status || t('safari.activeLabel')}</Text>
                   </View>
                 </View>
               </View>
@@ -2733,7 +2759,7 @@ function AirportsTab() {
             </View>
           );
         }}
-        ListEmptyComponent={<EmptyView title="No airports found" sub="Add airports using the + button below." />}
+        ListEmptyComponent={<EmptyView title={t('safari.noAirportsFound')} sub={t('safari.noAirportsSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
       />
       <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditAirport(null); setShowModal(true); }}>
@@ -2774,6 +2800,7 @@ interface Lodge {
 function LodgeFormModal({ visible, lodge, onClose, onSaved }: {
   visible: boolean; lodge: Lodge | null; onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [dest, setDest] = useState('');
   const [type, setType] = useState('Lodge');
@@ -2822,40 +2849,40 @@ function LodgeFormModal({ visible, lodge, onClose, onSaved }: {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>{lodge ? 'Edit Lodge' : 'Add Hotel / Lodge'}</Text>
+            <Text style={gm.title}>{lodge ? t('safari.editLodgeTitle') : t('safari.addLodgeTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-            <FieldLabel label="Lodge / Hotel Name *" /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Forest Lodge" />
-            <FieldLabel label="Destination" /><TextF value={dest} onChange={setDest} placeholder="e.g. Bwindi Impenetrable Forest" />
-            <FieldLabel label="Type" />
+            <FieldLabel label={t('safari.fieldLodgeName')} /><TextF value={name} onChange={setName} placeholder="e.g. Bwindi Forest Lodge" />
+            <FieldLabel label={t('safari.fieldDestination')} /><TextF value={dest} onChange={setDest} placeholder="e.g. Bwindi Impenetrable Forest" />
+            <FieldLabel label={t('safari.fieldType')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowTypePicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{type}</Text><Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 16, marginBottom: 4, fontWeight: '700' }}>RACK RATES (USD)</Text>
+            <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 16, marginBottom: 4, fontWeight: '700' }}>{t('safari.rackRates')}</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <FieldLabel label="Double" /><TextF value={pDouble} onChange={setPDouble} placeholder="350" keyboardType="decimal-pad" />
+                <FieldLabel label={t('safari.fieldDouble')} /><TextF value={pDouble} onChange={setPDouble} placeholder="350" keyboardType="decimal-pad" />
               </View>
               <View style={{ flex: 1 }}>
-                <FieldLabel label="Single" /><TextF value={pSingle} onChange={setPSingle} placeholder="250" keyboardType="decimal-pad" />
+                <FieldLabel label={t('safari.fieldSingle')} /><TextF value={pSingle} onChange={setPSingle} placeholder="250" keyboardType="decimal-pad" />
               </View>
             </View>
-            <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 16, marginBottom: 4, fontWeight: '700' }}>STO / CONTRACT RATES (USD)</Text>
+            <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 16, marginBottom: 4, fontWeight: '700' }}>{t('safari.stoRates')}</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <FieldLabel label="STO Double" /><TextF value={pStoDouble} onChange={setPStoDouble} placeholder="280" keyboardType="decimal-pad" />
+                <FieldLabel label={t('safari.fieldStoDouble')} /><TextF value={pStoDouble} onChange={setPStoDouble} placeholder="280" keyboardType="decimal-pad" />
               </View>
               <View style={{ flex: 1 }}>
-                <FieldLabel label="STO Single" /><TextF value={pStoSingle} onChange={setPStoSingle} placeholder="200" keyboardType="decimal-pad" />
+                <FieldLabel label={t('safari.fieldStoSingle')} /><TextF value={pStoSingle} onChange={setPStoSingle} placeholder="200" keyboardType="decimal-pad" />
               </View>
             </View>
             <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{lodge ? 'Update Lodge' : 'Add Lodge'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{lodge ? t('safari.updateLodgeBtn') : t('safari.addLodgeBtn')}</Text>}
             </TouchableOpacity>
           </ScrollView>
-          <PickerModal visible={showTypePicker} title="Lodge Type"
+          <PickerModal visible={showTypePicker} title={t('safari.lodgeTypeTitle')}
             options={['Lodge', 'Hotel', 'Tented Camp', 'Budget Hotel', 'Resort', 'Guesthouse', 'Hostel'].map(t => ({ value: t, label: t }))}
             selected={type} onSelect={o => setType(o.value)} onClose={() => setShowTypePicker(false)} />
         </SafeAreaView>
@@ -2865,6 +2892,7 @@ function LodgeFormModal({ visible, lodge, onClose, onSaved }: {
 }
 
 function HotelsLodgesTab() {
+  const { t } = useAppPreferences();
   const [lodges, setLodges] = useState<Lodge[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -2881,7 +2909,7 @@ function HotelsLodgesTab() {
   useEffect(() => { setLoading(true); fetchLodges().finally(() => setLoading(false)); }, [fetchLodges]);
 
   const deleteLodge = useCallback((l: Lodge) => {
-    Alert.alert('Delete Lodge', `Remove "${l.lodge_name}"?`, [
+    Alert.alert(t('safari.deleteLodgeTitle'), t('safari.removeQuotedConfirm', { name: l.lodge_name }), [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await supabase.from('safari_lodges').delete().eq('id', l.id);
@@ -2903,7 +2931,7 @@ function HotelsLodgesTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search lodges, destinations…" placeholderTextColor={C.textMuted}
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder={t('safari.searchLodgesPlaceholder')} placeholderTextColor={C.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
             blurOnSubmit={false}
@@ -2922,10 +2950,10 @@ function HotelsLodgesTab() {
               {l.destination ? <Text style={ldStyle.dest}>{l.destination}</Text> : null}
               {l.lodge_type ? <View style={ldStyle.typeBadge}><Text style={ldStyle.typeText}>{l.lodge_type}</Text></View> : null}
               <View style={ldStyle.priceGrid}>
-                {l.price_double_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>Double</Text><Text style={ldStyle.priceVal}>${l.price_double_usd}</Text></View> : null}
-                {l.price_single_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>Single</Text><Text style={ldStyle.priceVal}>${l.price_single_usd}</Text></View> : null}
-                {l.price_sto_double_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>STO Dbl</Text><Text style={[ldStyle.priceVal, { color: C.gold }]}>${l.price_sto_double_usd}</Text></View> : null}
-                {l.price_sto_single_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>STO Sgl</Text><Text style={[ldStyle.priceVal, { color: C.gold }]}>${l.price_sto_single_usd}</Text></View> : null}
+                {l.price_double_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>{t('safari.priceLabelDouble')}</Text><Text style={ldStyle.priceVal}>${l.price_double_usd}</Text></View> : null}
+                {l.price_single_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>{t('safari.priceLabelSingle')}</Text><Text style={ldStyle.priceVal}>${l.price_single_usd}</Text></View> : null}
+                {l.price_sto_double_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>{t('safari.priceLabelStoDbl')}</Text><Text style={[ldStyle.priceVal, { color: C.gold }]}>${l.price_sto_double_usd}</Text></View> : null}
+                {l.price_sto_single_usd != null ? <View style={ldStyle.priceBox}><Text style={ldStyle.priceLabel}>{t('safari.priceLabelStoSgl')}</Text><Text style={[ldStyle.priceVal, { color: C.gold }]}>${l.price_sto_single_usd}</Text></View> : null}
               </View>
             </View>
             <View style={{ gap: 8, paddingLeft: 10 }}>
@@ -2938,7 +2966,7 @@ function HotelsLodgesTab() {
             </View>
           </View>
         )}
-        ListEmptyComponent={<EmptyView title="No lodges found" sub="Add hotels & lodges using the + button." />}
+        ListEmptyComponent={<EmptyView title={t('safari.noLodgesFound')} sub={t('safari.noLodgesSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
       />
       <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditLodge(null); setShowModal(true); }}>
@@ -2975,6 +3003,7 @@ interface NationalPark {
 }
 
 function NationalParksTab() {
+  const { t } = useAppPreferences();
   const [parks, setParks] = useState<NationalPark[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -3008,7 +3037,7 @@ function NationalParksTab() {
   }, [editValues]);
 
   const deletePark = useCallback((p: NationalPark) => {
-    Alert.alert('Delete Park', `Remove "${p.park_name}"?`, [
+    Alert.alert(t('safari.deleteParkTitle'), t('safari.removeQuotedConfirm', { name: p.park_name }), [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await supabase.from('national_parks').delete().eq('id', p.id);
@@ -3037,7 +3066,7 @@ function NationalParksTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search parks, regions…" placeholderTextColor={C.textMuted}
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder={t('safari.searchParksPlaceholder')} placeholderTextColor={C.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
             blurOnSubmit={false}
@@ -3068,10 +3097,10 @@ function NationalParksTab() {
                   <TextInput style={pkStyle.editInput} value={editValues.description || ''} onChangeText={v => setEditValues(e => ({ ...e, description: v }))} placeholder="Description" multiline />
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity style={[pkStyle.actionBtn, { backgroundColor: C.primary, flex: 1 }]} onPress={() => saveEdit(p.id)} disabled={saving}>
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{saving ? '...' : 'Save'}</Text>
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{saving ? '...' : t('common.save')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[pkStyle.actionBtn, { backgroundColor: C.input, flex: 1 }]} onPress={cancelEdit}>
-                      <Text style={{ color: C.textMuted, fontWeight: '700', fontSize: 13 }}>Cancel</Text>
+                      <Text style={{ color: C.textMuted, fontWeight: '700', fontSize: 13 }}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -3094,11 +3123,11 @@ function NationalParksTab() {
             </View>
           );
         }}
-        ListEmptyComponent={<EmptyView title="No parks found" sub="Add national parks using the + button." />}
+        ListEmptyComponent={<EmptyView title={t('safari.noParksFound')} sub={t('safari.noParksSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
       />
       <TouchableOpacity style={fabStyle.fab} onPress={async () => {
-        const name = await new Promise<string | null>(res => Alert.prompt ? Alert.prompt('Add Park', 'Enter park name:', res, 'plain-text') : res(null));
+        const name = await new Promise<string | null>(res => Alert.prompt ? Alert.prompt(t('safari.addParkPrompt'), t('safari.addParkMessage'), res, 'plain-text') : res(null));
         if (!name) return;
         const { error } = await supabase.from('national_parks').insert({ park_name: name.trim(), country: countryFilter === 'All' ? 'Uganda' : countryFilter });
         if (!error) fetchParks();
@@ -3139,6 +3168,7 @@ interface PaymentBooking {
 }
 
 function PaymentsTab() {
+  const { t } = useAppPreferences();
   const [bookings, setBookings] = useState<PaymentBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -3168,9 +3198,9 @@ function PaymentsTab() {
 
   const getPayStatus = (b: PaymentBooking) => {
     const paid = b.amount_paid || 0; const total = b.total_price_usd || 0;
-    if (paid <= 0) return { label: 'Unpaid', color: C.danger };
-    if (paid >= total && total > 0) return { label: 'Fully Paid', color: C.success };
-    return { label: 'Partial', color: C.gold };
+    if (paid <= 0) return { label: t('safari.unpaid'), color: C.danger };
+    if (paid >= total && total > 0) return { label: t('safari.fullyPaid'), color: C.success };
+    return { label: t('safari.partial'), color: C.gold };
   };
 
   if (loading) return <LoadingView label="Loading payment records…" />;
@@ -3180,11 +3210,11 @@ function PaymentsTab() {
       {/* Summary KPIs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}>
         {[
-          { l: 'Fully Paid', v: fullyPaid.length.toString(), c: C.success },
-          { l: 'Total Revenue', v: formatCurrency(totalRevenue, 'USD'), c: C.primary },
-          { l: 'Avg. Value', v: formatCurrency(avgValue, 'USD'), c: C.primary },
-          { l: 'Active', v: activeCount.toString(), c: C.gold },
-          { l: 'Completed', v: completedCount.toString(), c: C.textMuted },
+          { l: t('safari.fullyPaid'), v: fullyPaid.length.toString(), c: C.success },
+          { l: t('safari.kpiTotalRevenue'), v: formatCurrency(totalRevenue, 'USD'), c: C.primary },
+          { l: t('safari.kpiAvgValue'), v: formatCurrency(avgValue, 'USD'), c: C.primary },
+          { l: t('safari.activeLabel'), v: activeCount.toString(), c: C.gold },
+          { l: t('safari.kpiCompleted'), v: completedCount.toString(), c: C.textMuted },
         ].map((k, i) => (
           <View key={i} style={paStyle.kpiCard}>
             <Text style={paStyle.kpiLabel}>{k.l}</Text>
@@ -3195,7 +3225,7 @@ function PaymentsTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search bookings, customers…" placeholderTextColor={C.textMuted}
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder={t('safari.searchPaymentsPlaceholder')} placeholderTextColor={C.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
             blurOnSubmit={false}
@@ -3225,14 +3255,14 @@ function PaymentsTab() {
                   <Text style={paStyle.date}>{fmtDate(b.start_date)} → {fmtDate(b.end_date)}</Text>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={paStyle.paid}>{formatCurrency(b.amount_paid || 0, 'USD')}</Text>
-                    {(b.total_price_usd || 0) > 0 ? <Text style={paStyle.total}>of {formatCurrency(b.total_price_usd || 0, 'USD')}</Text> : null}
+                    {(b.total_price_usd || 0) > 0 ? <Text style={paStyle.total}>{t('safari.ofAmount', { amount: formatCurrency(b.total_price_usd || 0, 'USD') })}</Text> : null}
                   </View>
                 </View>
               </View>
             </View>
           );
         }}
-        ListEmptyComponent={<EmptyView title="No payment records" sub="Payment records appear when safari bookings have amounts." />}
+        ListEmptyComponent={<EmptyView title={t('safari.noPaymentRecords')} sub={t('safari.noPaymentRecordsSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
       />
     </View>
@@ -3275,6 +3305,7 @@ interface SafariClient {
 function ClientFormModal({ visible, client, onClose, onSaved }: {
   visible: boolean; client: SafariClient | null; onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [phone, setPhone] = useState('');
@@ -3319,27 +3350,27 @@ function ClientFormModal({ visible, client, onClose, onSaved }: {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
           <View style={gm.header}>
-            <Text style={gm.title}>{client ? 'Edit Client' : 'Add Safari Client'}</Text>
+            <Text style={gm.title}>{client ? t('safari.editClientTitle') : t('safari.addClientTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={gm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-            <FieldLabel label="Customer Name *" /><TextF value={name} onChange={setName} placeholder="Client or company name" />
-            <FieldLabel label="Contact Person" /><TextF value={contact} onChange={setContact} placeholder="Primary contact" />
-            <FieldLabel label="Email *" /><TextF value={email} onChange={setEmail} placeholder="email@example.com" keyboardType="email-address" />
-            <FieldLabel label="Phone Number" /><TextF value={phone} onChange={setPhone} placeholder="+256 700 000000" keyboardType="phone-pad" />
-            <FieldLabel label="Address" /><TextF value={address} onChange={setAddress} placeholder="Physical address…" multiline />
-            <FieldLabel label="KYC Status" />
+            <FieldLabel label={t('safari.fieldCustomerName')} /><TextF value={name} onChange={setName} placeholder="Client or company name" />
+            <FieldLabel label={t('safari.fieldContactPerson')} /><TextF value={contact} onChange={setContact} placeholder="Primary contact" />
+            <FieldLabel label={t('driverMgmt.fieldEmail')} /><TextF value={email} onChange={setEmail} placeholder="email@example.com" keyboardType="email-address" />
+            <FieldLabel label={t('safari.fieldPhoneNumber')} /><TextF value={phone} onChange={setPhone} placeholder="+256 700 000000" keyboardType="phone-pad" />
+            <FieldLabel label={t('safari.fieldAddress')} /><TextF value={address} onChange={setAddress} placeholder="Physical address…" multiline />
+            <FieldLabel label={t('safari.fieldKycStatus')} />
             <TouchableOpacity style={gm.selector} onPress={() => setShowKycPicker(true)}>
               <Text style={{ flex: 1, fontSize: 14, color: C.text }}>{kyc}</Text><Ico.ChevDown s={16} c={C.textMuted} />
             </TouchableOpacity>
-            <FieldLabel label="Notes" /><TextF value={notes} onChange={setNotes} placeholder="Additional notes…" multiline />
+            <FieldLabel label={t('safari.fieldNotes')} /><TextF value={notes} onChange={setNotes} placeholder="Additional notes…" multiline />
             <TouchableOpacity style={[gm.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{client ? 'Update Client' : 'Add Client'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={gm.saveBtnT}>{client ? t('safari.updateClientBtn') : t('safari.addClientBtn')}</Text>}
             </TouchableOpacity>
           </ScrollView>
-          <PickerModal visible={showKycPicker} title="KYC Status"
-            options={[{ value: 'Incomplete', label: 'Incomplete' }, { value: 'Pending Review', label: 'Pending Review' }, { value: 'Complete', label: 'Complete' }]}
+          <PickerModal visible={showKycPicker} title={t('safari.kycStatusTitle')}
+            options={[{ value: 'Incomplete', label: t('safari.kycIncomplete') }, { value: 'Pending Review', label: t('safari.kycPendingReview') }, { value: 'Complete', label: t('safari.kycComplete') }]}
             selected={kyc} onSelect={o => setKyc(o.value)} onClose={() => setShowKycPicker(false)} />
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -3356,6 +3387,7 @@ const KYC_CFG: Record<string, { bg: string; text: string }> = {
 function ClientHistoryModal({ client, visible, onClose }: {
   client: SafariClient | null; visible: boolean; onClose: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [bookings, setBookings] = useState<SafariBooking[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -3379,32 +3411,32 @@ function ClientHistoryModal({ client, visible, onClose }: {
         <View style={dm.header}>
           <View style={{ flex: 1 }}>
             <Text style={dm.headerRef}>{client.company_name}</Text>
-            <Text style={dm.headerSub}>{client.email || client.phone_number || 'Client history'}</Text>
+            <Text style={dm.headerSub}>{client.email || client.phone_number || t('safari.clientHistoryFallback')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={dm.closeBtn}><Ico.Close s={18} c={C.textMuted} /></TouchableOpacity>
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
             <View style={[paStyle.kpiCard, { flex: 1 }]}>
-              <Text style={paStyle.kpiLabel}>Total Bookings</Text>
+              <Text style={paStyle.kpiLabel}>{t('safari.kpiTotalBookings')}</Text>
               <Text style={[paStyle.kpiValue, { color: C.primary, fontSize: 22 }]}>{bookings.length}</Text>
             </View>
             <View style={[paStyle.kpiCard, { flex: 1 }]}>
-              <Text style={paStyle.kpiLabel}>Lifetime Value</Text>
+              <Text style={paStyle.kpiLabel}>{t('safari.lifetimeValue')}</Text>
               <Text style={[paStyle.kpiValue, { color: C.success, fontSize: 20 }]}>{formatCurrency(lifetimeSpend, 'USD')}</Text>
             </View>
           </View>
           {client.address ? (
             <View style={dm.sect}>
-              <Text style={dm.sectTitle}>Contact</Text>
-              <View style={dm.detRow}><Text style={dm.detL}>Contact Person</Text><Text style={dm.detV}>{client.contact_person || '—'}</Text></View>
-              <View style={dm.detRow}><Text style={dm.detL}>Address</Text><Text style={dm.detV} numberOfLines={2}>{client.address}</Text></View>
+              <Text style={dm.sectTitle}>{t('safari.contact')}</Text>
+              <View style={dm.detRow}><Text style={dm.detL}>{t('safari.fieldContactPerson')}</Text><Text style={dm.detV}>{client.contact_person || '—'}</Text></View>
+              <View style={dm.detRow}><Text style={dm.detL}>{t('safari.fieldAddress')}</Text><Text style={dm.detV} numberOfLines={2}>{client.address}</Text></View>
             </View>
           ) : null}
           <View style={dm.sect}>
-            <Text style={dm.sectTitle}>Booking History</Text>
+            <Text style={dm.sectTitle}>{t('safari.bookingHistory')}</Text>
             {loading ? <LoadingView label="Loading bookings…" /> : bookings.length === 0 ? (
-              <Text style={{ color: C.textMuted, textAlign: 'center', paddingVertical: 20, fontSize: 13 }}>No bookings yet for this client</Text>
+              <Text style={{ color: C.textMuted, textAlign: 'center', paddingVertical: 20, fontSize: 13 }}>{t('safari.noBookingsForClient')}</Text>
             ) : bookings.map(b => {
               const st = STATUS_CFG[b.status] || STATUS_CFG.pending;
               return (
@@ -3416,7 +3448,7 @@ function ClientHistoryModal({ client, visible, onClose }: {
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={dm.detV}>{formatCurrency(b.total_price_usd || 0, 'USD')}</Text>
                     <View style={[dm.permitBadge, { backgroundColor: st.bg, marginTop: 4 }]}>
-                      <Text style={{ fontSize: 9, fontWeight: '700', color: st.text }}>{st.label}</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '700', color: st.text }}>{statusLabel(b.status, t)}</Text>
                     </View>
                   </View>
                 </View>
@@ -3435,6 +3467,7 @@ function ClientHistoryModal({ client, visible, onClose }: {
 }
 
 function ClientsTab() {
+  const { t } = useAppPreferences();
   const [clients, setClients] = useState<SafariClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -3453,11 +3486,11 @@ function ClientsTab() {
   useEffect(() => { setLoading(true); fetchClients().finally(() => setLoading(false)); }, [fetchClients]);
 
   const deleteClient = useCallback((c: SafariClient) => {
-    Alert.alert('Delete Client', `Remove "${c.company_name}"?`, [
+    Alert.alert(t('safari.deleteClientTitle'), t('safari.removeQuotedConfirm', { name: c.company_name }), [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         const { error } = await supabase.from('clients').delete().eq('id', c.id);
-        if (error) { Alert.alert('Cannot Delete', error.message.includes('foreign') ? 'This client has linked safari bookings and cannot be deleted.' : error.message); return; }
+        if (error) { Alert.alert(t('safari.cannotDeleteTitle'), error.message.includes('foreign') ? t('safari.cannotDeleteLinkedMsg') : error.message); return; }
         fetchClients();
       }},
     ]);
@@ -3480,9 +3513,9 @@ function ClientsTab() {
       {/* KPI row */}
       <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 10 }}>
         {[
-          { l: 'Total Clients', v: totalCount.toString(), c: C.primary },
-          { l: 'Verified',      v: verifiedCount.toString(), c: C.success },
-          { l: 'Pending KYC',  v: pendingCount.toString(), c: C.gold },
+          { l: t('safari.kpiTotalClients'), v: totalCount.toString(), c: C.primary },
+          { l: t('safari.kpiVerified'),      v: verifiedCount.toString(), c: C.success },
+          { l: t('safari.kpiPendingKyc'),  v: pendingCount.toString(), c: C.gold },
         ].map((k, i) => (
           <View key={i} style={[paStyle.kpiCard, { flex: 1 }]}>
             <Text style={paStyle.kpiLabel}>{k.l}</Text>
@@ -3493,7 +3526,7 @@ function ClientsTab() {
       <View style={ts.searchWrap}>
         <View style={ts.searchBox}>
           <Ico.Search s={15} c={C.textMuted} />
-          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder="Search clients, emails…" placeholderTextColor={C.textMuted}
+          <TextInput style={ts.searchInput} value={search} onChangeText={setSearch} placeholder={t('safari.searchClientsPlaceholder')} placeholderTextColor={C.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
             blurOnSubmit={false}
@@ -3514,12 +3547,12 @@ function ClientsTab() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                   <Text style={clStyle.name} numberOfLines={1}>{c.company_name}</Text>
                   <View style={[clStyle.kycBadge, { backgroundColor: kyc.bg }]}>
-                    <Text style={[clStyle.kycText, { color: kyc.text }]}>{c.kyc_status || 'Incomplete'}</Text>
+                    <Text style={[clStyle.kycText, { color: kyc.text }]}>{c.kyc_status ? (c.kyc_status === 'Complete' ? t('safari.kycComplete') : c.kyc_status === 'Pending Review' ? t('safari.kycPendingReview') : t('safari.kycIncomplete')) : t('safari.kycIncomplete')}</Text>
                   </View>
                 </View>
                 {c.email ? <Text style={clStyle.sub}>{c.email}</Text> : null}
                 {c.phone_number ? <Text style={clStyle.sub}>{c.phone_number}</Text> : null}
-                {c.contact_person ? <Text style={clStyle.sub}>Contact: {c.contact_person}</Text> : null}
+                {c.contact_person ? <Text style={clStyle.sub}>{t('safari.contactPrefix', { name: c.contact_person })}</Text> : null}
               </View>
               <View style={{ gap: 8 }}>
                 <TouchableOpacity style={op.iconBtn} onPress={() => { setEditClient(c); setShowModal(true); }}>
@@ -3532,7 +3565,7 @@ function ClientsTab() {
             </TouchableOpacity>
           );
         }}
-        ListEmptyComponent={<EmptyView title="No safari clients" sub="Add clients using the + button below." />}
+        ListEmptyComponent={<EmptyView title={t('safari.noClientsFound')} sub={t('safari.noClientsSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
       />
       <TouchableOpacity style={fabStyle.fab} onPress={() => { setEditClient(null); setShowModal(true); }}>
@@ -3561,18 +3594,33 @@ const clStyle = StyleSheet.create({
 type MainTab = 'bookings' | 'ops' | 'airports' | 'hotels' | 'parks' | 'payments' | 'analytics' | 'clients';
 
 export function SafariManagementScreen() {
+  const { t } = useAppPreferences();
   const [tab, setTab] = useState<MainTab>('bookings');
   const insets = useSafeAreaInsets();
 
-  const TABS: { key: MainTab; label: string }[] = [
-    { key: 'bookings',  label: 'Bookings' },
-    { key: 'ops',       label: 'Operations' },
-    { key: 'airports',  label: 'Airports' },
-    { key: 'hotels',    label: 'Hotels & Lodges' },
-    { key: 'parks',     label: 'Parks' },
-    { key: 'payments',  label: 'Payments' },
-    { key: 'analytics', label: 'Analytics' },
-    { key: 'clients',   label: 'Clients' },
+  const mainTabLabel = useCallback((key: MainTab): string => {
+    switch (key) {
+      case 'bookings': return t('safari.tabBookings');
+      case 'ops': return t('safari.tabOps');
+      case 'airports': return t('safari.tabAirports');
+      case 'hotels': return t('safari.tabHotels');
+      case 'parks': return t('safari.tabParks');
+      case 'payments': return t('safari.tabPayments');
+      case 'analytics': return t('safari.tabAnalytics');
+      case 'clients': return t('safari.tabClients');
+      default: return key;
+    }
+  }, [t]);
+
+  const TABS: { key: MainTab }[] = [
+    { key: 'bookings' },
+    { key: 'ops' },
+    { key: 'airports' },
+    { key: 'hotels' },
+    { key: 'parks' },
+    { key: 'payments' },
+    { key: 'analytics' },
+    { key: 'clients' },
   ];
 
   return (
@@ -3580,13 +3628,13 @@ export function SafariManagementScreen() {
       {/* Dark hero header */}
       <View style={[sc.hero, { paddingTop: insets.top + 10 }]}>
         <View style={sc.glowL} /><View style={sc.glowR} />
-        <Text style={sc.eyebrow}>Operations</Text>
-        <Text style={sc.heroTitle}>Safari Management</Text>
+        <Text style={sc.eyebrow}>{t('safari.eyebrow')}</Text>
+        <Text style={sc.heroTitle}>{t('safari.title')}</Text>
         {/* Tab pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={sc.tabRow}>
-          {TABS.map(t => (
-            <TouchableOpacity key={t.key} style={[sc.tabPill, tab === t.key && sc.tabPillOn]} onPress={() => setTab(t.key)}>
-              <Text style={[sc.tabPillT, tab === t.key && sc.tabPillTOn]}>{t.label}</Text>
+          {TABS.map(t2 => (
+            <TouchableOpacity key={t2.key} style={[sc.tabPill, tab === t2.key && sc.tabPillOn]} onPress={() => setTab(t2.key)}>
+              <Text style={[sc.tabPillT, tab === t2.key && sc.tabPillTOn]}>{mainTabLabel(t2.key)}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>

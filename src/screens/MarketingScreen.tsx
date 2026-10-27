@@ -26,6 +26,7 @@ import type { PortalVehicle, Promotion, SafariPackage } from '../types/safari';
 import { useGA4Analytics, type DatePreset } from '../hooks/useGA4Analytics';
 import { useBlogAnalytics } from '../hooks/useBlogAnalytics';
 import { getErrorMessage } from '../lib/errors';
+import { useAppPreferences } from '../contexts/AppPreferencesContext';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -241,6 +242,7 @@ function VehicleEditModal({ vehicle, visible, onClose, onSaved }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function VehicleCatalogTab() {
+  const { t } = useAppPreferences();
   const [vehicles, setVehicles] = useState<PortalVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -316,7 +318,7 @@ function VehicleCatalogTab() {
             </View>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<EmptyView title="No vehicles found" sub="Add vehicles in the Fleet tab first." />}
+        ListEmptyComponent={<EmptyView title={t('marketing.noVehiclesFound')} sub={t('marketing.noVehiclesSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
@@ -404,6 +406,7 @@ function PackageEditModal({ pkg, visible, onClose, onSaved }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function SafariCatalogTab() {
+  const { t } = useAppPreferences();
   const [packages, setPackages] = useState<SafariPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -484,7 +487,7 @@ function SafariCatalogTab() {
             </View>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<EmptyView title="No packages found" sub="Create safari packages in the Safari Management screen." />}
+        ListEmptyComponent={<EmptyView title={t('marketing.noPackagesFound')} sub={t('marketing.noPackagesSub')} />}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       />
@@ -678,6 +681,7 @@ const ug = StyleSheet.create({
 });
 
 function MarketingCommandCenterTab() {
+  const { t } = useAppPreferences();
   const [period, setPeriod] = useState<DatePreset>('30d');
 
   // ── GA4 (Traffic & Engagement) ────────────────────────────────────────────
@@ -852,7 +856,7 @@ function MarketingCommandCenterTab() {
 
       {/* ── SECTION 1: Traffic & Engagement KPIs ─────────────────────────────── */}
       <Text style={cc.sectionHeader}>
-        {'🔵 Traffic & Engagement  '}
+        {'🔵 '}{t('marketing.trafficEngagement')}{'  '}
         <Text style={cc.sourceTag}>{s ? 'GA4' : 'Supabase'}</Text>
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -883,7 +887,7 @@ function MarketingCommandCenterTab() {
       {/* ── SECTION 2: Traffic Channels ─────────────────────────────────────── */}
       {ch && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Channel Breakdown  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.channelBreakdown')}  <Text style={cc.sourceTagInline}>GA4</Text></Text>
           {(Object.entries(ch) as [string, number][])
             .filter(([, v]) => v > 0)
             .sort(([,a],[,b]) => b - a)
@@ -908,7 +912,7 @@ function MarketingCommandCenterTab() {
       {/* Source / Medium detailed rows */}
       {ga4 && ga4.sourceMedium.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Source / Medium  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.sourceMedium')}  <Text style={cc.sourceTagInline}>GA4</Text></Text>
           {ga4.sourceMedium.slice(0, 10).map((r, i) => {
             const color = CHANNEL_COLORS[r.source] || C.textMuted;
             return (
@@ -931,7 +935,7 @@ function MarketingCommandCenterTab() {
       {/* UTM attribution from marketing_leads — always shown alongside or when GA4 unavailable */}
       {dbStats.utmChannels.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Lead Attribution  <Text style={cc.sourceTagInline}>Supabase · UTM</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.leadAttribution')}  <Text style={cc.sourceTagInline}>Supabase · UTM</Text></Text>
           {dbStats.utmChannels.map(({ source, count, pct }) => {
             const color = CHANNEL_COLORS[source] || C.gold;
             return (
@@ -952,7 +956,7 @@ function MarketingCommandCenterTab() {
       {/* ── SECTION 3: Top Pages ────────────────────────────────────────────── */}
       {ga4 && ga4.topPages.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Top Pages  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.topPages')}  <Text style={cc.sourceTagInline}>GA4</Text></Text>
           {ga4.topPages.slice(0, 8).map((p, i) => (
             <View key={i} style={cc.pkgRow}>
               <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
@@ -974,7 +978,7 @@ function MarketingCommandCenterTab() {
       {/* ── SECTION 4: Social Traffic ───────────────────────────────────────── */}
       {ga4 && Object.keys(ga4.socialTraffic).length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Social Traffic  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.socialTraffic')}  <Text style={cc.sourceTagInline}>GA4</Text></Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
             {Object.entries(ga4.socialTraffic)
               .sort(([,a],[,b]) => b - a)
@@ -992,7 +996,7 @@ function MarketingCommandCenterTab() {
       {/* ── SECTION 5: Audience ─────────────────────────────────────────────── */}
       {ga4 && (ga4.audience.countries.length > 0 || ga4.audience.devices.length > 0) && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Audience Insights  <Text style={cc.sourceTagInline}>GA4</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.audienceInsights')}  <Text style={cc.sourceTagInline}>GA4</Text></Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             {/* Countries */}
             <View style={{ flex: 1 }}>
@@ -1029,7 +1033,7 @@ function MarketingCommandCenterTab() {
       )}
 
       {/* ── SECTION 6: Supabase Conversion KPIs ─────────────────────────────── */}
-      <Text style={cc.sectionHeader}>🟣 Conversions & Revenue  <Text style={cc.sourceTag}>Supabase</Text></Text>
+      <Text style={cc.sectionHeader}>{'🟣 '}{t('marketing.conversionsRevenue')}  <Text style={cc.sourceTag}>Supabase</Text></Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         {[
           { label: 'Bookings',    value: dbStats.totalBookings.toLocaleString(),     color: C.primary },
@@ -1046,7 +1050,7 @@ function MarketingCommandCenterTab() {
 
       {/* Revenue collection bar */}
       <View style={cc.sect}>
-        <Text style={cc.sectTitle}>Revenue Collection</Text>
+        <Text style={cc.sectTitle}>{t('marketing.revenueCollection')}</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
           {[
             { label: 'Total Revenue', value: `$${Math.round(dbStats.totalRevenue).toLocaleString()}`, color: C.primary },
@@ -1070,7 +1074,7 @@ function MarketingCommandCenterTab() {
       {/* Booking funnel */}
       {dbStats.funnel.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Booking Conversion Funnel  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.bookingFunnel')}  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
           {dbStats.funnel.map(f => (
             <View key={f.label} style={cc.funnelRow}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: f.color, marginRight: 6 }} />
@@ -1087,7 +1091,7 @@ function MarketingCommandCenterTab() {
 
       {/* Portal catalog */}
       <View style={cc.sect}>
-        <Text style={cc.sectTitle}>Portal Catalog — Live  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+        <Text style={cc.sectTitle}>{t('marketing.portalCatalogLive')}  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {[
             { label: 'Vehicles Live',  value: dbStats.portalVehicles,  color: C.primary },
@@ -1105,7 +1109,7 @@ function MarketingCommandCenterTab() {
       {/* Top packages */}
       {dbStats.topPackages.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>Top Safari Packages  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.topPackages')}  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
           {dbStats.topPackages.map((p, i) => (
             <View key={i} style={cc.pkgRow}>
               <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
@@ -1169,6 +1173,7 @@ const cc = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function WebsiteAnalyticsTab() {
+  const { t } = useAppPreferences();
   const [period, setPeriod] = useState<DatePreset>('30d');
   const { data: ga4, loading, refreshing, stale, error, unavailable, refresh } = useGA4Analytics(period);
 
@@ -1231,7 +1236,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Engagement Metrics (8 KPIs matching web) ── */}
           <View style={cc.sect}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Text style={cc.sectTitle}>Engagement Metrics</Text>
+              <Text style={cc.sectTitle}>{t('marketing.engagementMetrics')}</Text>
               <View style={{ backgroundColor: C.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                 <Text style={{ fontSize: 9, color: C.textMuted, fontWeight: '600' }}>From Google Analytics</Text>
               </View>
@@ -1258,7 +1263,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Top Conversions ── */}
           {keyEventsList.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Top Conversions</Text>
+              <Text style={cc.sectTitle}>{t('marketing.topConversions')}</Text>
               {keyEventsList.slice(0, 8).map((k, i) => (
                 <View key={i} style={[cc.funnelRow, {
                   borderBottomWidth: i < keyEventsList.length - 1 ? 1 : 0,
@@ -1277,7 +1282,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Traffic Sources (Channels) ── */}
           {ch && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Traffic Sources</Text>
+              <Text style={cc.sectTitle}>{t('marketing.trafficSources')}</Text>
               {(Object.entries(ch) as [string, number][])
                 .filter(([,v]) => v > 0).sort(([,a],[,b]) => b - a)
                 .map(([channel, sessions]) => {
@@ -1301,7 +1306,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Source / Medium detail ── */}
           {ga4!.sourceMedium.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Source / Medium</Text>
+              <Text style={cc.sectTitle}>{t('marketing.sourceMedium')}</Text>
               {ga4!.sourceMedium.slice(0, 12).map((r, i) => {
                 const color = CHANNEL_COLORS[r.source] || C.textMuted;
                 return (
@@ -1321,7 +1326,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Device Distribution + Browser Breakdown ── */}
           {ga4!.audience.devices.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Device Distribution</Text>
+              <Text style={cc.sectTitle}>{t('marketing.deviceDistribution')}</Text>
               {ga4!.audience.devices.map((d, i) => {
                 const color = [C.primary, C.success, C.gold][i] ?? C.textMuted;
                 return (
@@ -1362,7 +1367,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Geographic Insights ── */}
           {ga4!.audience.countries.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Geographic Insights</Text>
+              <Text style={cc.sectTitle}>{t('marketing.geoInsights')}</Text>
               {ga4!.audience.countries.slice(0, 8).map((c, i) => (
                 <View key={i} style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
@@ -1380,7 +1385,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Social Media Traffic ── */}
           {Object.keys(ga4!.socialTraffic).length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Social Media Traffic</Text>
+              <Text style={cc.sectTitle}>{t('marketing.socialMediaTraffic')}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                 {Object.entries(ga4!.socialTraffic)
                   .sort(([,a],[,b]) => (b as number) - (a as number))
@@ -1398,7 +1403,7 @@ function WebsiteAnalyticsTab() {
           {/* ── Top Performing Pages ── */}
           {ga4!.topPages.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Top Performing Pages</Text>
+              <Text style={cc.sectTitle}>{t('marketing.topPerformingPages')}</Text>
               {ga4!.topPages.slice(0, 10).map((p, i) => (
                 <View key={i} style={cc.pkgRow}>
                   <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
@@ -1453,6 +1458,7 @@ const an = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function GoogleAdsTab() {
+  const { t } = useAppPreferences();
   const [period, setPeriod] = useState<DatePreset>('30d');
   // No Google Ads API credentials here — the website doesn't use a developer
   // token, customer ID, client ID/secret or refresh token either. Ads
@@ -1497,32 +1503,32 @@ function GoogleAdsTab() {
       )}
 
       {!ads ? (
-        <EmptyView title="No Ads data available" sub="Pull to refresh." />
+        <EmptyView title={t('marketing.noAdsData')} sub={t('marketing.pullToRefresh')} />
       ) : !ads.costDataAvailable ? (
         // Same flag and message the website uses — never show 0s when cost
         // data genuinely isn't linked, since that reads as "no ad spend"
         // rather than "we can't see ad spend."
         <View style={ga.unavailCard}>
           <Text style={{ fontSize: 32, marginBottom: 12 }}>📢</Text>
-          <Text style={ga.unavailTitle}>Ad cost data not available</Text>
+          <Text style={ga.unavailTitle}>{t('marketing.adCostNotAvailable')}</Text>
           <Text style={ga.unavailSub}>{ads.costNote || "Google Ads isn't linked to Analytics for this property yet."}</Text>
         </View>
       ) : (
         <>
           {/* ── KPI Summary ──────────────────────────────────────────────────── */}
           <Text style={cc.sectionHeader}>
-            📢 Ads Performance  <Text style={cc.sourceTag}>Google Ads via GA4</Text>
+            {'📢 '}{t('marketing.adsPerformance')}  <Text style={cc.sourceTag}>Google Ads via GA4</Text>
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
             {[
-              { label: 'Spend',       value: fmt$(ads.totals.cost),                color: C.danger   },
-              { label: 'Impressions', value: fmtN(ads.totals.impressions),         color: C.primary  },
-              { label: 'Clicks',      value: fmtN(ads.totals.clicks),              color: C.gold     },
-              { label: 'CTR',         value: `${ads.totals.ctr.toFixed(2)}%`,      color: '#7c3aed'  },
-              { label: 'Avg CPC',     value: fmt$(ads.totals.cpc),                 color: '#0891b2'  },
-              { label: 'Visits',      value: fmtN(ads.totals.sessions),            color: C.success  },
-              { label: 'Conversions', value: fmtN(ads.totals.conversions),         color: C.gold     },
-              { label: 'Cost / Conv', value: ads.totals.conversions > 0 ? fmt$(ads.totals.costPerConversion) : '—', color: C.textMuted },
+              { label: t('marketing.adSpend'),       value: fmt$(ads.totals.cost),                color: C.danger   },
+              { label: t('marketing.adImpressions'), value: fmtN(ads.totals.impressions),         color: C.primary  },
+              { label: t('marketing.adClicks'),      value: fmtN(ads.totals.clicks),              color: C.gold     },
+              { label: t('marketing.adCtr'),         value: `${ads.totals.ctr.toFixed(2)}%`,      color: '#7c3aed'  },
+              { label: t('marketing.adAvgCpc'),      value: fmt$(ads.totals.cpc),                 color: '#0891b2'  },
+              { label: t('marketing.adVisits'),      value: fmtN(ads.totals.sessions),            color: C.success  },
+              { label: t('marketing.adConversions'), value: fmtN(ads.totals.conversions),         color: C.gold     },
+              { label: t('marketing.adCostPerConv'), value: ads.totals.conversions > 0 ? fmt$(ads.totals.costPerConversion) : '—', color: C.textMuted },
             ].map(k => (
               <View key={k.label} style={[cc.kpiCard, { borderLeftColor: k.color, borderLeftWidth: 3 }]}>
                 <Text style={cc.kpiLabel}>{k.label}</Text>
@@ -1534,7 +1540,7 @@ function GoogleAdsTab() {
           {/* ── Campaigns list ───────────────────────────────────────────────── */}
           {ads.campaigns.length > 0 && (
             <View style={cc.sect}>
-              <Text style={cc.sectTitle}>Campaign Performance  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
+              <Text style={cc.sectTitle}>{t('marketing.campaignPerformance')}  <Text style={cc.sourceTagInline}>Google Ads</Text></Text>
               {ads.campaigns.map((c, i) => {
                 const pctOfSpend = ads.totals.cost > 0 ? Math.round((c.cost / ads.totals.cost) * 100) : 0;
                 return (
@@ -1581,13 +1587,25 @@ type MarketingTab = 'command-center' | 'vehicles' | 'safaris' | 'analytics' | 'a
 export function MarketingScreen() {
   const [tab, setTab] = useState<MarketingTab>('command-center');
   const insets = useSafeAreaInsets();
+  const { t } = useAppPreferences();
 
-  const TABS: { key: MarketingTab; label: string }[] = [
-    { key: 'command-center',  label: 'Console' },
-    { key: 'vehicles',        label: 'Vehicles' },
-    { key: 'safaris',         label: 'Safaris' },
-    { key: 'analytics',       label: 'Analytics' },
-    { key: 'ads',             label: 'ADs' },
+  const tabLabel = useCallback((key: MarketingTab): string => {
+    switch (key) {
+      case 'command-center': return t('marketing.tabConsole');
+      case 'vehicles': return t('marketing.tabVehicles');
+      case 'safaris': return t('marketing.tabSafaris');
+      case 'analytics': return t('marketing.tabAnalytics');
+      case 'ads': return t('marketing.tabAds');
+      default: return key;
+    }
+  }, [t]);
+
+  const TABS: { key: MarketingTab }[] = [
+    { key: 'command-center' },
+    { key: 'vehicles' },
+    { key: 'safaris' },
+    { key: 'analytics' },
+    { key: 'ads' },
   ];
 
   return (
@@ -1595,12 +1613,12 @@ export function MarketingScreen() {
       {/* Hero header */}
       <View style={[ms.hero, { paddingTop: insets.top + 10 }]}>
         <View style={ms.glowL} /><View style={ms.glowR} />
-        <Text style={ms.eyebrow}>Marketing Console</Text>
-        <Text style={ms.heroTitle}>{tab === 'command-center' ? 'Command Center' : 'Marketing'}</Text>
+        <Text style={ms.eyebrow}>{t('marketing.eyebrow')}</Text>
+        <Text style={ms.heroTitle}>{tab === 'command-center' ? t('marketing.commandCenter') : t('marketing.title')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ms.tabRow}>
-          {TABS.map(t => (
-            <TouchableOpacity key={t.key} style={[ms.tabPill, tab === t.key && ms.tabPillOn]} onPress={() => setTab(t.key)}>
-              <Text style={[ms.tabPillT, tab === t.key && ms.tabPillTOn]}>{t.label}</Text>
+          {TABS.map(t2 => (
+            <TouchableOpacity key={t2.key} style={[ms.tabPill, tab === t2.key && ms.tabPillOn]} onPress={() => setTab(t2.key)}>
+              <Text style={[ms.tabPillT, tab === t2.key && ms.tabPillTOn]}>{tabLabel(t2.key)}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>

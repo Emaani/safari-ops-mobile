@@ -24,6 +24,7 @@ import { Svg, Path, Rect, Circle } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import type { Currency } from '../../types/dashboard';
 import { getErrorMessage } from '../../lib/errors';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -129,9 +130,11 @@ function formatDisplay(iso: string): string {
 }
 
 // ─── Calendar Picker Field ────────────────────────────────────────────────────
-function DatePickerField({ label, value, onChange, minDate, placeholder = 'Select date' }: {
+function DatePickerField({ label, value, onChange, minDate, placeholder }: {
   label: string; value: string; onChange: (iso: string) => void; minDate?: Date; placeholder?: string;
 }) {
+  const { t } = useAppPreferences();
+  const resolvedPlaceholder = placeholder ?? t('editBooking.selectDate');
   const [open,   setOpen]   = useState(false);
   const [staged, setStaged] = useState<Date>(value ? new Date(value) : new Date());
 
@@ -154,7 +157,7 @@ function DatePickerField({ label, value, onChange, minDate, placeholder = 'Selec
         >
           <CalendarIcon color={value ? C.primary : C.muted} />
           <Text style={[fieldStyles.iconInputText, !value && { color: C.muted, fontWeight: '400' }]}>
-            {value ? formatDisplay(value) : placeholder}
+            {value ? formatDisplay(value) : resolvedPlaceholder}
           </Text>
           {value ? (
             <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -173,9 +176,9 @@ function DatePickerField({ label, value, onChange, minDate, placeholder = 'Selec
         <Pressable style={pickerSheet.backdrop} onPress={handleCancel} />
         <View style={pickerSheet.sheet}>
           <View style={pickerSheet.header}>
-            <TouchableOpacity onPress={handleCancel}><Text style={pickerSheet.cancel}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleCancel}><Text style={pickerSheet.cancel}>{t('common.cancel')}</Text></TouchableOpacity>
             <Text style={pickerSheet.title}>{label.replace(' *', '')}</Text>
-            <TouchableOpacity onPress={handleConfirm}><Text style={pickerSheet.confirm}>Confirm</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleConfirm}><Text style={pickerSheet.confirm}>{t('editBooking.confirmLabel')}</Text></TouchableOpacity>
           </View>
           <DateTimePicker
             value={staged}
@@ -226,6 +229,7 @@ function ClientSearch({
   selectedClient: ClientResult | null;
   onClear: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [query,       setQuery]       = useState('');
   const [results,     setResults]     = useState<ClientResult[]>([]);
   const [searching,   setSearching]   = useState(false);
@@ -265,7 +269,7 @@ function ClientSearch({
   if (selectedClient) {
     return (
       <View style={fieldStyles.wrap}>
-        <Text style={fieldStyles.label}>Client</Text>
+        <Text style={fieldStyles.label}>{t('newBooking.clientLabel')}</Text>
         <View style={srchStyles.selectedPill}>
           <View style={srchStyles.selectedLeft}>
             <CheckIcon />
@@ -288,14 +292,14 @@ function ClientSearch({
 
   return (
     <View style={fieldStyles.wrap}>
-      <Text style={fieldStyles.label}>Search Existing Client (Optional)</Text>
+      <Text style={fieldStyles.label}>{t('newBooking.searchExistingClientLabel')}</Text>
       <View style={[fieldStyles.iconInput, showResults && { borderColor: C.primary, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         <SearchIcon color={searching ? C.primary : C.muted} />
         <TextInput
           style={fieldStyles.iconInputText}
           value={query}
           onChangeText={handleQueryChange}
-          placeholder="Search by name, email, or phone…"
+          placeholder={t('newBooking.searchClientPlaceholder')}
           placeholderTextColor={C.muted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -333,7 +337,7 @@ function ClientSearch({
       )}
       {showResults && results.length === 0 && !searching && query.length >= 2 && (
         <View style={srchStyles.noResults}>
-          <Text style={srchStyles.noResultsText}>No clients found — enter details below</Text>
+          <Text style={srchStyles.noResultsText}>{t('createSafari.noClientsFoundBelow')}</Text>
         </View>
       )}
     </View>
@@ -373,6 +377,7 @@ interface CreateSafariModalProps {
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], userId }: CreateSafariModalProps) {
+  const { t } = useAppPreferences();
   const insets = useSafeAreaInsets();
   const [submitting, setSubmitting] = useState(false);
 
@@ -434,17 +439,17 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
   }, [endDate]);
 
   const validate = (): string | null => {
-    if (!clientName.trim()) return 'Client name is required.';
-    if (!startDate) return 'Please select a start date.';
-    if (endDate && endDate < startDate) return 'End date must be after start date.';
+    if (!clientName.trim()) return t('createSafari.clientNameRequiredErr');
+    if (!startDate) return t('newBooking.selectStartDateErr');
+    if (endDate && endDate < startDate) return t('createSafari.endDateAfterStartErr');
     const cost = parseFloat(totalCost);
-    if (isNaN(cost) || cost <= 0) return 'Total cost must be a positive number.';
+    if (isNaN(cost) || cost <= 0) return t('newBooking.totalCostPositiveErr');
     return null;
   };
 
   const handleSubmit = useCallback(async () => {
     const err = validate();
-    if (err) { Alert.alert('Validation Error', err); return; }
+    if (err) { Alert.alert(t('common.validationError'), err); return; }
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -481,7 +486,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
       if (error) throw error;
       reset();
       onSuccess();
-      Alert.alert('Safari Created', `Safari booking ${booking_reference} has been successfully created.`);
+      Alert.alert(t('createSafari.safariCreatedTitle'), t('createSafari.safariCreatedBody', { ref: booking_reference }));
     } catch (e: any) {
       Alert.alert('Error', getErrorMessage(e, 'Failed to create safari booking. Please try again.'));
     } finally {
@@ -496,8 +501,8 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerEyebrow}>Safari</Text>
-              <Text style={styles.headerTitle}>Create Safari</Text>
+              <Text style={styles.headerEyebrow}>{t('createSafari.eyebrow')}</Text>
+              <Text style={styles.headerTitle}>{t('createSafari.title')}</Text>
             </View>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} style={styles.closeBtn}>
               <CloseIcon color="#C4A882" />
@@ -508,7 +513,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Safari Name / Trip Title */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Safari / Trip Title (Optional)</Text>
+              <Text style={fieldStyles.label}>{t('createSafari.safariTripTitleLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={safariName}
@@ -529,18 +534,18 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             {/* Divider */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{selectedClient ? 'Safari Details' : 'Or Enter Client Details'}</Text>
+              <Text style={styles.dividerText}>{selectedClient ? t('createSafari.safariDetailsLabel') : t('createSafari.orEnterClientDetails')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
             {/* Client Name */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Client Name *</Text>
+              <Text style={fieldStyles.label}>{t('createSafari.clientNameRequiredLabel')}</Text>
               <TextInput
                 style={[styles.input, selectedClient && { borderColor: C.success + '60' }]}
                 value={clientName}
                 onChangeText={handleClientNameChange}
-                placeholder="Full name or group name"
+                placeholder={t('createSafari.clientNamePlaceholder')}
                 placeholderTextColor={C.muted}
                 autoCapitalize="words"
               />
@@ -550,12 +555,12 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <View style={fieldStyles.wrap}>
-                  <Text style={fieldStyles.label}>Contact</Text>
+                  <Text style={fieldStyles.label}>{t('newBooking.contactLabel')}</Text>
                   <TextInput
                     style={styles.input}
                     value={contact}
                     onChangeText={setContact}
-                    placeholder="Phone"
+                    placeholder={t('createSafari.contactPhonePlaceholder')}
                     placeholderTextColor={C.muted}
                     keyboardType="phone-pad"
                   />
@@ -563,7 +568,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
               </View>
               <View style={{ flex: 1 }}>
                 <View style={fieldStyles.wrap}>
-                  <Text style={fieldStyles.label}>Email</Text>
+                  <Text style={fieldStyles.label}>{t('driverMgmt.fieldEmail')}</Text>
                   <TextInput
                     style={styles.input}
                     value={email}
@@ -579,7 +584,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Safari Type chips */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Safari Type *</Text>
+              <Text style={fieldStyles.label}>{t('createSafari.safariTypeRequiredLabel')}</Text>
               <View style={styles.chipGrid}>
                 {SAFARI_TYPES.map(t => (
                   <TouchableOpacity
@@ -596,7 +601,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Park / Location chips */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>National Park / Location</Text>
+              <Text style={fieldStyles.label}>{t('createSafari.nationalParkLabel')}</Text>
               <View style={styles.chipGrid}>
                 {PARKS.map(p => (
                   <TouchableOpacity
@@ -614,10 +619,10 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             {/* Dates */}
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <DatePickerField label="Start Date *" value={startDate} onChange={handleStartDateChange} placeholder="Select start" />
+                <DatePickerField label={t('editBooking.fieldStartDate')} value={startDate} onChange={handleStartDateChange} placeholder={t('createSafari.selectStart')} />
               </View>
               <View style={{ flex: 1 }}>
-                <DatePickerField label="End Date" value={endDate} onChange={setEndDate} minDate={minEndDate} placeholder="Select end" />
+                <DatePickerField label={t('safari.fieldEndDate')} value={endDate} onChange={setEndDate} minDate={minEndDate} placeholder={t('createSafari.selectEnd')} />
               </View>
             </View>
 
@@ -625,12 +630,12 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <View style={fieldStyles.wrap}>
-                  <Text style={fieldStyles.label}>Group Size</Text>
+                  <Text style={fieldStyles.label}>{t('createSafari.groupSizeLabel')}</Text>
                   <TextInput
                     style={styles.input}
                     value={groupSize}
                     onChangeText={setGroupSize}
-                    placeholder="# pax"
+                    placeholder={t('createSafari.groupSizePlaceholder')}
                     placeholderTextColor={C.muted}
                     keyboardType="number-pad"
                   />
@@ -638,7 +643,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
               </View>
               <View style={{ flex: 2 }}>
                 <View style={fieldStyles.wrap}>
-                  <Text style={fieldStyles.label}>Total Cost *</Text>
+                  <Text style={fieldStyles.label}>{t('createSafari.totalCostRequiredLabel')}</Text>
                   <TextInput
                     style={styles.input}
                     value={totalCost}
@@ -653,7 +658,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Currency */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Currency</Text>
+              <Text style={fieldStyles.label}>{t('editBooking.fieldCurrency')}</Text>
               <View style={styles.segRow}>
                 {CURRENCIES.map(cur => (
                   <TouchableOpacity
@@ -669,7 +674,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Status */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Status</Text>
+              <Text style={fieldStyles.label}>{t('safari.statusLabel')}</Text>
               <View style={styles.segRow}>
                 {STATUSES.map(s => (
                   <TouchableOpacity
@@ -686,13 +691,13 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             {/* Vehicle picker */}
             {vehicles.length > 0 && (
               <View style={fieldStyles.wrap}>
-                <Text style={fieldStyles.label}>Assign Vehicle</Text>
+                <Text style={fieldStyles.label}>{t('createSafari.assignVehicleLabel')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                   <TouchableOpacity
                     style={[styles.vehicleChip, vehicleId === '' && styles.vehicleChipActive]}
                     onPress={() => setVehicleId('')}
                   >
-                    <Text style={[styles.vehicleChipText, vehicleId === '' && styles.vehicleChipTextActive]}>None</Text>
+                    <Text style={[styles.vehicleChipText, vehicleId === '' && styles.vehicleChipTextActive]}>{t('createSafari.noneLabel')}</Text>
                   </TouchableOpacity>
                   {vehicles.map(v => (
                     <TouchableOpacity
@@ -716,12 +721,12 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Guide / Ranger */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Guide / Ranger</Text>
+              <Text style={fieldStyles.label}>{t('createSafari.guideRangerLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={guideName}
                 onChangeText={setGuideName}
-                placeholder="Assigned guide name (optional)"
+                placeholder={t('createSafari.guideNamePlaceholder')}
                 placeholderTextColor={C.muted}
                 autoCapitalize="words"
               />
@@ -729,12 +734,12 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
 
             {/* Itinerary / Notes */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Itinerary / Notes</Text>
+              <Text style={fieldStyles.label}>{t('createSafari.itineraryNotesLabel')}</Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
                 value={itinerary}
                 onChangeText={setItinerary}
-                placeholder="Day-by-day itinerary, inclusions, special requirements…"
+                placeholder={t('createSafari.itineraryPlaceholder')}
                 placeholderTextColor={C.muted}
                 multiline
                 numberOfLines={4}
@@ -745,7 +750,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             {/* Info notice */}
             <View style={styles.notice}>
               <Text style={styles.noticeText}>
-                🌿 This creates a booking record. Update payment and status from the Bookings screen after creation.
+                {t('createSafari.noticeText')}
               </Text>
             </View>
 
@@ -758,7 +763,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
             >
               {submitting
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.submitText}>Create Safari Booking</Text>}
+                : <Text style={styles.submitText}>{t('createSafari.createSafariBookingBtn')}</Text>}
             </TouchableOpacity>
 
             <View style={{ height: insets.bottom + 20 }} />

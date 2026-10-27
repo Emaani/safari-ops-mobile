@@ -14,6 +14,7 @@ import {
 import { Svg, Path, Circle, Line } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import type { Vehicle } from '../../types/dashboard';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ============================================================================
 // CONSTANTS
@@ -84,7 +85,17 @@ interface VehicleDetailModalProps {
   onUpdated?: () => void;
 }
 
+function vehicleStatusLabel(status: string | undefined, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    available: 'fleet.available', booked: 'fleet.statusBooked', rented: 'fleet.statusRented',
+    maintenance: 'fleet.maintenance', out_of_service: 'fleet.statusOutOfService',
+  };
+  const k = status ? map[status] : undefined;
+  return k ? t(k) : (status?.replace('_', ' ') || '');
+}
+
 export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: VehicleDetailModalProps) {
+  const { t } = useAppPreferences();
   const [editingOdo, setEditingOdo] = useState(false);
   const [odoInput,   setOdoInput]   = useState('');
   const [saving,     setSaving]     = useState(false);
@@ -100,7 +111,7 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
   const saveOdometer = async () => {
     const value = parseInt(odoInput.replace(/[^\d]/g, ''), 10);
     if (isNaN(value) || value < 0) {
-      Alert.alert('Invalid reading', 'Enter a valid odometer value in km.');
+      Alert.alert(t('vehicleDetail.invalidReadingTitle'), t('vehicleDetail.invalidReadingMsg'));
       return;
     }
     setSaving(true);
@@ -113,7 +124,7 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
       setEditingOdo(false);
       onUpdated?.();
     } catch (e: any) {
-      Alert.alert('Update Failed', e?.message || 'Could not update odometer reading.');
+      Alert.alert(t('vehicleDetail.updateFailedTitle'), e?.message || t('vehicleDetail.updateFailedMsg'));
     } finally {
       setSaving(false);
     }
@@ -121,18 +132,18 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
 
   const statusColors = STATUS_COLORS[vehicle.status] || STATUS_COLORS.available;
   const vehicleName = `${vehicle.make} ${vehicle.model}`;
-  const capacity = vehicle.capacity?.replace('_', ' ').replace('seater', ' Seater') || 'N/A';
+  const capacity = vehicle.capacity?.replace('_', ' ').replace('seater', ' Seater') || t('vehicleDetail.naLabel');
 
   // Extended vehicle properties (cast to any for optional fields)
   const extVehicle = vehicle as any;
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'N/A';
+    if (!dateStr) return t('vehicleDetail.naLabel');
     return new Date(dateStr).toLocaleDateString();
   };
 
   const formatCurrency = (amount?: number) => {
-    if (!amount) return 'N/A';
+    if (!amount) return t('vehicleDetail.naLabel');
     return `$${amount.toLocaleString()}`;
   };
 
@@ -170,7 +181,7 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
           <View style={styles.statusSection}>
             <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
               <Text style={[styles.statusText, { color: statusColors.text }]}>
-                {vehicle.status?.replace('_', ' ')}
+                {vehicleStatusLabel(vehicle.status, t)}
               </Text>
             </View>
             {vehicle.rating !== undefined && vehicle.rating > 0 && (
@@ -184,48 +195,48 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
 
           {/* Basic Info Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Vehicle Information</Text>
+            <Text style={styles.sectionTitle}>{t('vehicleDetail.vehicleInfoTitle')}</Text>
             <View style={styles.infoGrid}>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Make</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.makeLabel')}</Text>
                 <Text style={styles.infoValue}>{vehicle.make}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Model</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.modelLabel')}</Text>
                 <Text style={styles.infoValue}>{vehicle.model}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Year</Text>
-                <Text style={styles.infoValue}>{extVehicle.year || 'N/A'}</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.yearLabel')}</Text>
+                <Text style={styles.infoValue}>{extVehicle.year || t('vehicleDetail.naLabel')}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Capacity</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.capacityLabel')}</Text>
                 <Text style={styles.infoValue}>{capacity}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Fuel Type</Text>
-                <Text style={styles.infoValue}>{extVehicle.fuel_type || 'N/A'}</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.fuelTypeLabel')}</Text>
+                <Text style={styles.infoValue}>{extVehicle.fuel_type || t('vehicleDetail.naLabel')}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Color</Text>
-                <Text style={styles.infoValue}>{extVehicle.color || 'N/A'}</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.colorLabel')}</Text>
+                <Text style={styles.infoValue}>{extVehicle.color || t('vehicleDetail.naLabel')}</Text>
               </View>
             </View>
           </View>
 
           {/* Driver Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Current Driver</Text>
+            <Text style={styles.sectionTitle}>{t('vehicleDetail.currentDriverTitle')}</Text>
             <View style={styles.driverCard}>
               <Text style={styles.driverName}>
-                {vehicle.drivers?.full_name || 'Unassigned'}
+                {vehicle.drivers?.full_name || t('bookingDetail.unassignedLabel')}
               </Text>
             </View>
           </View>
 
           {/* Rates Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Daily Rates</Text>
+            <Text style={styles.sectionTitle}>{t('vehicleDetail.dailyRatesTitle')}</Text>
             <View style={styles.ratesGrid}>
               <View style={styles.rateItem}>
                 <Text style={styles.rateLabel}>USD</Text>
@@ -234,7 +245,7 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
               <View style={styles.rateItem}>
                 <Text style={styles.rateLabel}>UGX</Text>
                 <Text style={styles.rateValue}>
-                  {extVehicle.daily_rate_ugx ? `UGX ${extVehicle.daily_rate_ugx.toLocaleString()}` : 'N/A'}
+                  {extVehicle.daily_rate_ugx ? `UGX ${extVehicle.daily_rate_ugx.toLocaleString()}` : t('vehicleDetail.naLabel')}
                 </Text>
               </View>
             </View>
@@ -242,10 +253,10 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
 
           {/* Service Info Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Service Information</Text>
+            <Text style={styles.sectionTitle}>{t('vehicleDetail.serviceInfoTitle')}</Text>
             <View style={styles.infoGrid}>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Odometer</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.odometerLabel')}</Text>
                 {editingOdo ? (
                   <View style={styles.odoEditRow}>
                     <TextInput
@@ -254,11 +265,11 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
                       onChangeText={setOdoInput}
                       keyboardType="number-pad"
                       autoFocus
-                      placeholder="km"
+                      placeholder={t('vehicleDetail.kmPlaceholder')}
                       placeholderTextColor={COLORS.textMuted}
                     />
                     <TouchableOpacity style={styles.odoSaveBtn} onPress={saveOdometer} disabled={saving}>
-                      {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.odoSaveBtnT}>Save</Text>}
+                      {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.odoSaveBtnT}>{t('common.save')}</Text>}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.odoCancelBtn} onPress={() => setEditingOdo(false)}>
                       <CloseIcon size={16} color={COLORS.textMuted} />
@@ -267,25 +278,25 @@ export function VehicleDetailModal({ vehicle, visible, onClose, onUpdated }: Veh
                 ) : (
                   <TouchableOpacity onPress={openOdoEditor} style={styles.odoTapRow}>
                     <Text style={styles.infoValue}>
-                      {extVehicle.odometer ? `${extVehicle.odometer.toLocaleString()} km` : 'N/A'}
+                      {extVehicle.odometer ? `${extVehicle.odometer.toLocaleString()} km` : t('vehicleDetail.naLabel')}
                     </Text>
-                    <Text style={styles.odoEditLabel}>Update</Text>
+                    <Text style={styles.odoEditLabel}>{t('vehicleDetail.updateLabel')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Last Service</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.lastServiceLabel')}</Text>
                 <Text style={styles.infoValue}>{formatDate(extVehicle.last_service_date)}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Next Service</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.nextServiceLabel')}</Text>
                 <Text style={[styles.infoValue, isOverdueOrSoon(extVehicle.next_service_date) && styles.infoValueWarn]}>
                   {formatDate(extVehicle.next_service_date)}
                   {isOverdueOrSoon(extVehicle.next_service_date) ? '  ⚠' : ''}
                 </Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Insurance Expiry</Text>
+                <Text style={styles.infoLabel}>{t('vehicleDetail.insuranceExpiryLabel')}</Text>
                 <Text style={[styles.infoValue, isOverdueOrSoon(extVehicle.insurance_expiry) && styles.infoValueWarn]}>
                   {formatDate(extVehicle.insurance_expiry)}
                   {isOverdueOrSoon(extVehicle.insurance_expiry) ? '  ⚠' : ''}

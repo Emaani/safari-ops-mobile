@@ -6,6 +6,7 @@ import { usePaymentHistory, type PaymentEvent } from '../../hooks/usePaymentHist
 import { usePaymentReversal } from '../../hooks/usePaymentReversal';
 import { useUserRole } from '../../hooks/useUserRole';
 import { TransactionIdBadge, ExternalReferenceBadge } from './TransactionIdBadge';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 const C = {
   primary: '#8B6B3E',
@@ -24,6 +25,7 @@ const methodLabel = (m: string) => PAYMENT_METHODS.find(pm => pm.value === m)?.l
 function ReversalSheet({ event, visible, onClose, onReversed }: {
   event: PaymentEvent | null; visible: boolean; onClose: () => void; onReversed: () => void;
 }) {
+  const { t } = useAppPreferences();
   const { reversePayment, reversing } = usePaymentReversal();
   const [reason, setReason] = useState('');
 
@@ -47,23 +49,23 @@ function ReversalSheet({ event, visible, onClose, onReversed }: {
         <Pressable style={rs.backdrop} onPress={onClose}>
           <Pressable style={rs.sheet} onPress={() => {}}>
             <View style={rs.handle} />
-            <Text style={rs.title}>Reverse Payment</Text>
+            <Text style={rs.title}>{t('payments.reversePaymentTitle')}</Text>
             <Text style={rs.sub}>{event.system_transaction_id} · {formatCurrency(event.amount, event.currency)}</Text>
-            <Text style={rs.warn}>This permanently reverses the payment and restores the balance due. It cannot be undone.</Text>
-            <Text style={rs.label}>Reason *</Text>
+            <Text style={rs.warn}>{t('payments.permanentReverseWarning')}</Text>
+            <Text style={rs.label}>{t('payments.reasonLabel')}</Text>
             <TextInput
               style={rs.input}
               value={reason}
               onChangeText={setReason}
-              placeholder="Why is this payment being reversed?"
+              placeholder={t('payments.reasonPlaceholder')}
               placeholderTextColor={C.textMuted}
               multiline
             />
             <TouchableOpacity style={[rs.submitBtn, reversing && { opacity: 0.6 }]} onPress={submit} disabled={reversing}>
-              {reversing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={rs.submitBtnT}>Confirm Reversal</Text>}
+              {reversing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={rs.submitBtnT}>{t('payments.confirmReversal')}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={rs.cancelBtn} onPress={onClose} disabled={reversing}>
-              <Text style={rs.cancelBtnT}>Cancel</Text>
+              <Text style={rs.cancelBtnT}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -78,6 +80,7 @@ interface PaymentHistoryListProps {
 
 /** payment_events is read-only traceability — never aggregate this into revenue/expense totals. */
 export function PaymentHistoryList({ sourceId }: PaymentHistoryListProps) {
+  const { t } = useAppPreferences();
   const { events, loading, error, refresh } = usePaymentHistory({ sourceId });
   const { canReversePayments } = useUserRole();
   const [reversingEvent, setReversingEvent] = useState<PaymentEvent | null>(null);
@@ -97,7 +100,7 @@ export function PaymentHistoryList({ sourceId }: PaymentHistoryListProps) {
   if (events.length === 0) {
     return (
       <View style={{ paddingVertical: 28, alignItems: 'center' }}>
-        <Text style={styles.emptyText}>No payments recorded yet</Text>
+        <Text style={styles.emptyText}>{t('payments.noPaymentsRecorded')}</Text>
       </View>
     );
   }
@@ -111,7 +114,7 @@ export function PaymentHistoryList({ sourceId }: PaymentHistoryListProps) {
             <View style={styles.row}>
               <TransactionIdBadge id={e.system_transaction_id} size="small" />
               {isReversed && (
-                <View style={styles.reversedPill}><Text style={styles.reversedPillT}>REVERSED</Text></View>
+                <View style={styles.reversedPill}><Text style={styles.reversedPillT}>{t('payments.reversedBadge')}</Text></View>
               )}
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
@@ -120,7 +123,7 @@ export function PaymentHistoryList({ sourceId }: PaymentHistoryListProps) {
             </View>
             <Text style={styles.meta}>
               {formatDateDDMMYY(e.transaction_date)}
-              {e.recorded_by_name ? ` · Recorded by ${e.recorded_by_name}` : ''}
+              {e.recorded_by_name ? ` · ${t('payments.recordedByPrefix', { name: e.recorded_by_name })}` : ''}
             </Text>
             {e.reference && (
               <View style={{ marginTop: 8 }}>
@@ -128,15 +131,15 @@ export function PaymentHistoryList({ sourceId }: PaymentHistoryListProps) {
               </View>
             )}
             {e.description ? <Text style={styles.description}>{e.description}</Text> : null}
-            {e.receipt_document_id ? <Text style={styles.receiptNote}>📎 Receipt attached</Text> : null}
+            {e.receipt_document_id ? <Text style={styles.receiptNote}>{t('payments.receiptAttached')}</Text> : null}
 
             {!isReversed && canReversePayments && (
               <TouchableOpacity style={styles.reverseBtn} onPress={() => setReversingEvent(e)}>
-                <Text style={styles.reverseBtnT}>Reverse Payment</Text>
+                <Text style={styles.reverseBtnT}>{t('payments.reversePaymentBtn')}</Text>
               </TouchableOpacity>
             )}
             {isReversed && e.reversed_by_name && (
-              <Text style={styles.reversedMeta}>Reversed by {e.reversed_by_name}{e.reversed_at ? ` on ${formatDateDDMMYY(e.reversed_at)}` : ''}</Text>
+              <Text style={styles.reversedMeta}>{t('payments.reversedByPrefix', { name: e.reversed_by_name })}{e.reversed_at ? t('payments.onDateSuffix', { date: formatDateDDMMYY(e.reversed_at) }) : ''}</Text>
             )}
           </View>
         );

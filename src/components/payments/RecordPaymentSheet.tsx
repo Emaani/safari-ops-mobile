@@ -14,6 +14,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { enqueuePayment } from '../../lib/paymentQueue';
 import { PaymentMethodFields } from './PaymentMethodFields';
 import { TransactionIdBadge } from './TransactionIdBadge';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 const C = {
   primary: '#8B6B3E',
@@ -45,6 +46,7 @@ interface RecordPaymentSheetProps {
 export function RecordPaymentSheet({
   visible, onClose, source, sourceId, balanceDue, currency, subjectLabel, onRecorded,
 }: RecordPaymentSheetProps) {
+  const { t } = useAppPreferences();
   const { recordPayment, submitting } = usePaymentRecording();
   const { isOnline } = useNetworkStatus();
 
@@ -147,7 +149,7 @@ export function RecordPaymentSheet({
                   <Text style={{ fontSize: 28 }}>{confirmation.queuedOffline ? '📡' : '✓'}</Text>
                 </View>
                 <Text style={styles.confirmTitle}>
-                  {confirmation.queuedOffline ? 'Saved — Will Submit When Online' : confirmation.replayed ? 'Payment Already Recorded' : 'Payment Recorded'}
+                  {confirmation.queuedOffline ? t('payments.savedWillSubmit') : confirmation.replayed ? t('payments.paymentAlreadyRecorded') : t('payments.paymentRecorded')}
                 </Text>
                 {/* subjectLabel (e.g. "REF-00123 · Acme Safaris") was shown on the
                     form but dropped once the confirmation replaced it — leaving
@@ -156,10 +158,10 @@ export function RecordPaymentSheet({
                     same as it is on the form itself. */}
                 <Text style={styles.confirmSub}>{subjectLabel}</Text>
                 {confirmation.queuedOffline && (
-                  <Text style={styles.confirmSub}>No signal right now. This payment is saved on your device and will be submitted automatically the moment you're back online.</Text>
+                  <Text style={styles.confirmSub}>{t('payments.queuedOfflineMsg')}</Text>
                 )}
                 {confirmation.replayed && (
-                  <Text style={styles.confirmSub}>This matches an earlier submission — no duplicate was created.</Text>
+                  <Text style={styles.confirmSub}>{t('payments.replayedMsg')}</Text>
                 )}
                 {confirmation.systemTransactionId && (
                   <View style={{ marginTop: 14 }}>
@@ -167,16 +169,16 @@ export function RecordPaymentSheet({
                   </View>
                 )}
                 <TouchableOpacity style={styles.doneBtn} onPress={onClose}>
-                  <Text style={styles.doneBtnT}>Done</Text>
+                  <Text style={styles.doneBtnT}>{t('payments.doneLabel')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <>
-                <Text style={styles.title}>Record Payment</Text>
+                <Text style={styles.title}>{t('payments.recordPayment')}</Text>
                 <Text style={styles.sub}>{subjectLabel}</Text>
 
                 <View style={styles.balanceRow}>
-                  <Text style={styles.balanceLabel}>Current Balance Due</Text>
+                  <Text style={styles.balanceLabel}>{t('payments.currentBalanceDue')}</Text>
                   <Text style={styles.balanceValue}>{formatCurrency(balanceDue, currency)}</Text>
                 </View>
 
@@ -185,7 +187,7 @@ export function RecordPaymentSheet({
                     the height-capped sheet, so it shrinks and scrolls internally
                     instead of pushing the submit button off-screen. */}
                 <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
-                  <Text style={styles.label}>Amount Received ({currency}) *</Text>
+                  <Text style={styles.label}>{t('payments.amountReceived', { currency })}</Text>
                   <TextInput
                     style={styles.amountInput}
                     value={amount}
@@ -196,7 +198,7 @@ export function RecordPaymentSheet({
                     autoFocus
                   />
 
-                  <Text style={styles.label}>Payment Method *</Text>
+                  <Text style={styles.label}>{t('payments.paymentMethod')}</Text>
                   <View style={styles.methodRow}>
                     {PAYMENT_METHODS.map(m => (
                       <TouchableOpacity
@@ -217,12 +219,12 @@ export function RecordPaymentSheet({
                     onReferenceChange={setReference}
                   />
 
-                  <Text style={styles.label}>Description / Note</Text>
+                  <Text style={styles.label}>{t('payments.descriptionNote')}</Text>
                   <TextInput
                     style={styles.input}
                     value={description}
                     onChangeText={setDescription}
-                    placeholder="Optional"
+                    placeholder={t('payments.optional')}
                     placeholderTextColor={C.textMuted}
                   />
 
@@ -230,7 +232,7 @@ export function RecordPaymentSheet({
                 </ScrollView>
 
                 {!isOnline && (
-                  <Text style={styles.offlineHint}>📡 No signal — this will be saved on your device and submitted automatically once you're back online.</Text>
+                  <Text style={styles.offlineHint}>{t('payments.offlineHint')}</Text>
                 )}
 
                 <TouchableOpacity
@@ -240,10 +242,10 @@ export function RecordPaymentSheet({
                 >
                   {(submitting || queueing)
                     ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={styles.submitBtnT}>{isOnline ? 'Save Payment' : 'Save Offline'}</Text>}
+                    : <Text style={styles.submitBtnT}>{isOnline ? t('payments.savePayment') : t('payments.saveOffline')}</Text>}
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={submitting || queueing}>
-                  <Text style={styles.cancelBtnT}>Cancel</Text>
+                  <Text style={styles.cancelBtnT}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </>
             )}

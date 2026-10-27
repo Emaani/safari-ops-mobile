@@ -24,6 +24,7 @@ import {
 } from '../../constants/bookingStatus';
 import type { Booking, BookingStatus, Vehicle } from '../../types/dashboard';
 import { getErrorMessage } from '../../lib/errors';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ─── Vehicle status colours ───────────────────────────────────────────────────
 const VEHICLE_STATUS_COLOR: Record<string, string> = {
@@ -86,6 +87,7 @@ function countDays(start: string, end: string): number {
 function DatePickerField({
   label, value, onChange, minDate,
 }: { label: string; value: string; onChange: (iso: string) => void; minDate?: Date }) {
+  const { t } = useAppPreferences();
   const [open, setOpen]     = useState(false);
   const [staged, setStaged] = useState<Date>(value ? new Date(value) : new Date());
 
@@ -99,7 +101,7 @@ function DatePickerField({
         <Text style={fld.label}>{label}</Text>
         <TouchableOpacity style={[fld.input, open && { borderColor: C.primary }]} onPress={handleOpen} activeOpacity={0.8}>
           <CalendarIcon color={value ? C.primary : C.muted} />
-          <Text style={[fld.inputText, !value && { color: C.muted }]}>{value ? fmtDate(value) : 'Select date'}</Text>
+          <Text style={[fld.inputText, !value && { color: C.muted }]}>{value ? fmtDate(value) : t('editBooking.selectDate')}</Text>
           {value && (
             <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <CloseIcon color={C.muted} />
@@ -111,9 +113,9 @@ function DatePickerField({
         <Pressable style={ps.backdrop} onPress={() => setOpen(false)} />
         <View style={ps.sheet}>
           <View style={ps.header}>
-            <TouchableOpacity onPress={() => setOpen(false)}><Text style={ps.cancel}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setOpen(false)}><Text style={ps.cancel}>{t('common.cancel')}</Text></TouchableOpacity>
             <Text style={ps.title}>{label}</Text>
-            <TouchableOpacity onPress={handleConfirm}><Text style={ps.confirm}>Confirm</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleConfirm}><Text style={ps.confirm}>{t('editBooking.confirmLabel')}</Text></TouchableOpacity>
           </View>
           <DateTimePicker value={staged} mode="date" display="inline" onChange={handleChange} minimumDate={minDate} themeVariant="light" accentColor={C.primary} style={{ marginHorizontal: 4 }} />
         </View>
@@ -142,9 +144,10 @@ const fld = StyleSheet.create({
 function StatusSelector({
   current, allowed, onChange,
 }: { current: BookingStatus; allowed: BookingStatus[]; onChange: (s: BookingStatus) => void }) {
+  const { t } = useAppPreferences();
   return (
     <View style={fld.wrap}>
-      <Text style={fld.label}>Status</Text>
+      <Text style={fld.label}>{t('safari.statusLabel')}</Text>
       <View style={st.segRow}>
         {allowed.map(s => {
           const cfg = BOOKING_STATUS_CONFIG[s];
@@ -192,6 +195,7 @@ interface EditBookingModalProps {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicles }: EditBookingModalProps) {
+  const { t } = useAppPreferences();
   const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
 
@@ -277,21 +281,21 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
   }, [endDate]);
 
   const validate = useCallback((): string | null => {
-    if (!startDate) return 'Start date is required.';
-    if (!endDate)   return 'End date is required.';
-    if (endDate < startDate) return 'End date must be on or after start date.';
+    if (!startDate) return t('editBooking.startDateRequired');
+    if (!endDate)   return t('editBooking.endDateRequired');
+    if (endDate < startDate) return t('editBooking.endDateAfterStart');
     const cost = parseFloat(totalCost);
-    if (isNaN(cost) || cost <= 0) return 'Total amount must be a positive number.';
+    if (isNaN(cost) || cost <= 0) return t('editBooking.totalMustBePositive');
     const paid = parseFloat(amountPaid || '0');
-    if (isNaN(paid) || paid < 0) return 'Amount paid cannot be negative.';
-    if (paid > cost) return 'Amount paid cannot exceed total amount.';
+    if (isNaN(paid) || paid < 0) return t('editBooking.amountPaidNegative');
+    if (paid > cost) return t('editBooking.amountPaidExceeds');
     return null;
   }, [startDate, endDate, totalCost, amountPaid]);
 
   const handleSave = useCallback(async () => {
     if (!booking) return;
     const err = validate();
-    if (err) { Alert.alert('Validation Error', err); return; }
+    if (err) { Alert.alert(t('common.validationError'), err); return; }
 
     setSaving(true);
     try {
@@ -307,7 +311,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
           const conflictRef = avail[0].conflict_booking_reference || 'another booking';
           Alert.alert(
             'Vehicle Unavailable',
-            `This vehicle is already assigned to ${conflictRef}. Please select a different vehicle.`,
+            t('editBooking.vehicleUnavailableMsg', { ref: conflictRef }),
             [{ text: 'OK' }],
           );
           setSaving(false);
@@ -355,7 +359,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
       onSuccess();
       onClose();
-      Alert.alert('Booking Updated', `${booking.booking_reference || booking.booking_number || 'Booking'} has been updated successfully.`);
+      Alert.alert('Booking Updated', t('editBooking.bookingUpdatedMsg', { ref: booking.booking_reference || booking.booking_number || 'Booking' }));
     } catch (e: any) {
       Alert.alert('Error', getErrorMessage(e, 'Failed to update booking. Please try again.'));
     } finally {
@@ -380,7 +384,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
             {/* Header */}
             <View style={s.header}>
               <View>
-                <Text style={s.headerEyebrow}>Edit Booking</Text>
+                <Text style={s.headerEyebrow}>{t('editBooking.eyebrow')}</Text>
                 <Text style={s.headerTitle} numberOfLines={1}>{ref} · {clientName}</Text>
               </View>
               <TouchableOpacity onPress={onClose} style={s.closeBtn}><CloseIcon color="#C4A882" /></TouchableOpacity>
@@ -390,14 +394,14 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
             <View style={[s.statusBanner, { backgroundColor: statusCfg.bg }]}>
               <View style={[s.statusDot, { backgroundColor: statusCfg.dot }]} />
               <Text style={[s.statusBannerText, { color: statusCfg.text }]}>
-                Current status: {statusCfg.label}
+                {t('editBooking.currentStatus', { label: statusCfg.label })}
               </Text>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
 
               {/* Section 1: Status */}
-              <SectionHeader step="1" title="Booking Status" />
+              <SectionHeader step="1" title={t('editBooking.step1Title')} />
               <StatusSelector
                 current={status}
                 allowed={allowedStatuses}
@@ -406,19 +410,19 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
               {/* Section 2: Dates & Package */}
               <View style={s.gap} />
-              <SectionHeader step="2" title="Trip Details" />
+              <SectionHeader step="2" title={t('editBooking.step2Title')} />
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Package Type</Text>
+                <Text style={fld.label}>{t('editBooking.fieldPackageType')}</Text>
                 <TextInput style={s.input} value={packageType} onChangeText={setPackageType} placeholder="e.g. 7-Day Safari Package" placeholderTextColor={C.muted} />
               </View>
 
               <View style={s.row}>
                 <View style={{ flex: 1 }}>
-                  <DatePickerField label="Start Date *" value={startDate} onChange={handleStartDateChange} />
+                  <DatePickerField label={t('editBooking.fieldStartDate')} value={startDate} onChange={handleStartDateChange} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <DatePickerField label="End Date *" value={endDate} onChange={setEndDate} minDate={startDate ? new Date(startDate) : undefined} />
+                  <DatePickerField label={t('editBooking.fieldEndDate')} value={endDate} onChange={setEndDate} minDate={startDate ? new Date(startDate) : undefined} />
                 </View>
               </View>
 
@@ -427,25 +431,25 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                   <CalendarIcon color={C.primary} />
                   <Text style={s.dateRangeText}>
                     {fmtDate(startDate)} → {fmtDate(endDate)}{'  '}
-                    <Text style={{ fontWeight: '800' }}>({countDays(startDate, endDate)} days)</Text>
+                    <Text style={{ fontWeight: '800' }}>{t('editBooking.daysSuffix', { count: countDays(startDate, endDate) })}</Text>
                   </Text>
                 </View>
               )}
 
               {/* Section 3: Pricing */}
               <View style={s.gap} />
-              <SectionHeader step="3" title="Pricing & Payment" />
+              <SectionHeader step="3" title={t('editBooking.step3Title')} />
 
               <View style={s.row}>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Daily Rate</Text>
+                    <Text style={fld.label}>{t('editBooking.fieldDailyRate')}</Text>
                     <TextInput style={s.input} value={dailyRate} onChangeText={setDailyRate} placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" />
                   </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Total Amount *</Text>
+                    <Text style={fld.label}>{t('editBooking.fieldTotalAmount')}</Text>
                     <TextInput style={s.input} value={totalCost} onChangeText={setTotalCost} placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" />
                   </View>
                 </View>
@@ -453,14 +457,14 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
               <View style={s.row}>
                 <View style={{ flex: 1, marginBottom: 14 }}>
-                  <Text style={fld.label}>Amount Paid</Text>
+                  <Text style={fld.label}>{t('editBooking.fieldAmountPaid')}</Text>
                   <View style={s.readOnly}>
                     <Text style={s.readOnlyText}>{currency} {(parseFloat(amountPaid) || 0).toFixed(2)}</Text>
                   </View>
-                  <Text style={fld.hint}>Use Record Payment on the booking detail screen to change this.</Text>
+                  <Text style={fld.hint}>{t('editBooking.amountPaidHint')}</Text>
                 </View>
                 <View style={{ flex: 1, marginBottom: 14 }}>
-                  <Text style={fld.label}>Balance Due</Text>
+                  <Text style={fld.label}>{t('editBooking.fieldBalanceDue')}</Text>
                   <View style={[s.readOnly, balance > 0 && { borderColor: C.danger + '40' }]}>
                     <Text style={[s.readOnlyText, balance > 0 && { color: C.danger }]}>
                       {currency} {balance.toFixed(2)}
@@ -470,7 +474,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Currency</Text>
+                <Text style={fld.label}>{t('editBooking.fieldCurrency')}</Text>
                 <View style={st.segRow}>
                   {(['USD','UGX','KES'] as const).map(cur => (
                     <TouchableOpacity key={cur} style={[st.seg, currency === cur && { backgroundColor: C.primary + '18', borderColor: C.primary }]} onPress={() => setCurrency(cur)}>
@@ -481,7 +485,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Payment Method</Text>
+                <Text style={fld.label}>{t('editBooking.fieldPaymentMethod')}</Text>
                 <View style={st.segRow}>
                   {(['Cash', 'Mobile Money', 'Bank Transfer', 'Card', 'Cheque', 'Online'] as const).map(m => (
                     <TouchableOpacity
@@ -497,16 +501,16 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
               {/* Section 4: Vehicle */}
               <View style={s.gap} />
-              <SectionHeader step="4" title="Vehicle Assignment" />
+              <SectionHeader step="4" title={t('editBooking.step4Title')} />
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Assigned Vehicle (Optional)</Text>
+                <Text style={fld.label}>{t('editBooking.fieldAssignedVehicle')}</Text>
                 <TouchableOpacity style={[fld.input, vehicleId && { borderColor: C.primary }]} onPress={() => setVehicleSheetOpen(true)} activeOpacity={0.8}>
                   <TruckIcon color={selectedVehicle ? C.primary : C.muted} />
                   <Text style={[fld.inputText, !selectedVehicle && { color: C.muted }]}>
                     {selectedVehicle
                       ? `${selectedVehicle.make} ${selectedVehicle.model} · ${selectedVehicle.license_plate}`
-                      : `Tap to browse — ${vehicles.filter(v => v.status === 'available').length} of ${vehicles.length} available`}
+                      : t('editBooking.tapToBrowse', { available: vehicles.filter(v => v.status === 'available').length, total: vehicles.length })}
                   </Text>
                   {vehicleId && (
                     <TouchableOpacity onPress={() => setVehicleId('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -518,18 +522,18 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
               {/* Section 5: Contact & Notes */}
               <View style={s.gap} />
-              <SectionHeader step="5" title="Contact & Notes" />
+              <SectionHeader step="5" title={t('editBooking.step5Title')} />
 
               <View style={s.row}>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Contact Phone</Text>
+                    <Text style={fld.label}>{t('editBooking.fieldContactPhone')}</Text>
                     <TextInput style={s.input} value={contact} onChangeText={setContact} placeholder="+256 700 000 000" placeholderTextColor={C.muted} keyboardType="phone-pad" />
                   </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Email</Text>
+                    <Text style={fld.label}>{t('driverMgmt.fieldEmail')}</Text>
                     <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="client@email.com" placeholderTextColor={C.muted} keyboardType="email-address" autoCapitalize="none" />
                   </View>
                 </View>
@@ -541,7 +545,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
 
               {/* Save button */}
               <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>{t('editBooking.saveChanges')}</Text>}
               </TouchableOpacity>
 
               <View style={{ height: insets.bottom + 24 }} />
@@ -560,8 +564,8 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
           {/* Dark header */}
           <View style={s.header}>
             <View>
-              <Text style={s.headerEyebrow}>Fleet</Text>
-              <Text style={s.headerTitle}>Select Vehicle</Text>
+              <Text style={s.headerEyebrow}>{t('editBooking.fleetEyebrow')}</Text>
+              <Text style={s.headerTitle}>{t('editBooking.selectVehicleTitle')}</Text>
             </View>
             <TouchableOpacity onPress={() => { setVehicleSheetOpen(false); setVehicleQuery(''); }} style={s.closeBtn}>
               <CloseIcon color="#C4A882" />
@@ -575,7 +579,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
               style={s.vpSearchInput}
               value={vehicleQuery}
               onChangeText={setVehicleQuery}
-              placeholder="Search make, model, or plate…"
+              placeholder={t('editBooking.searchVehiclePlaceholder')}
               placeholderTextColor={C.muted}
               autoCorrect={false}
               clearButtonMode="while-editing"
@@ -598,12 +602,12 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                 <View style={s.vpCountRow}>
                   <Text style={s.vpCountText}>
                     {loadingConflicts
-                      ? 'Checking availability…'
-                      : `${avail.length} available · ${unavail.length} unavailable`}
+                      ? t('editBooking.checkingAvailability')
+                      : t('editBooking.availUnavailCount', { avail: avail.length, unavail: unavail.length })}
                   </Text>
                   {vehicleId && (
                     <TouchableOpacity onPress={() => { setVehicleId(''); setVehicleSheetOpen(false); setVehicleQuery(''); }}>
-                      <Text style={{ fontSize: 12, color: C.danger, fontWeight: '700' }}>Clear</Text>
+                      <Text style={{ fontSize: 12, color: C.danger, fontWeight: '700' }}>{t('editBooking.clearLabel')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -615,7 +619,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                   ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
                   ListEmptyComponent={
                     <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Text style={{ fontSize: 14, color: C.muted, fontStyle: 'italic' }}>No vehicles match your search</Text>
+                      <Text style={{ fontSize: 14, color: C.muted, fontStyle: 'italic' }}>{t('editBooking.noVehiclesMatch')}</Text>
                     </View>
                   }
                   renderItem={({ item: v }) => {
@@ -626,7 +630,7 @@ export function EditBookingModal({ booking, visible, onClose, onSuccess, vehicle
                     // Date-conflict badge for extra context on booked vehicles
                     const statusClr   = (hasConflict && !isAvail) ? C.danger : (VEHICLE_STATUS_COLOR[v.status] ?? C.muted);
                     const statusLabel = hasConflict
-                      ? 'Conflict'
+                      ? t('editBooking.conflictBadge')
                       : v.status.charAt(0).toUpperCase() + v.status.slice(1);
 
                     return (

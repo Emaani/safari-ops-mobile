@@ -33,6 +33,7 @@ import { useInAppNotification } from '../system/InAppNotificationBanner';
 import { notifySuccess } from '../../lib/haptics';
 import { formatCurrency } from '../../lib/utils';
 import type { Currency } from '../../types/dashboard';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -169,7 +170,9 @@ interface DatePickerFieldProps {
   placeholder?: string;
 }
 
-function DatePickerField({ label, value, onChange, minDate, placeholder = 'Select date' }: DatePickerFieldProps) {
+function DatePickerField({ label, value, onChange, minDate, placeholder }: DatePickerFieldProps) {
+  const { t } = useAppPreferences();
+  const resolvedPlaceholder = placeholder ?? t('editBooking.selectDate');
   const [open,   setOpen]   = useState(false);
   const [staged, setStaged] = useState<Date>(value ? new Date(value) : new Date());
 
@@ -194,7 +197,7 @@ function DatePickerField({ label, value, onChange, minDate, placeholder = 'Selec
         >
           <CalendarIcon color={value ? C.primary : C.muted} />
           <Text style={[fieldStyles.iconInputText, !value && { color: C.muted, fontWeight: '400' }]}>
-            {value ? formatDisplay(value) : placeholder}
+            {value ? formatDisplay(value) : resolvedPlaceholder}
           </Text>
           {value ? (
             <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -213,11 +216,11 @@ function DatePickerField({ label, value, onChange, minDate, placeholder = 'Selec
         <View style={pickerStyles.sheet}>
           <View style={pickerStyles.sheetHeader}>
             <TouchableOpacity onPress={handleCancel} style={pickerStyles.headerBtn}>
-              <Text style={pickerStyles.cancelText}>Cancel</Text>
+              <Text style={pickerStyles.cancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <Text style={pickerStyles.sheetTitle}>{label.replace(' *', '')}</Text>
             <TouchableOpacity onPress={handleConfirm} style={pickerStyles.headerBtn}>
-              <Text style={pickerStyles.confirmText}>Confirm</Text>
+              <Text style={pickerStyles.confirmText}>{t('editBooking.confirmLabel')}</Text>
             </TouchableOpacity>
           </View>
           <DateTimePicker
@@ -263,6 +266,7 @@ function ApproverSearch({
   onSelect:  (p: ApproverProfile) => void;
   onClear:   () => void;
 }) {
+  const { t } = useAppPreferences();
   const [query,       setQuery]       = useState('');
   const [results,     setResults]     = useState<ApproverProfile[]>([]);
   const [searching,   setSearching]   = useState(false);
@@ -326,7 +330,7 @@ function ApproverSearch({
   if (selected) {
     return (
       <View style={fieldStyles.wrap}>
-        <Text style={fieldStyles.label}>Assign Administrator Approver *</Text>
+        <Text style={fieldStyles.label}>{t('addExpense.assignApproverLabel')}</Text>
         <View style={approverStyles.selectedPill}>
           <View style={approverStyles.selectedLeft}>
             <View style={approverStyles.avatar}>
@@ -350,7 +354,7 @@ function ApproverSearch({
 
   return (
     <View style={fieldStyles.wrap}>
-      <Text style={fieldStyles.label}>Assign Administrator Approver *</Text>
+      <Text style={fieldStyles.label}>{t('addExpense.assignApproverLabel')}</Text>
       <View style={[
         fieldStyles.iconInput,
         showResults && results.length > 0 && { borderColor: C.warning, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
@@ -364,7 +368,7 @@ function ApproverSearch({
             if (results.length > 0) setShowResults(true);
             else search('');
           }}
-          placeholder="Search administrators…"
+          placeholder={t('addExpense.searchAdminsPlaceholder')}
           placeholderTextColor={C.muted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -403,7 +407,7 @@ function ApproverSearch({
       )}
       {showResults && results.length === 0 && !searching && (
         <View style={approverStyles.noResults}>
-          <Text style={approverStyles.noResultsText}>No approvers found</Text>
+          <Text style={approverStyles.noResultsText}>{t('addExpense.noApproversFound')}</Text>
         </View>
       )}
     </View>
@@ -428,6 +432,7 @@ const approverStyles = StyleSheet.create({
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName }: AddExpenseModalProps) {
+  const { t } = useAppPreferences();
   const insets = useSafeAreaInsets();
   const { showNotification } = useInAppNotification();
   const [submitting, setSubmitting] = useState(false);
@@ -457,21 +462,21 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
   }, []);
 
   const validate = (): string | null => {
-    if (!category)                  return 'Please select a category.';
-    if (!department)                return 'Please select a department.';
-    if (!description.trim())        return 'Purpose / description is required.';
-    if (!itemDescription.trim())    return 'Item description is required.';
+    if (!category)                  return t('addExpense.categoryRequiredErr');
+    if (!department)                return t('addExpense.departmentRequiredErr');
+    if (!description.trim())        return t('addExpense.purposeRequiredErr');
+    if (!itemDescription.trim())    return t('addExpense.itemDescRequiredErr');
     const num = parseFloat(amount);
-    if (isNaN(num) || num <= 0)     return 'Amount must be a positive number.';
-    if (!payeeName.trim())          return 'Payee / recipient name is required.';
-    if (!dateNeeded)                return 'Please select the date needed.';
-    if (!approver)                  return 'Please assign an approver for this requisition.';
+    if (isNaN(num) || num <= 0)     return t('addExpense.amountPositiveErr');
+    if (!payeeName.trim())          return t('addExpense.payeeRequiredErr');
+    if (!dateNeeded)                return t('addExpense.dateNeededRequiredErr');
+    if (!approver)                  return t('addExpense.approverRequiredErr');
     return null;
   };
 
   const handleSubmit = useCallback(async () => {
     const err = validate();
-    if (err) { Alert.alert('Validation Error', err); return; }
+    if (err) { Alert.alert(t('common.validationError'), err); return; }
     setSubmitting(true);
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -533,13 +538,13 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
       notifySuccess();
       showNotification({
         type: 'cr_raised',
-        title: 'Requisition Submitted',
-        body: `${cr_number} sent to ${displayName(approver!)} for approval.`,
+        title: t('addExpense.requisitionSubmittedTitle'),
+        body: t('addExpense.requisitionSubmittedBody', { crNumber: cr_number, approverName: displayName(approver!) }),
         screen: 'Finance',
       });
       onSuccess();
     } catch (e: any) {
-      Alert.alert('Submission Failed', e?.message || 'Failed to submit requisition. Please try again.');
+      Alert.alert(t('addExpense.submissionFailedTitle'), e?.message || 'Failed to submit requisition. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -553,8 +558,8 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerEyebrow}>Finance</Text>
-              <Text style={styles.headerTitle}>Cash Requisition</Text>
+              <Text style={styles.headerEyebrow}>{t('dashboard.financeEyebrow')}</Text>
+              <Text style={styles.headerTitle}>{t('txnDetail.cashRequisitionTitle')}</Text>
             </View>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} style={styles.closeBtn}>
               <CloseIcon color="#C4A882" />
@@ -569,7 +574,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Category ── */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Category *</Text>
+              <Text style={fieldStyles.label}>{t('addExpense.categoryLabel')}</Text>
               <View style={styles.chipGrid}>
                 {CATEGORIES.map(cat => (
                   <TouchableOpacity
@@ -586,7 +591,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Department ── */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Department *</Text>
+              <Text style={fieldStyles.label}>{t('addExpense.departmentLabel')}</Text>
               <View style={styles.chipGrid}>
                 {DEPARTMENTS.map(dep => (
                   <TouchableOpacity
@@ -603,12 +608,12 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Purpose ── */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Purpose *</Text>
+              <Text style={fieldStyles.label}>{t('addExpense.purposeLabel')}</Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
                 value={description}
                 onChangeText={setDescription}
-                placeholder="Why are these funds needed? What is the objective?"
+                placeholder={t('addExpense.purposePlaceholder')}
                 placeholderTextColor={C.muted}
                 multiline
                 numberOfLines={2}
@@ -618,12 +623,12 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Item Description ── */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Item / Service Description *</Text>
+              <Text style={fieldStyles.label}>{t('addExpense.itemDescLabel')}</Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
                 value={itemDescription}
                 onChangeText={setItemDescription}
-                placeholder="Describe the specific item, service, or expense being requested…"
+                placeholder={t('addExpense.itemDescPlaceholder')}
                 placeholderTextColor={C.muted}
                 multiline
                 numberOfLines={2}
@@ -635,7 +640,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
             <View style={styles.row}>
               <View style={{ flex: 2 }}>
                 <View style={fieldStyles.wrap}>
-                  <Text style={fieldStyles.label}>Amount *</Text>
+                  <Text style={fieldStyles.label}>{t('addExpense.amountRequired')}</Text>
                   <TextInput
                     style={styles.input}
                     value={amount}
@@ -647,7 +652,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
                 </View>
               </View>
               <View style={{ flex: 1, marginBottom: 14 }}>
-                <Text style={fieldStyles.label}>Currency</Text>
+                <Text style={fieldStyles.label}>{t('editBooking.fieldCurrency')}</Text>
                 <View style={styles.segCol}>
                   {CURRENCIES.map(cur => (
                     <TouchableOpacity
@@ -664,7 +669,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Payment Mode ── */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Payment Mode *</Text>
+              <Text style={fieldStyles.label}>{t('addExpense.paymentModeLabel')}</Text>
               <View style={styles.chipGrid}>
                 {PAYMENT_MODES.map(mode => (
                   <TouchableOpacity
@@ -681,12 +686,12 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Payee Name ── */}
             <View style={fieldStyles.wrap}>
-              <Text style={fieldStyles.label}>Payee / Recipient *</Text>
+              <Text style={fieldStyles.label}>{t('addExpense.payeeLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={payeeName}
                 onChangeText={setPayeeName}
-                placeholder="Name of person or company receiving the funds"
+                placeholder={t('addExpense.payeePlaceholder')}
                 placeholderTextColor={C.muted}
                 autoCapitalize="words"
               />
@@ -694,11 +699,11 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
 
             {/* ── Date Needed (native calendar picker) ── */}
             <DatePickerField
-              label="Date Needed *"
+              label={t('addExpense.dateNeededRequired')}
               value={dateNeeded}
               onChange={setDateNeeded}
               minDate={new Date()}
-              placeholder="Select date funds are needed"
+              placeholder={t('addExpense.dateNeededPlaceholder')}
             />
 
             {/* ── Approver Assignment ── */}
@@ -711,8 +716,8 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
             {/* ── Workflow notice ── */}
             <View style={styles.notice}>
               <Text style={styles.noticeText}>
-                📋 This requisition will be submitted as <Text style={{ fontWeight: '800' }}>Pending</Text> and routed to
-                {approver ? ` ${displayName(approver)}` : ' the selected approver'} for review before funds are released.
+                {t('addExpense.noticePrefix')} <Text style={{ fontWeight: '800' }}>{t('safari.statusPending')}</Text> {t('addExpense.noticeMiddle')}
+                {approver ? ` ${displayName(approver)}` : ` ${t('addExpense.noticeFallbackApprover')}`} {t('addExpense.noticeSuffix')}
               </Text>
             </View>
 
@@ -725,7 +730,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, userId, userName 
             >
               {submitting
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.submitText}>Submit Requisition</Text>}
+                : <Text style={styles.submitText}>{t('addExpense.submitRequisitionBtn')}</Text>}
             </TouchableOpacity>
 
             <View style={{ height: insets.bottom + 20 }} />

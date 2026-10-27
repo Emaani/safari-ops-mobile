@@ -28,6 +28,7 @@ import { enqueueCrAction } from '../../lib/crStatusQueue';
 import type { FinancialTransaction, CashRequisition } from '../../types/dashboard';
 import { formatCurrency } from '../../lib/utils';
 import { getErrorMessage } from '../../lib/errors';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ─── Palette (matches app-wide branding) ─────────────────────────────────────
 const C = {
@@ -104,11 +105,23 @@ const CR_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   Cancelled: { bg: '#F2F2F7', text: '#6C6C70' },
 };
 
+function crStatusLabel(status: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    Pending: 'safari.statusPending', Approved: 'txnDetail.statusApproved',
+    Completed: 'txnDetail.statusCompleted', Resolved: 'txnDetail.statusResolved',
+    Declined: 'txnDetail.statusDeclined', Rejected: 'txnDetail.statusRejected',
+    Cancelled: 'txnDetail.statusCancelled',
+  };
+  const k = map[status];
+  return k ? t(k) : status;
+}
+
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useAppPreferences();
   const palette = CR_STATUS_COLORS[status] ?? { bg: C.input, text: C.muted };
   return (
     <View style={[statusStyles.badge, { backgroundColor: palette.bg }]}>
-      <Text style={[statusStyles.text, { color: palette.text }]}>{status}</Text>
+      <Text style={[statusStyles.text, { color: palette.text }]}>{crStatusLabel(status, t)}</Text>
     </View>
   );
 }
@@ -202,6 +215,7 @@ export function TransactionDetailModal({
   currentUserEmail,
   rates = DEFAULT_RATES,
 }: TransactionDetailModalProps) {
+  const { t } = useAppPreferences();
   const [actioning, setActioning] = useState(false);
   const [declinePromptOpen, setDeclinePromptOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
@@ -227,9 +241,10 @@ export function TransactionDetailModal({
       if (!isOnline) {
         await enqueueCrAction({ crId: cr.id, crNumber: cr.cr_number, action: newStatus, notes: null, reason });
         onClose();
+        const offlineMsgKey = newStatus === 'Approved' ? 'txnDetail.approvedOfflineMsg' : newStatus === 'Declined' ? 'txnDetail.declinedOfflineMsg' : 'txnDetail.cancelledOfflineMsg';
         Alert.alert(
-          'Saved — Will Submit When Online',
-          `${cr.cr_number} is saved on your device and will be ${newStatus.toLowerCase()} automatically once you're back online.`,
+          t('payments.savedWillSubmit'),
+          t(offlineMsgKey, { crNumber: cr.cr_number }),
         );
         return;
       }
@@ -253,10 +268,9 @@ export function TransactionDetailModal({
 
       onRefetch?.();
       onClose();
-      Alert.alert(
-        newStatus === 'Approved' ? '✅ Requisition Approved' : newStatus === 'Declined' ? 'Requisition Declined' : 'Requisition Cancelled',
-        `${cr.cr_number} has been ${newStatus.toLowerCase()}.`
-      );
+      const titleKey = newStatus === 'Approved' ? 'txnDetail.requisitionApprovedTitle' : newStatus === 'Declined' ? 'txnDetail.requisitionDeclinedTitle' : 'txnDetail.requisitionCancelledTitle';
+      const msgKey = newStatus === 'Approved' ? 'txnDetail.requisitionApprovedMsg' : newStatus === 'Declined' ? 'txnDetail.requisitionDeclinedMsg' : 'txnDetail.requisitionCancelledMsg';
+      Alert.alert(t(titleKey), t(msgKey, { crNumber: cr.cr_number }));
     } catch (e: any) {
       Alert.alert('Error', getErrorMessage(e, 'Failed to update requisition.'));
     } finally {
@@ -267,20 +281,20 @@ export function TransactionDetailModal({
   const handleCRAction = (newStatus: 'Approved' | 'Cancelled') => {
     if (!item) return;
     const cr = item as CashRequisition;
-    const verb = newStatus === 'Approved' ? 'Approve' : 'Cancel';
+    const isApprove = newStatus === 'Approved';
     Alert.alert(
-      `${verb} Requisition`,
-      `Are you sure you want to ${verb.toLowerCase()} ${cr.cr_number}?`,
+      isApprove ? t('txnDetail.approveRequisitionConfirmTitle') : t('txnDetail.cancelRequisitionConfirmTitle'),
+      isApprove ? t('txnDetail.approveConfirmMsg', { crNumber: cr.cr_number }) : t('txnDetail.cancelConfirmMsg', { crNumber: cr.cr_number }),
       [
-        { text: 'Back', style: 'cancel' },
-        { text: verb, style: newStatus === 'Cancelled' ? 'destructive' : 'default', onPress: () => runCRAction(newStatus, null) },
+        { text: t('txnDetail.backLabel'), style: 'cancel' },
+        { text: isApprove ? t('txnDetail.approveLabel') : t('common.cancel'), style: newStatus === 'Cancelled' ? 'destructive' : 'default', onPress: () => runCRAction(newStatus, null) },
       ]
     );
   };
 
   const confirmDecline = () => {
     if (!declineReason.trim()) {
-      Alert.alert('Reason Required', 'Enter a reason for declining this requisition.');
+      Alert.alert(t('txnDetail.reasonRequiredTitle'), t('txnDetail.reasonRequiredMsg'));
       return;
     }
     setDeclinePromptOpen(false);
@@ -291,11 +305,11 @@ export function TransactionDetailModal({
 
   // ── Transaction view ──────────────────────────────────────────────────────
   if (itemType === 'transaction') {
-    const t = item as FinancialTransaction;
-    const isIncome = t.transaction_type === 'income';
-    const displayAmt = convertAmount(t.amount, t.currency || 'USD');
-    const date = t.transaction_date
-      ? new Date(t.transaction_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    const txn = item as FinancialTransaction;
+    const isIncome = txn.transaction_type === 'income';
+    const displayAmt = convertAmount(txn.amount, txn.currency || 'USD');
+    const date = txn.transaction_date
+      ? new Date(txn.transaction_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
       : '—';
 
     return (
@@ -304,8 +318,8 @@ export function TransactionDetailModal({
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerEyebrow}>{isIncome ? 'Income' : 'Expense'}</Text>
-              <Text style={styles.headerTitle}>Transaction</Text>
+              <Text style={styles.headerEyebrow}>{isIncome ? t('finance.income') : t('finance.expenses')}</Text>
+              <Text style={styles.headerTitle}>{t('txnDetail.transactionTitle')}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <CloseIcon />
@@ -318,29 +332,29 @@ export function TransactionDetailModal({
               <View style={[styles.amountIcon, { backgroundColor: isIncome ? C.success + '20' : C.danger + '20' }]}>
                 {isIncome ? <ArrowUpIcon /> : <ArrowDownIcon />}
               </View>
-              <Text style={styles.amountLabel}>Amount</Text>
+              <Text style={styles.amountLabel}>{t('txnDetail.amountLabel')}</Text>
               <Text style={[styles.amountValue, { color: isIncome ? C.income : C.expense }]}>
                 {isIncome ? '+' : '-'}{formatCurrency(displayAmt, displayCurrency)}
               </Text>
-              {t.currency !== displayCurrency && (
-                <Text style={styles.amountOriginal}>{formatCurrency(t.amount, t.currency || 'USD')}</Text>
+              {txn.currency !== displayCurrency && (
+                <Text style={styles.amountOriginal}>{formatCurrency(txn.amount, txn.currency || 'USD')}</Text>
               )}
             </View>
 
             {/* Details card */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Transaction Details</Text>
-              <InfoRow label="Category"   value={t.category || 'Uncategorized'} />
-              <InfoRow label="Date"       value={date} />
-              <InfoRow label="Status"     value={t.status} />
-              <InfoRow label="Reference"  value={t.reference_number} />
-              <InfoRow label="Currency"   value={t.currency} />
+              <Text style={styles.cardTitle}>{t('txnDetail.transactionDetailsTitle')}</Text>
+              <InfoRow label={t('txnDetail.categoryLabel')}   value={txn.category || t('txnDetail.uncategorized')} />
+              <InfoRow label={t('txnDetail.dateLabel')}       value={date} />
+              <InfoRow label={t('safari.statusLabel')}     value={crStatusLabel(txn.status, t) !== txn.status ? crStatusLabel(txn.status, t) : txn.status} />
+              <InfoRow label={t('txnDetail.referenceLabel')}  value={txn.reference_number} />
+              <InfoRow label={t('editBooking.fieldCurrency')}   value={txn.currency} />
             </View>
 
-            {t.description && (
+            {txn.description && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Description</Text>
-                <Text style={styles.descText}>{t.description}</Text>
+                <Text style={styles.cardTitle}>{t('safari.fieldDescription')}</Text>
+                <Text style={styles.descText}>{txn.description}</Text>
               </View>
             )}
           </ScrollView>
@@ -383,8 +397,8 @@ export function TransactionDetailModal({
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerEyebrow}>Finance</Text>
-            <Text style={styles.headerTitle}>Cash Requisition</Text>
+            <Text style={styles.headerEyebrow}>{t('dashboard.financeEyebrow')}</Text>
+            <Text style={styles.headerTitle}>{t('txnDetail.cashRequisitionTitle')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
             <CloseIcon />
@@ -397,7 +411,7 @@ export function TransactionDetailModal({
             <View style={[styles.amountIcon, { backgroundColor: C.warning + '20' }]}>
               <ReceiptIcon color={C.warning} />
             </View>
-            <Text style={styles.amountLabel}>Requested Amount</Text>
+            <Text style={styles.amountLabel}>{t('txnDetail.requestedAmount')}</Text>
             <Text style={[styles.amountValue, { color: C.text }]}>
               {formatCurrency(displayAmt, displayCurrency)}
             </Text>
@@ -409,15 +423,15 @@ export function TransactionDetailModal({
 
           {/* Details card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Requisition Details</Text>
-            <InfoRow label="CR Number"    value={cr.cr_number} />
-            <InfoRow label="Category"     value={cr.expense_category} />
-            <InfoRow label="Requested By" value={(cr as any).requester_name || cr.requested_by} />
-            <InfoRow label="Date Needed"  value={dateNeeded} />
-            <InfoRow label="Date Created" value={createdDate} />
+            <Text style={styles.cardTitle}>{t('txnDetail.requisitionDetailsTitle')}</Text>
+            <InfoRow label={t('txnDetail.crNumberLabel')}    value={cr.cr_number} />
+            <InfoRow label={t('txnDetail.categoryLabel')}     value={cr.expense_category} />
+            <InfoRow label={t('txnDetail.requestedByLabel')} value={(cr as any).requester_name || cr.requested_by} />
+            <InfoRow label={t('txnDetail.dateNeededLabel')}  value={dateNeeded} />
+            <InfoRow label={t('txnDetail.dateCreatedLabel')} value={createdDate} />
             {cr.approver && (
               <InfoRow
-                label="Assigned Approver"
+                label={t('txnDetail.assignedApproverLabel')}
                 value={cr.approver.full_name?.trim() || cr.approver.email || undefined}
               />
             )}
@@ -425,14 +439,14 @@ export function TransactionDetailModal({
 
           {/* Audit timeline — see AuditStep comment above for what's omitted and why */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Audit Timeline</Text>
-            <AuditStep label="Submitted" time={createdDate} tone="done" />
+            <Text style={styles.cardTitle}>{t('txnDetail.auditTimelineTitle')}</Text>
+            <AuditStep label={t('txnDetail.submittedLabel')} time={createdDate} tone="done" />
             {cr.status === 'Pending' && (
-              <AuditStep label="Awaiting Approval" tone="active" isLast />
+              <AuditStep label={t('txnDetail.awaitingApprovalLabel')} tone="active" isLast />
             )}
             {(cr.status === 'Approved' || cr.status === 'Completed' || cr.status === 'Resolved') && (
               <AuditStep
-                label="Approved"
+                label={t('txnDetail.statusApproved')}
                 time={cr.approved_at ? new Date(cr.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined}
                 sublabel={cr.approver?.full_name?.trim() || cr.approver?.email || undefined}
                 tone="done"
@@ -441,18 +455,18 @@ export function TransactionDetailModal({
             )}
             {(cr.status === 'Declined' || cr.status === 'Rejected') && (
               <AuditStep
-                label={cr.status}
+                label={crStatusLabel(cr.status, t)}
                 time={cr.declined_at ? new Date(cr.declined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined}
                 tone="danger"
                 isLast
               />
             )}
             {cr.status === 'Cancelled' && (
-              <AuditStep label="Cancelled" tone="muted" isLast />
+              <AuditStep label={t('txnDetail.statusCancelled')} tone="muted" isLast />
             )}
             {(cr.status === 'Completed' || cr.status === 'Resolved') && (
               <AuditStep
-                label={cr.status === 'Completed' ? 'Completed' : 'Resolved'}
+                label={cr.status === 'Completed' ? t('txnDetail.statusCompleted') : t('txnDetail.statusResolved')}
                 time={cr.date_completed ? new Date(cr.date_completed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined}
                 tone="done"
                 isLast
@@ -462,7 +476,7 @@ export function TransactionDetailModal({
 
           {cr.description && (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Description / Purpose</Text>
+              <Text style={styles.cardTitle}>{t('txnDetail.descriptionPurposeTitle')}</Text>
               <Text style={styles.descText}>{cr.description}</Text>
             </View>
           )}
@@ -470,25 +484,25 @@ export function TransactionDetailModal({
           {/* Approve / Decline — designated approver, or any non-submitter when no approver is set */}
           {isPending && canApprove && (
             <View style={styles.approvalCard}>
-              <Text style={styles.approvalTitle}>Approval Action</Text>
+              <Text style={styles.approvalTitle}>{t('txnDetail.approvalActionTitle')}</Text>
               <Text style={styles.approvalSub}>
                 {hasDesignatedApprover
-                  ? 'This requisition is awaiting your approval. You are the designated approver.'
-                  : 'No specific approver was assigned. As a non-submitter, you can action this requisition.'}
+                  ? t('txnDetail.awaitingYourApproval')
+                  : t('txnDetail.noApproverAssigned')}
               </Text>
 
               {!isOnline && (
-                <Text style={styles.offlineHint}>📡 No signal — this will be saved on your device and submitted automatically once you're back online.</Text>
+                <Text style={styles.offlineHint}>{t('payments.offlineHint')}</Text>
               )}
 
               {declinePromptOpen ? (
                 <View style={{ marginTop: 12 }}>
-                  <Text style={styles.declineLabel}>Reason for declining *</Text>
+                  <Text style={styles.declineLabel}>{t('txnDetail.reasonForDeclining')}</Text>
                   <TextInput
                     style={styles.declineInput}
                     value={declineReason}
                     onChangeText={setDeclineReason}
-                    placeholder="Required — explain why this is being declined"
+                    placeholder={t('txnDetail.declineReasonPlaceholder')}
                     placeholderTextColor={C.muted}
                     multiline
                     autoFocus
@@ -502,7 +516,7 @@ export function TransactionDetailModal({
                     >
                       {actioning
                         ? <ActivityIndicator color={C.danger} size="small" />
-                        : <Text style={styles.declineBtnText}>Confirm Decline</Text>
+                        : <Text style={styles.declineBtnText}>{t('txnDetail.confirmDecline')}</Text>
                       }
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -510,7 +524,7 @@ export function TransactionDetailModal({
                       onPress={() => { setDeclinePromptOpen(false); setDeclineReason(''); }}
                       disabled={actioning}
                     >
-                      <Text style={styles.cancelPromptBtnText}>Back</Text>
+                      <Text style={styles.cancelPromptBtnText}>{t('txnDetail.backLabel')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -524,7 +538,7 @@ export function TransactionDetailModal({
                   >
                     {actioning
                       ? <ActivityIndicator color="#fff" size="small" />
-                      : <><CheckIcon color="#fff" /><Text style={styles.approveBtnText}>Approve</Text></>
+                      : <><CheckIcon color="#fff" /><Text style={styles.approveBtnText}>{t('txnDetail.approveLabel')}</Text></>
                     }
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -533,7 +547,7 @@ export function TransactionDetailModal({
                     disabled={actioning}
                     activeOpacity={0.85}
                   >
-                    <XIcon color={C.danger} /><Text style={styles.declineBtnText}>Decline</Text>
+                    <XIcon color={C.danger} /><Text style={styles.declineBtnText}>{t('txnDetail.declineLabel')}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -543,9 +557,9 @@ export function TransactionDetailModal({
           {/* Cancel — the requester can withdraw their own pending requisition, admin/fleet_manager can cancel any */}
           {isPending && (isSubmitter || isAdminOrFleetManager) && (
             <View style={styles.cancelCard}>
-              <Text style={styles.cancelCardTitle}>Need to withdraw this requisition?</Text>
+              <Text style={styles.cancelCardTitle}>{t('txnDetail.withdrawTitle')}</Text>
               <Text style={styles.cancelCardSub}>
-                {isSubmitter ? 'You submitted this requisition and can cancel it if it\'s no longer needed.' : 'As an admin, you can cancel this requisition on the requester\'s behalf.'}
+                {isSubmitter ? t('txnDetail.withdrawSubmitterMsg') : t('txnDetail.withdrawAdminMsg')}
               </Text>
               <TouchableOpacity
                 style={[styles.cancelReqBtn, actioning && { opacity: 0.6 }]}
@@ -553,7 +567,7 @@ export function TransactionDetailModal({
                 disabled={actioning}
                 activeOpacity={0.85}
               >
-                <Text style={styles.cancelReqBtnText}>Cancel Requisition</Text>
+                <Text style={styles.cancelReqBtnText}>{t('txnDetail.cancelRequisitionBtn')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -563,8 +577,8 @@ export function TransactionDetailModal({
             <View style={styles.selfSubmitNotice}>
               <Text style={styles.selfSubmitText}>
                 {hasDesignatedApprover
-                  ? 'You submitted this requisition and cannot approve it. The assigned approver will review it.'
-                  : 'You submitted this requisition and cannot approve it. Another team member will need to review it.'}
+                  ? t('txnDetail.selfSubmitDesignated')
+                  : t('txnDetail.selfSubmitUndesignated')}
               </Text>
             </View>
           )}

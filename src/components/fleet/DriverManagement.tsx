@@ -25,6 +25,7 @@ import { devError } from '../../lib/devLog';
 import { realtimeManager } from '../../lib/realtimeManager';
 import { logEvent } from '../../lib/eventLogger';
 import { EmptyState } from '../ui';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 import type { Vehicle, Driver, DriverIncident, TripReview } from '../../types/dashboard';
 import { getErrorMessage } from '../../lib/errors';
 
@@ -95,6 +96,7 @@ function initialsOf(name: string) {
 function AddEditDriverModal({ visible, driver, onClose, onSaved }: {
   visible: boolean; driver: Driver | null; onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -150,22 +152,22 @@ function AddEditDriverModal({ visible, driver, onClose, onSaved }: {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
           <View style={m.header}>
-            <Text style={m.title}>{driver ? 'Edit Driver' : 'Add Driver'}</Text>
+            <Text style={m.title}>{driver ? t('driverMgmt.editDriverTitle') : t('driverMgmt.addDriverTitle')}</Text>
             <TouchableOpacity onPress={onClose} style={m.closeBtn}><CloseIcon /></TouchableOpacity>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-            <Text style={m.label}>Full Name *</Text>
+            <Text style={m.label}>{t('driverMgmt.fieldFullName')}</Text>
             <TextInput style={m.input} value={name} onChangeText={setName} placeholder="e.g. John Musoke" placeholderTextColor={C.textMuted} />
-            <Text style={m.label}>Phone</Text>
+            <Text style={m.label}>{t('driverMgmt.fieldPhone')}</Text>
             <TextInput style={m.input} value={phone} onChangeText={setPhone} placeholder="+256 700 000000" placeholderTextColor={C.textMuted} keyboardType="phone-pad" />
-            <Text style={m.label}>Email</Text>
+            <Text style={m.label}>{t('driverMgmt.fieldEmail')}</Text>
             <TextInput style={m.input} value={email} onChangeText={setEmail} placeholder="driver@example.com" placeholderTextColor={C.textMuted} keyboardType="email-address" autoCapitalize="none" />
-            <Text style={m.label}>License Number</Text>
+            <Text style={m.label}>{t('driverMgmt.fieldLicenseNumber')}</Text>
             <TextInput style={m.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder="e.g. DL-00123456" placeholderTextColor={C.textMuted} autoCapitalize="characters" />
-            <Text style={m.label}>License Expiry (YYYY-MM-DD)</Text>
+            <Text style={m.label}>{t('driverMgmt.fieldLicenseExpiry')}</Text>
             <TextInput style={m.input} value={licenseExpiry} onChangeText={setLicenseExpiry} placeholder="2027-06-30" placeholderTextColor={C.textMuted} keyboardType="numbers-and-punctuation" />
             <TouchableOpacity style={[m.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnT}>{driver ? 'Update Driver' : 'Add Driver'}</Text>}
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnT}>{driver ? t('driverMgmt.updateDriverBtn') : t('driverMgmt.addDriverTitle')}</Text>}
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
@@ -178,6 +180,7 @@ function AddEditDriverModal({ visible, driver, onClose, onSaved }: {
 function AssignDriverModal({ vehicle, drivers, onClose, onAssign }: {
   vehicle: Vehicle | null; drivers: Driver[]; onClose: () => void; onAssign: (driver: Driver | null) => void;
 }) {
+  const { t } = useAppPreferences();
   if (!vehicle) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -186,11 +189,11 @@ function AssignDriverModal({ vehicle, drivers, onClose, onAssign }: {
       </TouchableOpacity>
       <View style={m.sheetWrap}>
         <View style={m.sheet}>
-          <Text style={m.sheetTitle}>Assign Driver</Text>
+          <Text style={m.sheetTitle}>{t('driverMgmt.assignDriverTitle')}</Text>
           <Text style={m.sheetSub}>{vehicle.license_plate} · {vehicle.make} {vehicle.model}</Text>
           <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
             <TouchableOpacity style={m.optionRow} onPress={() => onAssign(null)}>
-              <Text style={[m.optionText, { color: C.textMuted }]}>Unassigned</Text>
+              <Text style={[m.optionText, { color: C.textMuted }]}>{t('driverMgmt.unassigned')}</Text>
               {!vehicle.current_driver_id && <CheckIcon />}
             </TouchableOpacity>
             {drivers.map(d => (
@@ -199,10 +202,10 @@ function AssignDriverModal({ vehicle, drivers, onClose, onAssign }: {
                 {vehicle.current_driver_id === d.id && <CheckIcon />}
               </TouchableOpacity>
             ))}
-            {drivers.length === 0 && <Text style={m.sheetSub}>No drivers on file yet — add one from the Roster tab first.</Text>}
+            {drivers.length === 0 && <Text style={m.sheetSub}>{t('driverMgmt.noDriversForAssign')}</Text>}
           </ScrollView>
           <TouchableOpacity style={m.cancelBtn} onPress={onClose}>
-            <Text style={m.cancelBtnT}>Cancel</Text>
+            <Text style={m.cancelBtnT}>{t('common.cancel')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -236,6 +239,7 @@ type SubTab = 'roster' | 'assign' | 'performance';
 export function DriverManagement({ vehicles, onVehiclesChanged }: {
   vehicles: Vehicle[]; onVehiclesChanged: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [subTab, setSubTab] = useState<SubTab>('roster');
   const [search, setSearch] = useState('');
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -356,9 +360,9 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
       {/* Sub-tab bar */}
       <View style={s.subBar}>
         {([
-          { key: 'roster', label: 'Roster' },
-          { key: 'assign', label: 'Assign' },
-          { key: 'performance', label: 'Performance' },
+          { key: 'roster', label: t('driverMgmt.tabRoster') },
+          { key: 'assign', label: t('driverMgmt.tabAssign') },
+          { key: 'performance', label: t('driverMgmt.tabPerformance') },
         ] as { key: SubTab; label: string }[]).map(t => (
           <TouchableOpacity
             key={t.key}
@@ -376,7 +380,7 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
           style={s.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder={subTab === 'assign' ? 'Search vehicles...' : 'Search drivers...'}
+          placeholder={subTab === 'assign' ? t('fleet.searchPlaceholder') : t('driverMgmt.searchDriversPlaceholder')}
           placeholderTextColor={C.textMuted}
           autoCorrect={false}
           autoCapitalize="none"
@@ -397,7 +401,7 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.driverName} numberOfLines={1}>{d.full_name}</Text>
                 <Text style={s.driverMeta} numberOfLines={1}>
-                  {[d.phone, d.license_number ? `Lic. ${d.license_number}` : null].filter(Boolean).join(' · ') || 'No contact info on file'}
+                  {[d.phone, d.license_number ? `Lic. ${d.license_number}` : null].filter(Boolean).join(' · ') || t('driverMgmt.noContactInfo')}
                 </Text>
               </View>
               {vehicleByDriverId[d.id] && (
@@ -410,9 +414,9 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
           )}
           ListEmptyComponent={!loading ? (
             driversError ? (
-              <EmptyState type="fleet" title="Couldn't load drivers" subtitle={driversError} secondaryLabel="Retry" onSecondary={fetchDrivers} />
+              <EmptyState type="fleet" title={t('driverMgmt.couldntLoadDrivers')} subtitle={driversError} secondaryLabel={t('common.retry')} onSecondary={fetchDrivers} />
             ) : (
-              <EmptyState type="fleet" title={search ? 'No drivers match' : 'No drivers yet'} subtitle={search ? 'Try a different search.' : 'Add your first driver using the + button.'} />
+              <EmptyState type="fleet" title={search ? t('driverMgmt.rosterNoMatch') : t('driverMgmt.rosterEmpty')} subtitle={search ? t('driverMgmt.noMatchTrySearch') : t('driverMgmt.rosterEmptySub')} />
             )
           ) : null}
           contentContainerStyle={s.listContent}
@@ -433,15 +437,15 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
               </View>
               <View style={{ alignItems: 'flex-end', gap: 6 }}>
                 <Text style={[s.assignedName, !v.drivers?.full_name && { color: C.textMuted, fontStyle: 'italic' }]}>
-                  {v.drivers?.full_name || 'Unassigned'}
+                  {v.drivers?.full_name || t('driverMgmt.unassigned')}
                 </Text>
                 <TouchableOpacity style={s.assignBtn} onPress={() => setAssigningVehicle(v)}>
-                  <Text style={s.assignBtnT}>{v.drivers?.full_name ? 'Change' : 'Assign'}</Text>
+                  <Text style={s.assignBtnT}>{v.drivers?.full_name ? t('driverMgmt.changeBtn') : t('driverMgmt.assignBtn')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
-          ListEmptyComponent={<EmptyState type="fleet" title={search ? 'No vehicles match' : 'No vehicles yet'} subtitle={search ? 'Try a different search.' : 'Vehicles will appear here once added.'} />}
+          ListEmptyComponent={<EmptyState type="fleet" title={search ? t('fleet.emptyNoMatch') : t('driverMgmt.vehiclesEmpty')} subtitle={search ? t('driverMgmt.noMatchTrySearch') : t('driverMgmt.vehiclesEmptySub')} />}
           contentContainerStyle={s.listContent}
         />
       )}
@@ -466,7 +470,7 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={s.driverName} numberOfLines={1}>{d.full_name}</Text>
                     <Text style={s.driverMeta} numberOfLines={1}>
-                      {(d.total_trips ?? 0)} trip{d.total_trips === 1 ? '' : 's'}{stat && stat.reviewCount > 0 ? ` · ${stat.reviewCount} review${stat.reviewCount === 1 ? '' : 's'}` : ''}
+                      {t('driverMgmt.tripsCount', { count: d.total_trips ?? 0, plural: d.total_trips === 1 ? '' : 's' })}{stat && stat.reviewCount > 0 ? ` · ${t('driverMgmt.reviewsCount', { count: stat.reviewCount, plural: stat.reviewCount === 1 ? '' : 's' })}` : ''}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 6 }}>
@@ -478,14 +482,14 @@ export function DriverManagement({ vehicles, onVehiclesChanged }: {
                     {!!stat?.incidentCount && (
                       <View style={s.incidentPill}>
                         <WarningIcon />
-                        <Text style={s.incidentPillT}>{stat.incidentCount} incident{stat.incidentCount === 1 ? '' : 's'}</Text>
+                        <Text style={s.incidentPillT}>{t('driverMgmt.incidentsCount', { count: stat.incidentCount, plural: stat.incidentCount === 1 ? '' : 's' })}</Text>
                       </View>
                     )}
                   </View>
                 </View>
               );
             }}
-            ListEmptyComponent={<EmptyState type="fleet" title="No drivers yet" subtitle="Performance data appears once drivers are added." />}
+            ListEmptyComponent={<EmptyState type="fleet" title={t('driverMgmt.rosterEmpty')} subtitle={t('driverMgmt.performanceEmptySub')} />}
             contentContainerStyle={s.listContent}
           />
         )

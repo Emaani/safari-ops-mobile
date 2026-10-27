@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Svg, Path, Circle } from 'react-native-svg';
 import { useFleetDataContext } from '../contexts/FleetDataContext';
+import { useAppPreferences } from '../contexts/AppPreferencesContext';
 import { VehicleCard, VehicleDetailModal, MaintenanceTracker, DriverManagement } from '../components/fleet';
 import type { Vehicle, VehicleStatus } from '../types/dashboard';
 import { FadeSlideIn, EmptyState, ListSkeleton } from '../components/ui';
@@ -44,13 +45,15 @@ const COLORS = {
   border:     '#E5E5EA',
 };
 
-const STATUS_FILTERS: { label: string; value: VehicleStatus | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Available', value: 'available' },
-  { label: 'Booked', value: 'booked' },
-  { label: 'Rented', value: 'rented' },
-  { label: 'Maintenance', value: 'maintenance' },
-  { label: 'Out of Service', value: 'out_of_service' },
+// Labels are resolved via t() inside the component (statusLabel()) since
+// module-level constants can't call hooks — this array only carries values.
+const STATUS_FILTERS: { value: VehicleStatus | 'all' }[] = [
+  { value: 'all' },
+  { value: 'available' },
+  { value: 'booked' },
+  { value: 'rented' },
+  { value: 'maintenance' },
+  { value: 'out_of_service' },
 ];
 
 // ============================================================================
@@ -159,6 +162,19 @@ export function FleetScreen() {
   // Shared across Fleet + Bookings tabs via FleetDataProvider — one fetch,
   // one realtime subscription, instead of each screen running its own.
   const { vehicles, repairs, loading, error, refetch } = useFleetDataContext();
+  const { t } = useAppPreferences();
+
+  const statusLabel = useCallback((value: VehicleStatus | 'all'): string => {
+    switch (value) {
+      case 'all': return t('fleet.statusAll');
+      case 'available': return t('fleet.available');
+      case 'booked': return t('fleet.statusBooked');
+      case 'rented': return t('fleet.statusRented');
+      case 'maintenance': return t('fleet.maintenance');
+      case 'out_of_service': return t('fleet.statusOutOfService');
+      default: return value;
+    }
+  }, [t]);
 
   // ========================================================================
   // COMPUTED VALUES
@@ -277,10 +293,10 @@ export function FleetScreen() {
         <>
           {/* Stats Cards */}
           <View style={styles.statsContainer}>
-            <StatCard title="Total Fleet"  value={stats.total}       color={COLORS.primary} bgColor="#F5E8D0" delay={0}   />
-            <StatCard title="Available"    value={stats.available}   color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
-            <StatCard title="On Safari"    value={stats.booked}      color={COLORS.purple}  bgColor="#ede8f9" delay={120} />
-            <StatCard title="Maintenance"  value={stats.maintenance} color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
+            <StatCard title={t('fleet.total')}  value={stats.total}       color={COLORS.primary} bgColor="#F5E8D0" delay={0}   />
+            <StatCard title={t('fleet.available')}    value={stats.available}   color={COLORS.success} bgColor="#D8F0E4" delay={60}  />
+            <StatCard title={t('fleet.onSafari')}    value={stats.booked}      color={COLORS.purple}  bgColor="#ede8f9" delay={120} />
+            <StatCard title={t('fleet.maintenance')}  value={stats.maintenance} color={COLORS.warning} bgColor="#FDE8C0" delay={180} />
           </View>
         </>
       )}
@@ -291,7 +307,7 @@ export function FleetScreen() {
           <SearchIcon size={18} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search vehicles..."
+            placeholder={t('fleet.searchPlaceholder')}
             placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -327,7 +343,7 @@ export function FleetScreen() {
                       statusFilter === item.value && styles.filterPillTextActive,
                     ]}
                   >
-                    {item.label}
+                    {statusLabel(item.value)}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -370,7 +386,7 @@ export function FleetScreen() {
       )}
 
       {/* List Header */}
-      <Text style={styles.listHeader}>Vehicles ({filteredVehicles.length})</Text>
+      <Text style={styles.listHeader}>{t('fleet.vehiclesCount', { count: filteredVehicles.length })}</Text>
     </>
   );
 
@@ -384,13 +400,13 @@ export function FleetScreen() {
     return (
       <EmptyState
         type="fleet"
-        title={searchQuery || statusFilter !== 'all' ? 'No vehicles match' : 'Fleet is empty'}
+        title={searchQuery || statusFilter !== 'all' ? t('fleet.emptyNoMatch') : t('fleet.emptyIsEmpty')}
         subtitle={
           searchQuery || statusFilter !== 'all'
-            ? 'Try adjusting your search or filters.'
-            : 'Add your first vehicle to start managing your safari fleet.'
+            ? t('fleet.emptyNoMatchSub')
+            : t('fleet.emptyIsEmptySub')
         }
-        secondaryLabel={searchQuery || statusFilter !== 'all' ? 'Clear Filters' : undefined}
+        secondaryLabel={searchQuery || statusFilter !== 'all' ? t('fleet.clearFilters') : undefined}
         onSecondary={searchQuery || statusFilter !== 'all' ? () => { setSearchQuery(''); setStatusFilter('all'); } : undefined}
       />
     );
@@ -407,8 +423,8 @@ export function FleetScreen() {
           <Text style={styles.heroEyebrow}>Operations</Text>
           <View style={styles.heroRow}>
             <View>
-              <Text style={styles.heroTitle}>Fleet</Text>
-              <Text style={styles.heroSub}>{stats.total} vehicles · {stats.available} available</Text>
+              <Text style={styles.heroTitle}>{t('fleet.title')}</Text>
+              <Text style={styles.heroSub}>{t('fleet.heroSubtitle', { total: stats.total, available: stats.available })}</Text>
             </View>
             {stats.maintenance > 0 && (
               <View style={[styles.heroBadge, { backgroundColor: '#C6A563' }]}>
@@ -423,13 +439,13 @@ export function FleetScreen() {
               style={[styles.segmentBtn, viewMode === 'vehicles' && styles.segmentBtnOn]}
               onPress={() => setViewMode('vehicles')}
             >
-              <Text style={[styles.segmentT, viewMode === 'vehicles' && styles.segmentTOn]}>Vehicles</Text>
+              <Text style={[styles.segmentT, viewMode === 'vehicles' && styles.segmentTOn]}>{t('fleet.segmentVehicles')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.segmentBtn, viewMode === 'drivers' && styles.segmentBtnOn]}
               onPress={() => setViewMode('drivers')}
             >
-              <Text style={[styles.segmentT, viewMode === 'drivers' && styles.segmentTOn]}>Drivers</Text>
+              <Text style={[styles.segmentT, viewMode === 'drivers' && styles.segmentTOn]}>{t('fleet.segmentDrivers')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -443,7 +459,7 @@ export function FleetScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.heroTabText, statusFilter === f.value && styles.heroTabTextActive]}>
-                    {f.label}
+                    {statusLabel(f.value)}
                   </Text>
                 </TouchableOpacity>
               ))}

@@ -28,6 +28,7 @@ import { notifySuccess } from '../../lib/haptics';
 import { usePaymentRecording, generateRequestId } from '../../hooks/usePaymentRecording';
 import type { PaymentDetails, PaymentMethod as RecordPaymentMethod } from '../../lib/paymentMethods';
 import { getErrorMessage } from '../../lib/errors';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -181,7 +182,9 @@ interface DatePickerFieldProps {
   placeholder?: string;
   hasError?: boolean;
 }
-function DatePickerField({ label, value, onChange, minDate, placeholder = 'Select date', hasError }: DatePickerFieldProps) {
+function DatePickerField({ label, value, onChange, minDate, placeholder, hasError }: DatePickerFieldProps) {
+  const { t } = useAppPreferences();
+  const resolvedPlaceholder = placeholder ?? t('editBooking.selectDate');
   const [open,   setOpen]   = useState(false);
   const [staged, setStaged] = useState<Date>(value ? new Date(value) : new Date());
 
@@ -200,7 +203,7 @@ function DatePickerField({ label, value, onChange, minDate, placeholder = 'Selec
         >
           <CalendarIcon color={value ? C.primary : C.muted} />
           <Text style={[fld.iconInputText, !value && { color: C.muted, fontWeight: '400' }]}>
-            {value ? formatDisplay(value) : placeholder}
+            {value ? formatDisplay(value) : resolvedPlaceholder}
           </Text>
           {value
             ? <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><CloseIcon color={C.muted} /></TouchableOpacity>
@@ -211,9 +214,9 @@ function DatePickerField({ label, value, onChange, minDate, placeholder = 'Selec
         <Pressable style={pickerSt.backdrop} onPress={handleCancel} />
         <View style={pickerSt.sheet}>
           <View style={pickerSt.sheetHeader}>
-            <TouchableOpacity onPress={handleCancel} style={pickerSt.headerBtn}><Text style={pickerSt.cancelText}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleCancel} style={pickerSt.headerBtn}><Text style={pickerSt.cancelText}>{t('common.cancel')}</Text></TouchableOpacity>
             <Text style={pickerSt.sheetTitle}>{label.replace(' *', '')}</Text>
-            <TouchableOpacity onPress={handleConfirm} style={pickerSt.headerBtn}><Text style={pickerSt.confirmText}>Confirm</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleConfirm} style={pickerSt.headerBtn}><Text style={pickerSt.confirmText}>{t('editBooking.confirmLabel')}</Text></TouchableOpacity>
           </View>
           <DateTimePicker value={staged} mode="date" display="inline" onChange={handleChange} minimumDate={minDate} themeVariant="light" accentColor={C.primary} style={pickerSt.picker} />
         </View>
@@ -243,6 +246,7 @@ function VehiclePickerSheet({
   onClose: () => void;
   conflictingIds?: Set<string>;
 }) {
+  const { t } = useAppPreferences();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
 
@@ -269,8 +273,8 @@ function VehiclePickerSheet({
         {/* Header */}
         <View style={vpSt.header}>
           <View>
-            <Text style={vpSt.eyebrow}>Fleet</Text>
-            <Text style={vpSt.title}>Select Vehicle</Text>
+            <Text style={vpSt.eyebrow}>{t('editBooking.fleetEyebrow')}</Text>
+            <Text style={vpSt.title}>{t('editBooking.selectVehicleTitle')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={vpSt.closeBtn}><CloseIcon color="#C4A882" /></TouchableOpacity>
         </View>
@@ -282,7 +286,7 @@ function VehiclePickerSheet({
             style={vpSt.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search by make, model, or plate…"
+            placeholder={t('newBooking.searchVehiclePlaceholder')}
             placeholderTextColor={C.muted}
             autoCorrect={false}
             clearButtonMode="while-editing"
@@ -292,11 +296,11 @@ function VehiclePickerSheet({
         {/* Count pill */}
         <View style={vpSt.countRow}>
           <Text style={vpSt.countText}>
-            {available.length} available · {other.length} unavailable
+            {t('editBooking.availUnavailCount', { avail: available.length, unavail: other.length })}
           </Text>
           {selectedId && (
             <TouchableOpacity onPress={handleClear}>
-              <Text style={vpSt.clearText}>Clear selection</Text>
+              <Text style={vpSt.clearText}>{t('newBooking.clearSelectionLabel')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -310,7 +314,7 @@ function VehiclePickerSheet({
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={
             <View style={vpSt.empty}>
-              <Text style={vpSt.emptyText}>No vehicles match your search</Text>
+              <Text style={vpSt.emptyText}>{t('editBooking.noVehiclesMatch')}</Text>
             </View>
           }
           renderItem={({ item: v }) => {
@@ -353,7 +357,7 @@ function VehiclePickerSheet({
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
                   <View style={[vpSt.statusPill, { backgroundColor: statusClr + '20' }]}>
                     <Text style={[vpSt.statusText, { color: statusClr }]}>
-                      {hasConflict ? 'Conflict' : v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                      {hasConflict ? t('editBooking.conflictBadge') : v.status.charAt(0).toUpperCase() + v.status.slice(1)}
                     </Text>
                   </View>
                   {isSelected && <CheckIcon color={C.primary} />}
@@ -405,6 +409,7 @@ function DriverPickerSheet({
   onSelect: (id: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useAppPreferences();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
 
@@ -416,8 +421,8 @@ function DriverPickerSheet({
       <View style={[dpSt.container, { paddingTop: insets.top || 16 }]}>
         <View style={dpSt.header}>
           <View>
-            <Text style={dpSt.eyebrow}>Safari Team</Text>
-            <Text style={dpSt.title}>Select Driver / Guide</Text>
+            <Text style={dpSt.eyebrow}>{t('newBooking.safariTeamEyebrow')}</Text>
+            <Text style={dpSt.title}>{t('newBooking.selectDriverGuideTitle')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={dpSt.closeBtn}><CloseIcon color="#C4A882" /></TouchableOpacity>
         </View>
@@ -428,7 +433,7 @@ function DriverPickerSheet({
             style={dpSt.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search by name or phone…"
+            placeholder={t('newBooking.searchDriverPlaceholder')}
             placeholderTextColor={C.muted}
             autoCorrect={false}
             clearButtonMode="while-editing"
@@ -449,13 +454,13 @@ function DriverPickerSheet({
               <View style={[dpSt.avatar, { backgroundColor: C.muted + '20' }]}>
                 <Text style={[dpSt.avatarText, { color: C.muted }]}>—</Text>
               </View>
-              <Text style={dpSt.noneName}>No driver / guide assigned</Text>
+              <Text style={dpSt.noneName}>{t('newBooking.noDriverGuideAssigned')}</Text>
               {!selectedId && <CheckIcon color={C.primary} />}
             </TouchableOpacity>
           }
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
-            <View style={dpSt.empty}><Text style={dpSt.emptyText}>No guides found</Text></View>
+            <View style={dpSt.empty}><Text style={dpSt.emptyText}>{t('safari.noGuidesFound')}</Text></View>
           }
           renderItem={({ item: g }) => {
             const isSelected = g.id === selectedId;
@@ -509,6 +514,7 @@ function ClientSearch({ onSelect, selectedClient, onClear }: {
   selectedClient: ClientResult | null;
   onClear: () => void;
 }) {
+  const { t } = useAppPreferences();
   const [query, setQuery]             = useState('');
   const [results, setResults]         = useState<ClientResult[]>([]);
   const [searching, setSearching]     = useState(false);
@@ -540,7 +546,7 @@ function ClientSearch({ onSelect, selectedClient, onClear }: {
   if (selectedClient) {
     return (
       <View style={fld.wrap}>
-        <Text style={fld.label}>Client</Text>
+        <Text style={fld.label}>{t('newBooking.clientLabel')}</Text>
         <View style={srch.selectedPill}>
           <View style={srch.selectedLeft}>
             <CheckIcon />
@@ -563,14 +569,14 @@ function ClientSearch({ onSelect, selectedClient, onClear }: {
 
   return (
     <View style={fld.wrap}>
-      <Text style={fld.label}>Search Existing Client (Optional)</Text>
+      <Text style={fld.label}>{t('newBooking.searchExistingClientLabel')}</Text>
       <View style={[fld.iconInput, showResults && { borderColor: C.primary, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         <SearchIcon color={searching ? C.primary : C.muted} />
         <TextInput
           style={fld.iconInputText}
           value={query}
           onChangeText={handleQueryChange}
-          placeholder="Search by name, email, or phone…"
+          placeholder={t('newBooking.searchClientPlaceholder')}
           placeholderTextColor={C.muted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -601,7 +607,7 @@ function ClientSearch({ onSelect, selectedClient, onClear }: {
         </View>
       )}
       {showResults && results.length === 0 && !searching && query.length >= 2 && (
-        <View style={srch.noResults}><Text style={srch.noResultsText}>No clients found — enter details manually below</Text></View>
+        <View style={srch.noResults}><Text style={srch.noResultsText}>{t('newBooking.noClientsFoundManual')}</Text></View>
       )}
     </View>
   );
@@ -629,6 +635,7 @@ function AutocompleteName({ value, onChange, onSelect, isLinked }: {
   onSelect: (c: ClientResult) => void;
   isLinked: boolean;
 }) {
+  const { t } = useAppPreferences();
   const [suggestions, setSuggestions]       = useState<ClientResult[]>([]);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [showSuggest, setShowSuggest]       = useState(false);
@@ -656,7 +663,7 @@ function AutocompleteName({ value, onChange, onSelect, isLinked }: {
 
   return (
     <View style={fld.wrap}>
-      <Text style={fld.label}>Client Name *</Text>
+      <Text style={fld.label}>{t('newBooking.clientNameLabel')}</Text>
       <View style={[fld.iconInput, isLinked && { borderColor: C.success + '60' }, showSuggest && { borderColor: C.primary, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         <UserIcon color={isLinked ? C.success : C.primary} />
         <TextInput
@@ -664,7 +671,7 @@ function AutocompleteName({ value, onChange, onSelect, isLinked }: {
           value={value}
           onChangeText={handleTextChange}
           onBlur={() => { setSuggestions([]); setShowSuggest(false); }}
-          placeholder="Enter client or company name"
+          placeholder={t('newBooking.clientNamePlaceholder')}
           placeholderTextColor={C.muted}
           autoCapitalize="words"
           returnKeyType="next"
@@ -685,7 +692,7 @@ function AutocompleteName({ value, onChange, onSelect, isLinked }: {
                 <Text style={autoSt.name}>{c.company_name}</Text>
                 {(c.email || c.phone_number) && <Text style={autoSt.sub} numberOfLines={1}>{[c.email, c.phone_number].filter(Boolean).join(' · ')}</Text>}
               </View>
-              <Text style={autoSt.tag}>Tap to fill</Text>
+              <Text style={autoSt.tag}>{t('newBooking.tapToFill')}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -714,6 +721,7 @@ const fld = StyleSheet.create({
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId }: NewBookingModalProps) {
+  const { t } = useAppPreferences();
   const insets = useSafeAreaInsets();
   const { showNotification } = useInAppNotification();
   const [submitting, setSubmitting] = useState(false);
@@ -832,32 +840,32 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   }, [startDate, endDate]);
 
   const validate = useCallback((): string | null => {
-    if (!companyName.trim())  return 'Company name is required.';
-    if (!phoneNumber.trim())  return 'Phone number is required.';
-    if (!clientName.trim())   return 'Contact person name is required.';
-    if (!contact.trim())      return 'Contact phone is required.';
-    if (!email.trim())        return 'Email is required.';
-    if (!packageType.trim())  return 'Package type is required.';
-    if (!dailyRate.trim())    return 'Daily rate is required.';
-    if (!startDate)           return 'Please select a start date.';
-    if (!endDate)             return 'Please select an end date.';
-    if (endDate < startDate)  return 'End date must be on or after the start date.';
+    if (!companyName.trim())  return t('newBooking.companyNameRequiredErr');
+    if (!phoneNumber.trim())  return t('newBooking.phoneNumberRequiredErr');
+    if (!clientName.trim())   return t('newBooking.contactPersonNameRequiredErr');
+    if (!contact.trim())      return t('newBooking.contactPhoneRequiredErr');
+    if (!email.trim())        return t('newBooking.emailRequiredErr');
+    if (!packageType.trim())  return t('newBooking.packageTypeRequiredErr');
+    if (!dailyRate.trim())    return t('newBooking.dailyRateRequiredErr');
+    if (!startDate)           return t('newBooking.selectStartDateErr');
+    if (!endDate)             return t('newBooking.selectEndDateErr');
+    if (endDate < startDate)  return t('newBooking.endDateAfterStartErr');
     const rate = parseFloat(dailyRate);
-    if (isNaN(rate) || rate <= 0) return 'Daily rate must be a positive number.';
+    if (isNaN(rate) || rate <= 0) return t('newBooking.dailyRatePositiveErr');
     const cost = parseFloat(totalCost);
-    if (isNaN(cost) || cost <= 0) return 'Total cost must be a positive number.';
+    if (isNaN(cost) || cost <= 0) return t('newBooking.totalCostPositiveErr');
     const paid = parseFloat(amountPaid || '0');
-    if (isNaN(paid) || paid < 0) return 'Amount paid cannot be negative.';
-    if (paid > cost) return 'Amount paid cannot exceed total amount.';
+    if (isNaN(paid) || paid < 0) return t('editBooking.amountPaidNegative');
+    if (paid > cost) return t('editBooking.amountPaidExceeds');
     if ((paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && !transactionId.trim())
-      return 'Please enter transaction ID for the selected payment method.';
-    if (paymentMethod === 'bank_transfer' && !bankName.trim()) return 'Please specify the bank.';
+      return t('newBooking.transactionIdRequiredErr');
+    if (paymentMethod === 'bank_transfer' && !bankName.trim()) return t('newBooking.bankRequiredErr');
     return null;
-  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, transactionId, bankName]);
+  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, transactionId, bankName, t]);
 
   const handleSubmit = useCallback(async () => {
     const err = validate();
-    if (err) { Alert.alert('Validation Error', err); return; }
+    if (err) { Alert.alert(t('common.validationError'), err); return; }
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -880,8 +888,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
         if (!availErr && avail?.[0]?.is_available === false) {
           const conflictRef = avail[0].conflict_booking_reference || 'another booking';
           Alert.alert(
-            'Vehicle Unavailable',
-            `This vehicle is already assigned to ${conflictRef}. Please select a different vehicle.`,
+            t('editBooking.vehicleUnavailableTitle'),
+            t('editBooking.vehicleUnavailableMsg', { ref: conflictRef }),
             [{ text: 'OK' }],
           );
           setSubmitting(false);
@@ -952,8 +960,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
           // than silently losing the payment; the booking itself is NOT rolled back
           // since it's a valid record on its own (balance_due stays at the full amount).
           Alert.alert(
-            'Booking Created — Deposit Not Recorded',
-            `${bookingData.booking_reference || 'The booking'} was created, but the deposit payment failed: ${payResult.error || 'Unknown error'}. Record it from the booking detail screen.`,
+            t('newBooking.bookingCreatedDepositFailedTitle'),
+            t('newBooking.bookingCreatedDepositFailedMsg', { ref: bookingData.booking_reference || 'The booking', error: payResult.error || 'Unknown error' }),
           );
         }
       }
@@ -961,8 +969,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
       notifySuccess();
       showNotification({
         type: 'booking_new',
-        title: 'Booking Created',
-        body: `${bookingData?.booking_reference || 'New booking'} created successfully.`,
+        title: t('newBooking.bookingCreatedTitle'),
+        body: t('newBooking.bookingCreatedBody', { ref: bookingData?.booking_reference || 'New booking' }),
         screen: 'Bookings',
       });
       onSuccess();
@@ -984,8 +992,8 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
             {/* ── Header ── */}
             <View style={st.header}>
               <View>
-                <Text style={st.headerEyebrow}>Bookings</Text>
-                <Text style={st.headerTitle}>Create New Booking</Text>
+                <Text style={st.headerEyebrow}>{t('common.bookings')}</Text>
+                <Text style={st.headerTitle}>{t('newBooking.createNewBookingTitle')}</Text>
               </View>
               <TouchableOpacity onPress={() => { reset(); onClose(); }} style={st.closeBtn}>
                 <CloseIcon color="#C4A882" />
@@ -995,61 +1003,61 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={st.body} keyboardShouldPersistTaps="handled">
 
               {/* ── Section 1: Client ── */}
-              <SectionHeader step="1" title="Client Information" icon={<UserIcon color={C.primary} />} />
+              <SectionHeader step="1" title={t('newBooking.step1ClientInfo')} icon={<UserIcon color={C.primary} />} />
 
               <ClientSearch onSelect={handleClientSelect} selectedClient={selectedClient} onClear={() => setSelectedClient(null)} />
 
               <View style={st.divider}>
                 <View style={st.dividerLine} />
-                <Text style={st.dividerText}>{selectedClient ? 'Booking Details' : 'Or Enter Manually'}</Text>
+                <Text style={st.dividerText}>{selectedClient ? t('newBooking.bookingDetailsLabel') : t('newBooking.orEnterManually')}</Text>
                 <View style={st.dividerLine} />
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Company Name *</Text>
-                <TextInput style={st.input} value={companyName} onChangeText={t => { if (selectedClient) setSelectedClient(null); setCompanyName(t); }} placeholder="Enter company name" placeholderTextColor={C.muted} autoCapitalize="words" />
+                <Text style={fld.label}>{t('newBooking.companyNameLabel')}</Text>
+                <TextInput style={st.input} value={companyName} onChangeText={v => { if (selectedClient) setSelectedClient(null); setCompanyName(v); }} placeholder={t('newBooking.companyNamePlaceholder')} placeholderTextColor={C.muted} autoCapitalize="words" />
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Phone Number *</Text>
-                <TextInput style={st.input} value={phoneNumber} onChangeText={t => { setPhoneNumber(t); if (!contact) setContact(t); }} placeholder="Company phone number" placeholderTextColor={C.muted} keyboardType="phone-pad" />
+                <Text style={fld.label}>{t('newBooking.phoneNumberLabel')}</Text>
+                <TextInput style={st.input} value={phoneNumber} onChangeText={v => { setPhoneNumber(v); if (!contact) setContact(v); }} placeholder={t('newBooking.phoneNumberPlaceholder')} placeholderTextColor={C.muted} keyboardType="phone-pad" />
               </View>
 
-              <AutocompleteName value={clientName} onChange={t => { if (selectedClient) setSelectedClient(null); setClientName(t); }} onSelect={handleClientSelect} isLinked={!!selectedClient} />
+              <AutocompleteName value={clientName} onChange={v => { if (selectedClient) setSelectedClient(null); setClientName(v); }} onSelect={handleClientSelect} isLinked={!!selectedClient} />
 
               <View style={st.row}>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Contact</Text>
-                    <TextInput style={st.input} value={contact} onChangeText={setContact} placeholder="Phone number" placeholderTextColor={C.muted} keyboardType="phone-pad" />
+                    <Text style={fld.label}>{t('newBooking.contactLabel')}</Text>
+                    <TextInput style={st.input} value={contact} onChangeText={setContact} placeholder={t('newBooking.contactPlaceholder')} placeholderTextColor={C.muted} keyboardType="phone-pad" />
                   </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Email *</Text>
+                    <Text style={fld.label}>{t('newBooking.emailRequiredLabel')}</Text>
                     <TextInput style={st.input} value={email} onChangeText={setEmail} placeholder="client@email.com" placeholderTextColor={C.muted} keyboardType="email-address" autoCapitalize="none" />
                   </View>
                 </View>
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Contact Person (Optional)</Text>
-                <TextInput style={st.input} value={contactPerson} onChangeText={setContactPerson} placeholder="Reference person at client organisation" placeholderTextColor={C.muted} autoCapitalize="words" />
+                <Text style={fld.label}>{t('newBooking.contactPersonOptionalLabel')}</Text>
+                <TextInput style={st.input} value={contactPerson} onChangeText={setContactPerson} placeholder={t('newBooking.contactPersonPlaceholder')} placeholderTextColor={C.muted} autoCapitalize="words" />
               </View>
 
               {/* ── Section 2: Trip ── */}
               <View style={st.sectionGap} />
-              <SectionHeader step="2" title="Trip Details" icon={<CalendarIcon color={C.primary} />} />
+              <SectionHeader step="2" title={t('editBooking.step2Title')} icon={<CalendarIcon color={C.primary} />} />
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Package Type *</Text>
+                <Text style={fld.label}>{t('newBooking.packageTypeRequiredLabel')}</Text>
                 <TextInput style={st.input} value={packageType} onChangeText={setPackageType} placeholder="e.g. 7-Day Safari Package" placeholderTextColor={C.muted} />
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Booking Type *</Text>
+                <Text style={fld.label}>{t('newBooking.bookingTypeLabel')}</Text>
                 <View style={st.segRow}>
-                  {BOOKING_TYPES.map(opt => (
+                  {[{ value: 'booking' as BookingType, label: t('newBooking.bookingCurrent') }, { value: 'reservation' as BookingType, label: t('newBooking.reservationFuture') }].map(opt => (
                     <TouchableOpacity key={opt.value} style={[st.seg, bookingType === opt.value && st.segActive]} onPress={() => { setBookingType(opt.value); setStatus('Pending'); }}>
                       <Text style={[st.segText, bookingType === opt.value && st.segTextActive]}>{opt.label}</Text>
                     </TouchableOpacity>
@@ -1059,10 +1067,10 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               <View style={st.row}>
                 <View style={{ flex: 1 }}>
-                  <DatePickerField label="Start Date *" value={startDate} onChange={handleStartDateChange} placeholder="Select start date" />
+                  <DatePickerField label={t('editBooking.fieldStartDate')} value={startDate} onChange={handleStartDateChange} placeholder={t('newBooking.selectStartDate')} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <DatePickerField label="End Date *" value={endDate} onChange={setEndDate} minDate={minEndDate} placeholder="Select end date" />
+                  <DatePickerField label={t('editBooking.fieldEndDate')} value={endDate} onChange={setEndDate} minDate={minEndDate} placeholder={t('newBooking.selectEndDate')} />
                 </View>
               </View>
 
@@ -1071,27 +1079,27 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                   <CalendarIcon color={C.primary} />
                   <Text style={st.dateRangeText}>
                     {formatDisplay(startDate)} → {formatDisplay(endDate)}{'  '}
-                    <Text style={st.dateRangeDays}>({countDays(startDate, endDate)} {countDays(startDate, endDate) === 1 ? 'day' : 'days'})</Text>
+                    <Text style={st.dateRangeDays}>({countDays(startDate, endDate)} {countDays(startDate, endDate) === 1 ? t('newBooking.daySingular') : t('newBooking.dayPlural')})</Text>
                   </Text>
                 </View>
               )}
 
               {/* ── Section 3: Pricing ── */}
               <View style={st.sectionGap} />
-              <SectionHeader step="3" title="Pricing & Payment" />
+              <SectionHeader step="3" title={t('editBooking.step3Title')} />
 
               <View style={st.row}>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Daily Rate *</Text>
+                    <Text style={fld.label}>{t('newBooking.dailyRateRequiredLabel')}</Text>
                     <TextInput style={st.input} value={dailyRate} onChangeText={handleDailyRateChange} placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" />
                   </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <Text style={fld.label}>Total Amount</Text>
-                      {costAutoCalc && <Text style={st.autoCalcTag}>Auto</Text>}
+                      <Text style={fld.label}>{t('newBooking.totalAmountLabel')}</Text>
+                      {costAutoCalc && <Text style={st.autoCalcTag}>{t('newBooking.autoTag')}</Text>}
                     </View>
                     <TextInput style={st.input} value={totalCost} onChangeText={t => { setTotalCost(t); setCostAutoCalc(false); }} placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" />
                   </View>
@@ -1101,12 +1109,12 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               <View style={st.row}>
                 <View style={{ flex: 1 }}>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Amount Paid</Text>
+                    <Text style={fld.label}>{t('editBooking.fieldAmountPaid')}</Text>
                     <TextInput style={st.input} value={amountPaid} onChangeText={setAmountPaid} placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" />
                   </View>
                 </View>
                 <View style={{ flex: 1, marginBottom: 14 }}>
-                  <Text style={fld.label}>Balance Due</Text>
+                  <Text style={fld.label}>{t('editBooking.fieldBalanceDue')}</Text>
                   <View style={st.readOnlyBox}>
                     <Text style={[st.readOnlyText, calculateBalance(totalCost, amountPaid) > 0 && { color: C.danger }]}>
                       {currency} {calculateBalance(totalCost, amountPaid).toFixed(2)}
@@ -1116,7 +1124,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Currency</Text>
+                <Text style={fld.label}>{t('editBooking.fieldCurrency')}</Text>
                 <View style={st.segRow}>
                   {CURRENCIES.map(cur => (
                     <TouchableOpacity key={cur} style={[st.seg, currency === cur && st.segActive]} onPress={() => setCurrency(cur)}>
@@ -1127,7 +1135,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Status</Text>
+                <Text style={fld.label}>{t('safari.statusLabel')}</Text>
                 <View style={st.segRow}>
                   {STATUS_OPTIONS.map(s => (
                     <TouchableOpacity key={s} style={[st.seg, status === s && { ...st.segActive, backgroundColor: STATUS_COLOR[s] + '20', borderColor: STATUS_COLOR[s] }]} onPress={() => setStatus(s)}>
@@ -1138,7 +1146,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               </View>
 
               <View style={fld.wrap}>
-                <Text style={fld.label}>Payment Method</Text>
+                <Text style={fld.label}>{t('editBooking.fieldPaymentMethod')}</Text>
                 <View style={st.segRow}>
                   {PAYMENT_METHODS.map(m => (
                     <TouchableOpacity key={m.value} style={[st.seg, paymentMethod === m.value && st.segActive]} onPress={() => { setPaymentMethod(m.value); setTransactionId(''); setBankName(''); }}>
@@ -1150,11 +1158,11 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               {paymentMethod === 'bank_transfer' && (
                 <View style={fld.wrap}>
-                  <Text style={fld.label}>Bank *</Text>
+                  <Text style={fld.label}>{t('newBooking.bankRequiredLabel')}</Text>
                   <View style={st.segRow}>
                     {['stanbic_bank', 'im_bank'].map(bank => (
                       <TouchableOpacity key={bank} style={[st.seg, bankName === bank && st.segActive]} onPress={() => setBankName(bank)}>
-                        <Text style={[st.segText, bankName === bank && st.segTextActive]}>{bank === 'stanbic_bank' ? 'Stanbic Bank' : 'I&M Bank'}</Text>
+                        <Text style={[st.segText, bankName === bank && st.segTextActive]}>{bank === 'stanbic_bank' ? t('newBooking.stanbicBank') : t('newBooking.imBank')}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -1163,20 +1171,20 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               {(paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && (
                 <View style={fld.wrap}>
-                  <Text style={fld.label}>Transaction ID *</Text>
-                  <TextInput style={st.input} value={transactionId} onChangeText={setTransactionId} placeholder="Enter transaction ID" placeholderTextColor={C.muted} autoCapitalize="characters" />
+                  <Text style={fld.label}>{t('newBooking.transactionIdRequiredLabel')}</Text>
+                  <TextInput style={st.input} value={transactionId} onChangeText={setTransactionId} placeholder={t('newBooking.transactionIdPlaceholder')} placeholderTextColor={C.muted} autoCapitalize="characters" />
                 </View>
               )}
 
               {/* ── Section 4: Assignment ── */}
               <View style={st.sectionGap} />
-              <SectionHeader step="4" title="Vehicle & Driver Assignment" icon={<TruckIcon color={C.primary} />} />
+              <SectionHeader step="4" title={t('newBooking.step4VehicleDriverAssignment')} icon={<TruckIcon color={C.primary} />} />
 
               {/* Vehicle source toggle */}
               <View style={fld.wrap}>
-                <Text style={fld.label}>Vehicle Source</Text>
+                <Text style={fld.label}>{t('newBooking.vehicleSourceLabel')}</Text>
                 <View style={st.segRow}>
-                  {([{ value: 'fleet', label: 'Fleet Vehicle' }, { value: 'external', label: 'External / Vendor' }] as { value: VehicleSource; label: string }[]).map(opt => (
+                  {([{ value: 'fleet', label: t('newBooking.fleetVehicleLabel') }, { value: 'external', label: t('newBooking.externalVendorLabel') }] as { value: VehicleSource; label: string }[]).map(opt => (
                     <TouchableOpacity key={opt.value} style={[st.seg, vehicleSource === opt.value && st.segActive]} onPress={() => { setVehicleSource(opt.value); setVehicleId(''); setVendorName(''); setVendorPlate(''); setVendorReason(''); }}>
                       <Text style={[st.segText, vehicleSource === opt.value && st.segTextActive]}>{opt.label}</Text>
                     </TouchableOpacity>
@@ -1188,20 +1196,20 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               {vehicleSource === 'external' && (
                 <>
                   <View style={fld.wrap}>
-                    <Text style={fld.label}>Vendor / Company Name</Text>
-                    <TextInput style={st.input} value={vendorName} onChangeText={setVendorName} placeholder="e.g. Kampala Car Rentals Ltd" placeholderTextColor={C.muted} autoCapitalize="words" />
+                    <Text style={fld.label}>{t('newBooking.vendorCompanyNameLabel')}</Text>
+                    <TextInput style={st.input} value={vendorName} onChangeText={setVendorName} placeholder={t('newBooking.vendorCompanyNamePlaceholder')} placeholderTextColor={C.muted} autoCapitalize="words" />
                   </View>
                   <View style={st.row}>
                     <View style={{ flex: 1 }}>
                       <View style={fld.wrap}>
-                        <Text style={fld.label}>Vehicle Plate</Text>
+                        <Text style={fld.label}>{t('newBooking.vehiclePlateLabel')}</Text>
                         <TextInput style={st.input} value={vendorPlate} onChangeText={setVendorPlate} placeholder="e.g. UAA 123B" placeholderTextColor={C.muted} autoCapitalize="characters" />
                       </View>
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={fld.wrap}>
-                        <Text style={fld.label}>Reason</Text>
-                        <TextInput style={st.input} value={vendorReason} onChangeText={setVendorReason} placeholder="Why external vehicle?" placeholderTextColor={C.muted} />
+                        <Text style={fld.label}>{t('newBooking.reasonLabel')}</Text>
+                        <TextInput style={st.input} value={vendorReason} onChangeText={setVendorReason} placeholder={t('newBooking.reasonPlaceholder')} placeholderTextColor={C.muted} />
                       </View>
                     </View>
                   </View>
@@ -1211,7 +1219,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               {/* Fleet vehicle selector — opens full-screen scrollable picker */}
               {vehicleSource === 'fleet' && (
                 <View style={fld.wrap}>
-                  <Text style={fld.label}>Assign Vehicle (Optional)</Text>
+                  <Text style={fld.label}>{t('newBooking.assignVehicleOptionalLabel')}</Text>
                   <TouchableOpacity
                     style={[fld.iconInput, vehicleId && { borderColor: C.primary }]}
                     onPress={() => setVehicleSheetOpen(true)}
@@ -1231,7 +1239,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                         </>
                       ) : (
                         <Text style={[fld.iconInputText, { color: C.muted }]}>
-                          {`Tap to browse — ${vehicles.filter(v => v.status === 'available').length} of ${vehicles.length} available`}
+                          {t('editBooking.tapToBrowse', { available: vehicles.filter(v => v.status === 'available').length, total: vehicles.length })}
                         </Text>
                       )}
                     </View>
@@ -1244,7 +1252,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               {/* Driver selector */}
               <View style={fld.wrap}>
-                <Text style={fld.label}>Assign Driver / Guide (Optional)</Text>
+                <Text style={fld.label}>{t('newBooking.assignDriverOptionalLabel')}</Text>
                 <TouchableOpacity
                   style={[fld.iconInput, driverId && { borderColor: C.primary }]}
                   onPress={() => setDriverSheetOpen(true)}
@@ -1252,7 +1260,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                 >
                   <UserIcon color={driverId ? C.primary : C.muted} />
                   <Text style={[fld.iconInputText, !driverId && { color: C.muted }]}>
-                    {selectedGuide ? selectedGuide.full_name : `Tap to browse ${guides.length} guide${guides.length !== 1 ? 's' : ''}…`}
+                    {selectedGuide ? selectedGuide.full_name : t('newBooking.tapToBrowseGuides', { count: guides.length, plural: guides.length !== 1 ? 's' : '' })}
                   </Text>
                   {driverId
                     ? <TouchableOpacity onPress={() => setDriverId('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><CloseIcon color={C.muted} /></TouchableOpacity>
@@ -1262,14 +1270,14 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               {/* ── Section 5: Notes ── */}
               <View style={st.sectionGap} />
-              <SectionHeader step="5" title="Additional Notes" />
+              <SectionHeader step="5" title={t('newBooking.step5AdditionalNotes')} />
 
               <View style={fld.wrap}>
                 <TextInput
                   style={[st.input, st.textarea]}
                   value={notes}
                   onChangeText={setNotes}
-                  placeholder="Special requirements, inclusions, or notes…"
+                  placeholder={t('newBooking.notesPlaceholder')}
                   placeholderTextColor={C.muted}
                   multiline
                   numberOfLines={3}
@@ -1279,7 +1287,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               {/* ── Submit ── */}
               <TouchableOpacity style={[st.submitBtn, submitting && st.submitBtnDisabled]} onPress={handleSubmit} disabled={submitting} activeOpacity={0.85}>
-                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={st.submitText}>Create Booking</Text>}
+                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={st.submitText}>{t('newBooking.createBookingBtn')}</Text>}
               </TouchableOpacity>
 
               <View style={{ height: insets.bottom + 24 }} />

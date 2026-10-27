@@ -14,6 +14,7 @@ import { formatCurrency } from '../../lib/utils';
 import { getBookingStatusConfig } from '../../constants/bookingStatus';
 import { RecordPaymentSheet } from '../payments/RecordPaymentSheet';
 import { PaymentHistoryList } from '../payments/PaymentHistoryList';
+import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
 // ============================================================================
 // CONSTANTS
@@ -73,15 +74,26 @@ interface BookingDetailModalProps {
   onPaymentRecorded?: () => void;
 }
 
+function bookingStatusLabel(status: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    Pending: 'bookingStatus.pending', Confirmed: 'bookingStatus.confirmed',
+    'In-Progress': 'bookingStatus.inProgress', Completed: 'bookingStatus.completed',
+    Cancelled: 'bookingStatus.cancelled',
+  };
+  const k = map[status];
+  return k ? t(k) : status;
+}
+
 export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymentRecorded }: BookingDetailModalProps) {
+  const { t } = useAppPreferences();
   const [showRecordPayment, setShowRecordPayment] = useState(false);
 
   if (!booking) return null;
 
   const statusCfg    = getBookingStatusConfig(booking.status);
   const statusColors = statusCfg;
-  const clientName = booking.client?.company_name || 'Unknown Client';
-  const assignedUser = booking.profiles?.full_name || 'Unassigned';
+  const clientName = booking.client?.company_name || t('bookingDetail.unknownClientLabel');
+  const assignedUser = booking.profiles?.full_name || t('bookingDetail.unassignedLabel');
   const startDate = new Date(booking.start_date).toLocaleDateString();
   const endDate = new Date(booking.end_date).toLocaleDateString();
   const amountPaid = booking.amount_paid || 0;
@@ -120,21 +132,21 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymen
           <View style={styles.statusSection}>
             <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
               <Text style={[styles.statusText, { color: statusColors.text }]}>
-                {booking.status}
+                {bookingStatusLabel(booking.status, t)}
               </Text>
             </View>
           </View>
 
           {/* Dates Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Booking Dates</Text>
+            <Text style={styles.sectionTitle}>{t('bookingDetail.bookingDatesTitle')}</Text>
             <View style={styles.infoGrid}>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Start Date</Text>
+                <Text style={styles.infoLabel}>{t('bookingDetail.startDateLabel')}</Text>
                 <Text style={styles.infoValue}>{startDate}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>End Date</Text>
+                <Text style={styles.infoLabel}>{t('bookingDetail.endDateLabel')}</Text>
                 <Text style={styles.infoValue}>{endDate}</Text>
               </View>
             </View>
@@ -142,31 +154,31 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymen
 
           {/* Client & Assignment Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Assignment</Text>
+            <Text style={styles.sectionTitle}>{t('bookingDetail.assignmentTitle')}</Text>
             <View style={styles.infoGrid}>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Client</Text>
+                <Text style={styles.infoLabel}>{t('newBooking.clientLabel')}</Text>
                 <Text style={styles.infoValue}>{clientName}</Text>
               </View>
               <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Assigned To</Text>
+                <Text style={styles.infoLabel}>{t('bookingDetail.assignedToLabel')}</Text>
                 <Text style={styles.infoValue}>{assignedUser}</Text>
               </View>
               {booking.vehicle && (
                 <View style={[styles.infoItem, { width: '100%' }]}>
-                  <Text style={styles.infoLabel}>Vehicle</Text>
+                  <Text style={styles.infoLabel}>{t('safari.fieldVehicle')}</Text>
                   <Text style={styles.infoValue}>{booking.vehicle.name}</Text>
                 </View>
               )}
               {extBooking.destination && (
                 <View style={[styles.infoItem, { width: '100%' }]}>
-                  <Text style={styles.infoLabel}>Destination</Text>
+                  <Text style={styles.infoLabel}>{t('bookingDetail.destinationLabel')}</Text>
                   <Text style={styles.infoValue}>{extBooking.destination}</Text>
                 </View>
               )}
               {extBooking.pax_count && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Passengers</Text>
+                  <Text style={styles.infoLabel}>{t('bookingDetail.passengersLabel')}</Text>
                   <Text style={styles.infoValue}>{extBooking.pax_count}</Text>
                 </View>
               )}
@@ -175,22 +187,22 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymen
 
           {/* Payment Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Information</Text>
+            <Text style={styles.sectionTitle}>{t('bookingDetail.paymentInfoTitle')}</Text>
             <View style={styles.paymentGrid}>
               <View style={[styles.paymentItem, { backgroundColor: '#f3e8ff' }]}>
-                <Text style={styles.paymentLabel}>Total Cost</Text>
+                <Text style={styles.paymentLabel}>{t('bookingDetail.totalCostLabel')}</Text>
                 <Text style={styles.paymentValue}>
                   {formatCurrency(totalCost, currency)}
                 </Text>
               </View>
               <View style={[styles.paymentItem, { backgroundColor: '#D8F0E4' }]}>
-                <Text style={styles.paymentLabel}>Amount Paid</Text>
+                <Text style={styles.paymentLabel}>{t('editBooking.fieldAmountPaid')}</Text>
                 <Text style={[styles.paymentValue, { color: COLORS.success }]}>
                   {formatCurrency(amountPaid, currency)}
                 </Text>
               </View>
               <View style={[styles.paymentItem, { backgroundColor: balance > 0 ? '#FDE8C0' : '#D8F0E4' }]}>
-                <Text style={styles.paymentLabel}>Balance</Text>
+                <Text style={styles.paymentLabel}>{t('bookingDetail.balanceLabel')}</Text>
                 <Text style={[styles.paymentValue, { color: balance > 0 ? COLORS.warning : COLORS.success }]}>
                   {formatCurrency(balance, currency)}
                 </Text>
@@ -199,7 +211,7 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymen
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
-              <Text style={styles.progressLabel}>Payment Progress</Text>
+              <Text style={styles.progressLabel}>{t('bookingDetail.paymentProgressLabel')}</Text>
               <View style={styles.progressBar}>
                 <View
                   style={[
@@ -209,27 +221,27 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymen
                 />
               </View>
               <Text style={styles.progressText}>
-                {totalCost > 0 ? Math.round((amountPaid / totalCost) * 100) : 0}% paid
+                {t('bookingDetail.pctPaidSuffix', { pct: totalCost > 0 ? Math.round((amountPaid / totalCost) * 100) : 0 })}
               </Text>
             </View>
 
             {balance > 0 && (
               <TouchableOpacity style={styles.recordPayBtn} onPress={() => setShowRecordPayment(true)}>
-                <Text style={styles.recordPayBtnText}>Record Payment</Text>
+                <Text style={styles.recordPayBtnText}>{t('safari.recordPayment')}</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {/* Payment History */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment History</Text>
+            <Text style={styles.sectionTitle}>{t('safari.paymentHistory')}</Text>
             <PaymentHistoryList sourceId={booking.id} />
           </View>
 
           {/* Notes Section */}
           {extBooking.notes && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notes</Text>
+              <Text style={styles.sectionTitle}>{t('bookingDetail.notesTitle')}</Text>
               <Text style={styles.notesText}>{extBooking.notes}</Text>
             </View>
           )}
@@ -241,13 +253,13 @@ export function BookingDetailModal({ booking, visible, onClose, onEdit, onPaymen
               onPress={() => { onClose(); onEdit?.(booking); }}
               activeOpacity={0.85}
             >
-              <Text style={styles.editBtnText}>Edit Booking</Text>
+              <Text style={styles.editBtnText}>{t('bookingDetail.editBookingBtn')}</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.lockNotice}>
               <Text style={styles.lockIcon}>🔒</Text>
               <Text style={styles.lockText}>
-                This booking is <Text style={{ fontWeight: '700' }}>{booking.status}</Text> and cannot be edited to preserve operational records.
+                {t('bookingDetail.lockedBookingPrefix')} <Text style={{ fontWeight: '700' }}>{bookingStatusLabel(booking.status, t)}</Text> {t('bookingDetail.lockedBookingSuffix')}
               </Text>
             </View>
           )}
