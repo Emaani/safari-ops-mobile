@@ -54,7 +54,6 @@ export function RecordPaymentSheet({
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('Cash');
   const [details, setDetails] = useState<PaymentDetails>({});
-  const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
   const [transactionDate] = useState(todayISO());
   const [confirmation, setConfirmation] = useState<{ systemTransactionId?: string; replayed?: boolean; queuedOffline?: boolean } | null>(null);
@@ -68,7 +67,6 @@ export function RecordPaymentSheet({
       setAmount('');
       setMethod('Cash');
       setDetails({});
-      setReference('');
       setDescription('');
       setConfirmation(null);
     }
@@ -84,7 +82,7 @@ export function RecordPaymentSheet({
       Alert.alert('Invalid Amount', 'Enter a valid payment amount.');
       return;
     }
-    const validationError = validatePaymentDetails(method, details, reference || null);
+    const validationError = validatePaymentDetails(method, details);
     if (validationError) {
       Alert.alert('Missing Information', validationError);
       return;
@@ -95,7 +93,9 @@ export function RecordPaymentSheet({
       sourceId,
       amount: value,
       method,
-      reference: reference.trim() || null,
+      // Matches the web dashboard: no manually-typed reference. The server
+      // generates the permanent Transaction ID for every payment.
+      reference: null,
       paymentDetails: details,
       transactionDate,
       description: description.trim() || null,
@@ -128,7 +128,7 @@ export function RecordPaymentSheet({
       amountPaid: result.amount_paid,
       balanceDue: result.balance_due,
     });
-  }, [amount, method, details, reference, description, transactionDate, requestId, source, sourceId, recordPayment, onRecorded]);
+  }, [amount, method, details, description, transactionDate, requestId, source, sourceId, recordPayment, onRecorded]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -204,7 +204,7 @@ export function RecordPaymentSheet({
                       <TouchableOpacity
                         key={m.value}
                         style={[styles.methodChip, method === m.value && styles.methodChipOn]}
-                        onPress={() => { setMethod(m.value); setDetails({}); setReference(''); }}
+                        onPress={() => { setMethod(m.value); setDetails({}); }}
                       >
                         <Text style={[styles.methodChipT, method === m.value && styles.methodChipTOn]}>{m.label}</Text>
                       </TouchableOpacity>
@@ -215,8 +215,6 @@ export function RecordPaymentSheet({
                     method={method}
                     details={details}
                     onDetailsChange={handleDetailsChange}
-                    reference={reference}
-                    onReferenceChange={setReference}
                   />
 
                   <Text style={styles.label}>{t('payments.descriptionNote')}</Text>

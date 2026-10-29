@@ -40,12 +40,20 @@ interface PaymentMethodFieldsProps {
   method: PaymentMethod;
   details: PaymentDetails;
   onDetailsChange: (patch: Partial<PaymentDetails>) => void;
-  reference: string;
-  onReferenceChange: (v: string) => void;
 }
 
-/** Renders the method-specific fields the server's record_payment validates — mirrors web PaymentMethodFields. */
-export function PaymentMethodFields({ method, details, onDetailsChange, reference, onReferenceChange }: PaymentMethodFieldsProps) {
+/**
+ * Renders the method-specific fields the server's record_payment validates —
+ * mirrors the web dashboard's PaymentMethodFields exactly, including that
+ * neither one asks staff to manually type a reference/invoice number: the
+ * server generates the permanent Transaction ID for every payment, and its
+ * duplicate-payment check for Mobile Money matches on amount + provider +
+ * phone number rather than a typed reference. A free-text reference field
+ * used to sit here requiring only a non-empty value, which meant typing
+ * just part of a real transaction number "worked" as readily as the full
+ * one — removing manual entry removes that whole class of bad data.
+ */
+export function PaymentMethodFields({ method, details, onDetailsChange }: PaymentMethodFieldsProps) {
   switch (method) {
     case 'Mobile Money':
       return (
@@ -64,8 +72,7 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
           </View>
           <FieldLabel label="Phone Number *" />
           <Field value={details.phone_number || ''} onChange={v => onDetailsChange({ phone_number: v })} placeholder="e.g. 0772 123 456" keyboardType="phone-pad" />
-          <FieldLabel label="Transaction Reference *" />
-          <Field value={reference} onChange={onReferenceChange} placeholder="Mobile Money transaction ID" autoCapitalize="characters" />
+          <Text style={styles.autoIdNotice}>The system generates the Transaction ID automatically; no reference is typed manually.</Text>
         </>
       );
 
@@ -74,10 +81,9 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
         <>
           <FieldLabel label="Bank Name *" />
           <Field value={details.bank_name || ''} onChange={v => onDetailsChange({ bank_name: v })} placeholder="e.g. Stanbic Bank" />
-          <FieldLabel label="Account Number *" />
-          <Field value={details.account_number || ''} onChange={v => onDetailsChange({ account_number: v })} placeholder="Account number" keyboardType="numeric" />
-          <FieldLabel label="Reference *" />
-          <Field value={reference} onChange={onReferenceChange} placeholder="Bank transfer reference" autoCapitalize="characters" />
+          <FieldLabel label="Account Number (Last 4 Digits) *" />
+          <Field value={details.account_number || ''} onChange={v => onDetailsChange({ account_number: v.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" keyboardType="numeric" maxLength={4} />
+          <Text style={styles.autoIdNotice}>The system generates the Transaction ID automatically; no reference is typed manually.</Text>
         </>
       );
 
@@ -91,8 +97,6 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
           <Field value={details.last_four || ''} onChange={v => onDetailsChange({ last_four: v.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" keyboardType="numeric" maxLength={4} />
           <FieldLabel label="Approval / Auth Code *" />
           <Field value={details.approval_code || ''} onChange={v => onDetailsChange({ approval_code: v })} placeholder="Approval code" autoCapitalize="characters" />
-          <FieldLabel label="Reference" />
-          <Field value={reference} onChange={onReferenceChange} placeholder="Optional reference" autoCapitalize="characters" />
         </>
       );
 
@@ -122,8 +126,6 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
         <>
           <FieldLabel label="Payment Details *" />
           <Field value={details.details || ''} onChange={v => onDetailsChange({ details: v })} placeholder="Describe how this payment was made" />
-          <FieldLabel label="Reference" />
-          <Field value={reference} onChange={onReferenceChange} placeholder="Optional reference" autoCapitalize="characters" />
         </>
       );
   }
@@ -138,4 +140,5 @@ const styles = StyleSheet.create({
   providerChipT: { fontSize: 13, fontWeight: '600', color: C.textMuted },
   providerChipTOn: { color: C.primary },
   cardNotice: { fontSize: 11, color: '#B5482F', backgroundColor: '#FBEAE4', borderRadius: 8, padding: 10, marginTop: 10, lineHeight: 15 },
+  autoIdNotice: { fontSize: 11, color: C.textMuted, fontStyle: 'italic', marginTop: 14, lineHeight: 15 },
 });

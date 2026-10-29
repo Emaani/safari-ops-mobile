@@ -762,7 +762,6 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   const [status,         setStatus]         = useState<BookingStatus>('Pending');
   const [bookingType,    setBookingType]    = useState<BookingType>('booking');
   const [paymentMethod,  setPaymentMethod]  = useState<PaymentMethod>('');
-  const [transactionId,  setTransactionId]  = useState('');
   const [bankName,       setBankName]       = useState('');
   const [accountNumber,  setAccountNumber]  = useState('');
   const [vehicleId,      setVehicleId]      = useState('');
@@ -827,7 +826,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     setSelectedClient(null);
     setCompanyName(''); setClientName(''); setContactPerson(''); setContact(''); setEmail(''); setPhoneNumber('');
     setStartDate(''); setEndDate(''); setPackageType(''); setTotalCost(''); setDailyRate(''); setAmountPaid('');
-    setCurrency('USD'); setStatus('Pending'); setBookingType('booking'); setPaymentMethod(''); setTransactionId(''); setBankName(''); setAccountNumber('');
+    setCurrency('USD'); setStatus('Pending'); setBookingType('booking'); setPaymentMethod(''); setBankName(''); setAccountNumber('');
     setVehicleId(''); setDriverId(''); setNotes('');
     setVehicleSource('fleet'); setVendorName(''); setVendorPlate(''); setVendorReason('');
     setCostAutoCalc(false); setVehicleSheetOpen(false); setDriverSheetOpen(false);
@@ -873,12 +872,10 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     const paid = parseFloat(amountPaid || '0');
     if (isNaN(paid) || paid < 0) return t('editBooking.amountPaidNegative');
     if (paid > cost) return t('editBooking.amountPaidExceeds');
-    if ((paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && !transactionId.trim())
-      return t('newBooking.transactionIdRequiredErr');
     if (paymentMethod === 'bank_transfer' && !bankName.trim()) return t('newBooking.bankRequiredErr');
-    if (paymentMethod === 'bank_transfer' && !accountNumber.trim()) return t('newBooking.accountNumberRequiredErr');
+    if (paymentMethod === 'bank_transfer' && accountNumber.trim().length !== 4) return t('newBooking.accountNumberRequiredErr');
     return null;
-  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, transactionId, bankName, accountNumber, t]);
+  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, bankName, accountNumber, t]);
 
   const handleSubmit = useCallback(async () => {
     const err = validate();
@@ -966,7 +963,9 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
           sourceId: bookingData.id,
           amount: paidAmount,
           method,
-          reference: transactionId.trim() || null,
+          // Matches the web dashboard: no manually-typed reference. The
+          // server generates the permanent Transaction ID for every payment.
+          reference: null,
           paymentDetails,
           transactionDate: new Date().toISOString().slice(0, 10),
           description: `Deposit at booking creation — ${clientName.trim()}`,
@@ -996,7 +995,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     } finally {
       setSubmitting(false);
     }
-  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, accountNumber, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess, recordPayment]);
+  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, bankName, accountNumber, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess, recordPayment]);
 
   const selectedVehicle = vehicles.find(v => v.id === vehicleId);
   const selectedGuide   = guides.find(g => g.id === driverId);
@@ -1166,7 +1165,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                 <Text style={fld.label}>{t('editBooking.fieldPaymentMethod')}</Text>
                 <View style={st.segRow}>
                   {PAYMENT_METHODS.map(m => (
-                    <TouchableOpacity key={m.value} style={[st.seg, paymentMethod === m.value && st.segActive]} onPress={() => { setPaymentMethod(m.value); setTransactionId(''); setBankName(''); setAccountNumber(''); }}>
+                    <TouchableOpacity key={m.value} style={[st.seg, paymentMethod === m.value && st.segActive]} onPress={() => { setPaymentMethod(m.value); setBankName(''); setAccountNumber(''); }}>
                       <Text style={[st.segText, paymentMethod === m.value && st.segTextActive]}>{m.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -1189,15 +1188,12 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
               {paymentMethod === 'bank_transfer' && (
                 <View style={fld.wrap}>
                   <Text style={fld.label}>{t('newBooking.accountNumberLabel')}</Text>
-                  <TextInput style={st.input} value={accountNumber} onChangeText={setAccountNumber} placeholder={t('newBooking.accountNumberPlaceholder')} placeholderTextColor={C.muted} keyboardType="numeric" />
+                  <TextInput style={st.input} value={accountNumber} onChangeText={v => setAccountNumber(v.replace(/\D/g, '').slice(0, 4))} placeholder={t('newBooking.accountNumberPlaceholder')} placeholderTextColor={C.muted} keyboardType="numeric" maxLength={4} />
                 </View>
               )}
 
               {(paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && (
-                <View style={fld.wrap}>
-                  <Text style={fld.label}>{t('newBooking.transactionIdRequiredLabel')}</Text>
-                  <TextInput style={st.input} value={transactionId} onChangeText={setTransactionId} placeholder={t('newBooking.transactionIdPlaceholder')} placeholderTextColor={C.muted} autoCapitalize="characters" />
-                </View>
+                <Text style={st.autoIdNotice}>{t('newBooking.autoIdNotice')}</Text>
               )}
 
               {/* ── Section 4: Assignment ── */}
@@ -1369,6 +1365,7 @@ const st = StyleSheet.create({
   segTextActive:    { color: C.primary, fontWeight: '800' },
   submitBtn:        { backgroundColor: C.primary, borderRadius: 18, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   submitBtnDisabled:{ opacity: 0.6 },
+  autoIdNotice:     { fontSize: 11, color: C.muted, fontStyle: 'italic', marginTop: 4, marginBottom: 14, lineHeight: 15 },
   submitText:       { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
 });
 
