@@ -52,7 +52,7 @@ export function RecordPaymentSheet({
 
   const [requestId, setRequestId] = useState('');
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('cash');
+  const [method, setMethod] = useState<PaymentMethod>('Cash');
   const [details, setDetails] = useState<PaymentDetails>({});
   const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
@@ -66,7 +66,7 @@ export function RecordPaymentSheet({
     if (visible) {
       setRequestId(generateRequestId());
       setAmount('');
-      setMethod('cash');
+      setMethod('Cash');
       setDetails({});
       setReference('');
       setDescription('');

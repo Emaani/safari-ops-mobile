@@ -47,7 +47,7 @@ interface PaymentMethodFieldsProps {
 /** Renders the method-specific fields the server's record_payment validates — mirrors web PaymentMethodFields. */
 export function PaymentMethodFields({ method, details, onDetailsChange, reference, onReferenceChange }: PaymentMethodFieldsProps) {
   switch (method) {
-    case 'mobile_money':
+    case 'Mobile Money':
       return (
         <>
           <FieldLabel label="Provider *" />
@@ -69,20 +69,24 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
         </>
       );
 
-    case 'bank_transfer':
+    case 'Bank Transfer':
       return (
         <>
           <FieldLabel label="Bank Name *" />
           <Field value={details.bank_name || ''} onChange={v => onDetailsChange({ bank_name: v })} placeholder="e.g. Stanbic Bank" />
+          <FieldLabel label="Account Number *" />
+          <Field value={details.account_number || ''} onChange={v => onDetailsChange({ account_number: v })} placeholder="Account number" keyboardType="numeric" />
           <FieldLabel label="Reference *" />
           <Field value={reference} onChange={onReferenceChange} placeholder="Bank transfer reference" autoCapitalize="characters" />
         </>
       );
 
-    case 'card':
+    case 'Card':
       return (
         <>
           <Text style={styles.cardNotice}>Never enter a full card number or CVV — last 4 digits and the approval code only.</Text>
+          <FieldLabel label="Payment Processor *" />
+          <Field value={details.processor || ''} onChange={v => onDetailsChange({ processor: v })} placeholder="e.g. Visa, Flutterwave, Stripe" />
           <FieldLabel label="Card Last 4 Digits *" />
           <Field value={details.last_four || ''} onChange={v => onDetailsChange({ last_four: v.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" keyboardType="numeric" maxLength={4} />
           <FieldLabel label="Approval / Auth Code *" />
@@ -92,17 +96,19 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
         </>
       );
 
-    case 'cheque':
+    case 'Cheque':
       return (
         <>
-          <FieldLabel label="Cheque Number *" />
-          <Field value={details.cheque_number || ''} onChange={v => onDetailsChange({ cheque_number: v })} placeholder="Cheque number" autoCapitalize="characters" />
+          <FieldLabel label="Cheque Number" />
+          <Field value={details.cheque_number || ''} onChange={v => onDetailsChange({ cheque_number: v })} placeholder="Cheque number (optional)" autoCapitalize="characters" />
           <FieldLabel label="Issuing Bank *" />
-          <Field value={details.cheque_bank || ''} onChange={v => onDetailsChange({ cheque_bank: v })} placeholder="e.g. Centenary Bank" />
+          <Field value={details.bank_name || ''} onChange={v => onDetailsChange({ bank_name: v })} placeholder="e.g. Centenary Bank" />
+          <FieldLabel label="Cheque Date *" />
+          <Field value={details.cheque_date || ''} onChange={v => onDetailsChange({ cheque_date: v })} placeholder="YYYY-MM-DD" />
         </>
       );
 
-    case 'cash':
+    case 'Cash':
       return (
         <>
           <FieldLabel label="Receipt / Reference Note" />
@@ -110,10 +116,12 @@ export function PaymentMethodFields({ method, details, onDetailsChange, referenc
         </>
       );
 
-    case 'other':
+    case 'Other':
     default:
       return (
         <>
+          <FieldLabel label="Payment Details *" />
+          <Field value={details.details || ''} onChange={v => onDetailsChange({ details: v })} placeholder="Describe how this payment was made" />
           <FieldLabel label="Reference" />
           <Field value={reference} onChange={onReferenceChange} placeholder="Optional reference" autoCapitalize="characters" />
         </>

@@ -622,7 +622,7 @@ export function CreateSafariModal({ visible, onClose, onSuccess, vehicles = [], 
                 <DatePickerField label={t('editBooking.fieldStartDate')} value={startDate} onChange={handleStartDateChange} placeholder={t('createSafari.selectStart')} />
               </View>
               <View style={{ flex: 1 }}>
-                <DatePickerField label={t('safari.fieldEndDate')} value={endDate} onChange={setEndDate} minDate={minEndDate} placeholder={t('createSafari.selectEnd')} />
+                <DatePickerField label={t('editBooking.fieldEndDate')} value={endDate} onChange={setEndDate} minDate={minEndDate} placeholder={t('createSafari.selectEnd')} />
               </View>
             </View>
 

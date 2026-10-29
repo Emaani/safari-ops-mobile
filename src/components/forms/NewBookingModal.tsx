@@ -119,15 +119,30 @@ function escapePostgrestSearch(v: string): string { return v.trim().replace(/[%,
 function calculateBalance(total: string, paid: string): number {
   return Math.max(0, (parseFloat(total) || 0) - (parseFloat(paid) || 0));
 }
-/** Maps this form's legacy payment method options onto the shared record_payment method + details shape. */
-function mapLegacyPaymentMethod(method: PaymentMethod, bankName: string): { method: RecordPaymentMethod; paymentDetails: PaymentDetails } {
+const BANK_DISPLAY_NAMES: Record<string, string> = {
+  stanbic_bank: 'Stanbic Bank',
+  im_bank: 'I&M Bank',
+};
+
+/**
+ * Maps this form's legacy payment method options onto the shared record_payment
+ * method + details shape. Method values here MUST match the server's own
+ * `record_payment` allow-list exactly ('Mobile Money' / 'Bank Transfer' / 'Cash')
+ * — a lowercase/snake_case value passes TypeScript but fails every deposit with
+ * "Choose a valid payment method" since the Postgres function's `IN (...)` check
+ * is case-sensitive. The server also requires phone_number for Mobile Money and
+ * account_number for Bank Transfer, so both are threaded through here.
+ */
+function mapLegacyPaymentMethod(
+  method: PaymentMethod, bankName: string, accountNumber: string, phoneNumber: string,
+): { method: RecordPaymentMethod; paymentDetails: PaymentDetails } {
   switch (method) {
-    case 'mtn_uganda':    return { method: 'mobile_money', paymentDetails: { provider: 'MTN' } };
-    case 'airtel_uganda': return { method: 'mobile_money', paymentDetails: { provider: 'Airtel' } };
-    case 'mpesa_kenya':   return { method: 'mobile_money', paymentDetails: { provider: 'M-Pesa' } };
-    case 'bank_transfer': return { method: 'bank_transfer', paymentDetails: { bank_name: bankName.trim() } };
+    case 'mtn_uganda':    return { method: 'Mobile Money', paymentDetails: { provider: 'MTN', phone_number: phoneNumber.trim() } };
+    case 'airtel_uganda': return { method: 'Mobile Money', paymentDetails: { provider: 'Airtel', phone_number: phoneNumber.trim() } };
+    case 'mpesa_kenya':   return { method: 'Mobile Money', paymentDetails: { provider: 'M-Pesa', phone_number: phoneNumber.trim() } };
+    case 'bank_transfer': return { method: 'Bank Transfer', paymentDetails: { bank_name: BANK_DISPLAY_NAMES[bankName] || bankName.trim(), account_number: accountNumber.trim() } };
     case 'cash':
-    default:              return { method: 'cash', paymentDetails: {} };
+    default:              return { method: 'Cash', paymentDetails: {} };
   }
 }
 
@@ -749,6 +764,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
   const [paymentMethod,  setPaymentMethod]  = useState<PaymentMethod>('');
   const [transactionId,  setTransactionId]  = useState('');
   const [bankName,       setBankName]       = useState('');
+  const [accountNumber,  setAccountNumber]  = useState('');
   const [vehicleId,      setVehicleId]      = useState('');
   const [driverId,       setDriverId]       = useState('');
   const [notes,          setNotes]          = useState('');
@@ -811,7 +827,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     setSelectedClient(null);
     setCompanyName(''); setClientName(''); setContactPerson(''); setContact(''); setEmail(''); setPhoneNumber('');
     setStartDate(''); setEndDate(''); setPackageType(''); setTotalCost(''); setDailyRate(''); setAmountPaid('');
-    setCurrency('USD'); setStatus('Pending'); setBookingType('booking'); setPaymentMethod(''); setTransactionId(''); setBankName('');
+    setCurrency('USD'); setStatus('Pending'); setBookingType('booking'); setPaymentMethod(''); setTransactionId(''); setBankName(''); setAccountNumber('');
     setVehicleId(''); setDriverId(''); setNotes('');
     setVehicleSource('fleet'); setVendorName(''); setVendorPlate(''); setVendorReason('');
     setCostAutoCalc(false); setVehicleSheetOpen(false); setDriverSheetOpen(false);
@@ -860,8 +876,9 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     if ((paymentMethod === 'mtn_uganda' || paymentMethod === 'airtel_uganda' || paymentMethod === 'mpesa_kenya' || paymentMethod === 'bank_transfer') && !transactionId.trim())
       return t('newBooking.transactionIdRequiredErr');
     if (paymentMethod === 'bank_transfer' && !bankName.trim()) return t('newBooking.bankRequiredErr');
+    if (paymentMethod === 'bank_transfer' && !accountNumber.trim()) return t('newBooking.accountNumberRequiredErr');
     return null;
-  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, transactionId, bankName, t]);
+  }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, transactionId, bankName, accountNumber, t]);
 
   const handleSubmit = useCallback(async () => {
     const err = validate();
@@ -943,7 +960,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
       // vehicle available) — mobile only ever saves the assignment.
 
       if (paidAmount > 0 && bookingData?.id) {
-        const { method, paymentDetails } = mapLegacyPaymentMethod(paymentMethod, bankName);
+        const { method, paymentDetails } = mapLegacyPaymentMethod(paymentMethod, bankName, accountNumber, contact || phoneNumber);
         const payResult = await recordPayment({
           source: 'booking',
           sourceId: bookingData.id,
@@ -979,7 +996,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     } finally {
       setSubmitting(false);
     }
-  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess, recordPayment]);
+  }, [validate, selectedClient, companyName, phoneNumber, clientName, contactPerson, contact, email, packageType, startDate, endDate, dailyRate, totalCost, amountPaid, currency, paymentMethod, transactionId, bankName, accountNumber, status, bookingType, vehicleId, vehicleSource, vendorName, vendorPlate, vendorReason, driverId, notes, userId, reset, onSuccess, recordPayment]);
 
   const selectedVehicle = vehicles.find(v => v.id === vehicleId);
   const selectedGuide   = guides.find(g => g.id === driverId);
@@ -1149,7 +1166,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                 <Text style={fld.label}>{t('editBooking.fieldPaymentMethod')}</Text>
                 <View style={st.segRow}>
                   {PAYMENT_METHODS.map(m => (
-                    <TouchableOpacity key={m.value} style={[st.seg, paymentMethod === m.value && st.segActive]} onPress={() => { setPaymentMethod(m.value); setTransactionId(''); setBankName(''); }}>
+                    <TouchableOpacity key={m.value} style={[st.seg, paymentMethod === m.value && st.segActive]} onPress={() => { setPaymentMethod(m.value); setTransactionId(''); setBankName(''); setAccountNumber(''); }}>
                       <Text style={[st.segText, paymentMethod === m.value && st.segTextActive]}>{m.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -1166,6 +1183,13 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
                       </TouchableOpacity>
                     ))}
                   </View>
+                </View>
+              )}
+
+              {paymentMethod === 'bank_transfer' && (
+                <View style={fld.wrap}>
+                  <Text style={fld.label}>{t('newBooking.accountNumberLabel')}</Text>
+                  <TextInput style={st.input} value={accountNumber} onChangeText={setAccountNumber} placeholder={t('newBooking.accountNumberPlaceholder')} placeholderTextColor={C.muted} keyboardType="numeric" />
                 </View>
               )}
 
