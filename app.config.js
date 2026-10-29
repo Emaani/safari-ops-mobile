@@ -30,7 +30,7 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      buildNumber: '65',
+      buildNumber: '66',
       bundleIdentifier: 'com.jackalwild.jackaladventures',
       infoPlist: {
         UIBackgroundModes: ['remote-notification'],
