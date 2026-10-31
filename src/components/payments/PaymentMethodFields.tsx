@@ -1,6 +1,8 @@
-import React from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Pressable, ScrollView } from 'react-native';
 import { MOBILE_MONEY_PROVIDERS, type PaymentDetails, type PaymentMethod } from '../../lib/paymentMethods';
+
+const BANK_OPTIONS = ['Stanbic Bank', 'I&M Bank'];
 
 const C = {
   primary: '#8B6B3E',
@@ -33,6 +35,38 @@ function Field({ value, onChange, placeholder, keyboardType, maxLength, autoCapi
       autoCorrect={false}
       blurOnSubmit={false}
     />
+  );
+}
+
+/** Dropdown for Bank Transfer's "Bank Name" — constrained to the two banks the business actually transacts with. */
+function BankPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TouchableOpacity style={styles.selector} onPress={() => setOpen(true)} activeOpacity={0.8}>
+        <Text style={[styles.selectorText, !value && { color: C.textMuted }]}>{value || 'Select bank'}</Text>
+        <Text style={styles.chevron}>▾</Text>
+      </TouchableOpacity>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
+            <Text style={styles.sheetTitle}>Select Bank</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {BANK_OPTIONS.map(bank => (
+                <TouchableOpacity
+                  key={bank}
+                  style={[styles.option, value === bank && styles.optionActive]}
+                  onPress={() => { onChange(bank); setOpen(false); }}
+                >
+                  <Text style={[styles.optionText, value === bank && styles.optionTextActive]}>{bank}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -80,7 +114,7 @@ export function PaymentMethodFields({ method, details, onDetailsChange }: Paymen
       return (
         <>
           <FieldLabel label="Bank Name *" />
-          <Field value={details.bank_name || ''} onChange={v => onDetailsChange({ bank_name: v })} placeholder="e.g. Stanbic Bank" />
+          <BankPicker value={details.bank_name || ''} onChange={v => onDetailsChange({ bank_name: v })} />
           <FieldLabel label="Account Number (Last 4 Digits) *" />
           <Field value={details.account_number || ''} onChange={v => onDetailsChange({ account_number: v.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" keyboardType="numeric" maxLength={4} />
           <Text style={styles.autoIdNotice}>The system generates the Transaction ID automatically; no reference is typed manually.</Text>
@@ -141,4 +175,15 @@ const styles = StyleSheet.create({
   providerChipTOn: { color: C.primary },
   cardNotice: { fontSize: 11, color: '#B5482F', backgroundColor: '#FBEAE4', borderRadius: 8, padding: 10, marginTop: 10, lineHeight: 15 },
   autoIdNotice: { fontSize: 11, color: C.textMuted, fontStyle: 'italic', marginTop: 14, lineHeight: 15 },
+  selector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  selectorText: { fontSize: 14, color: C.text },
+  chevron: { fontSize: 14, color: C.textMuted },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, maxHeight: '60%' },
+  handle: { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 12 },
+  option: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  optionActive: { backgroundColor: C.primarySoft + '50', borderRadius: 8, paddingHorizontal: 8 },
+  optionText: { fontSize: 15, color: C.text },
+  optionTextActive: { color: C.primary, fontWeight: '700' },
 });
