@@ -15,45 +15,35 @@
 -- ============================================================================
 -- 1. NOTIFICATIONS TABLE
 -- ============================================================================
--- Stores all notifications for users
+-- NOTE: the live table (shared with the web dashboard) does NOT have
+-- `status`/`read_at`/`expires_at`/`data` columns — only `is_read` (boolean),
+-- plus `link` (text) and `related_vehicle_id`. This CREATE TABLE is historical
+-- (IF NOT EXISTS no-ops against the real table) and kept only so the shape
+-- below matches production — do not "fix" it back to status/read_at, that
+-- was the bug (see mark_notification_read etc. below, and
+-- notifications_broadcast_trigger, which referenced the nonexistent columns
+-- and broke on every UPDATE until this was corrected 2026-11-03).
 CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN (
-        'booking_created',
-        'booking_confirmed',
-        'booking_completed',
-        'booking_cancelled',
-        'payment_received',
-        'payment_overdue',
-        'cr_created',
-        'cr_approved',
-        'cr_rejected',
-        'vehicle_maintenance',
-        'vehicle_available',
-        'system_alert',
-        'admin_message',
-        'general'
-    )),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
     title TEXT NOT NULL,
     message TEXT NOT NULL,
-    priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-    status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'archived')),
-    data JSONB DEFAULT '{}'::jsonb,
+    related_vehicle_id UUID REFERENCES public.vehicles(id) ON DELETE CASCADE,
+    priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'critical')),
+    is_read BOOLEAN NOT NULL DEFAULT false,
+    link TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    read_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ,
-    CONSTRAINT valid_read_at CHECK (read_at IS NULL OR read_at >= created_at),
-    CONSTRAINT valid_expires_at CHECK (expires_at IS NULL OR expires_at > created_at)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_status ON public.notifications(status);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON public.notifications(is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_type ON public.notifications(type);
 CREATE INDEX IF NOT EXISTS idx_notifications_priority ON public.notifications(priority);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_notifications_user_status ON public.notifications(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON public.notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON public.notifications(user_id, created_at DESC);
 
 -- Enable Row Level Security
@@ -229,6 +219,8 @@ CREATE TRIGGER on_auth_user_created_notification_preferences
     EXECUTE FUNCTION create_default_notification_preferences();
 
 -- Function to send push notification (to be called from backend/Edge Functions)
+-- NOTE: p_data is accepted for call-site compatibility but NOT persisted —
+-- the live table has no `data` column (see note at top of file).
 CREATE OR REPLACE FUNCTION send_push_notification(
     p_user_id UUID,
     p_type TEXT,
@@ -247,15 +239,13 @@ BEGIN
         type,
         title,
         message,
-        priority,
-        data
+        priority
     ) VALUES (
         p_user_id,
         p_type,
         p_title,
         p_message,
-        p_priority,
-        p_data
+        p_priority
     ) RETURNING id INTO notification_id;
 
     RETURN notification_id;
@@ -267,7 +257,7 @@ CREATE OR REPLACE FUNCTION mark_notification_read(p_notification_id UUID)
 RETURNS VOID AS $$
 BEGIN
     UPDATE public.notifications
-    SET status = 'read', read_at = NOW()
+    SET is_read = true
     WHERE id = p_notification_id AND user_id = auth.uid();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -277,8 +267,8 @@ CREATE OR REPLACE FUNCTION mark_all_notifications_read()
 RETURNS VOID AS $$
 BEGIN
     UPDATE public.notifications
-    SET status = 'read', read_at = NOW()
-    WHERE user_id = auth.uid() AND status = 'unread';
+    SET is_read = true
+    WHERE user_id = auth.uid() AND is_read = false;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -316,9 +306,8 @@ DECLARE
     deleted_count INTEGER;
 BEGIN
     DELETE FROM public.notifications
-    WHERE status = 'read'
-        AND read_at < NOW() - INTERVAL '30 days'
-        AND (expires_at IS NULL OR expires_at < NOW());
+    WHERE is_read = true
+        AND updated_at < NOW() - INTERVAL '30 days';
 
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     RETURN deleted_count;

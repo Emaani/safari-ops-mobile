@@ -29,7 +29,12 @@ export type NotificationStatus = 'unread' | 'read' | 'archived';
 
 /**
  * Main Notification Interface
- * Matches the database schema for notifications table
+ *
+ * The live `notifications` table only has `is_read` (boolean) — no `status`,
+ * `read_at`, `expires_at`, or `data` columns. `status`/`read_at` below are
+ * derived client-side from `is_read` (see useNotifications.ts's row mapper)
+ * purely so the existing filter-tab UI keeps working; they are never read
+ * from or written to the database directly.
  */
 export interface Notification {
   id: string;
@@ -38,6 +43,7 @@ export interface Notification {
   title: string;
   message: string;
   priority: NotificationPriority;
+  is_read: boolean;
   status: NotificationStatus;
   data?: NotificationData;
   created_at: string;

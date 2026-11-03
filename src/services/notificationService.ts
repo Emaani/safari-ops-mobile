@@ -234,16 +234,22 @@ export async function createNotification({
   title,
   message,
   priority = 'medium',
-  data = {},
+  data,
 }: CreateNotificationInput): Promise<void> {
+  // The live `notifications` table only has: user_id, type, title, message,
+  // priority, is_read, link, related_vehicle_id — no `status`/`data` columns.
+  // Sending either breaks the insert outright (PostgREST rejects the whole
+  // payload on any unrecognized key), so `data`'s deep-link context (booking_id,
+  // reference, amount) can't be persisted here — only the local push/in-app
+  // banner (fired separately, before this call) carries it.
   const { error } = await supabase.from('notifications').insert({
     user_id: userId,
     type,
     title,
     message,
     priority,
-    status: 'unread',
-    data,
+    is_read: false,
+    link: data?.screen,
   });
 
   if (error) {

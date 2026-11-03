@@ -32,6 +32,11 @@ interface UseNotificationsReturn {
 
 type NotificationInsertHandler = (notification: Notification) => void;
 
+/** DB rows only carry `is_read` — derive the client-side `status` field from it. */
+function mapRow(row: any): Notification {
+  return { ...row, status: row.is_read ? 'read' : 'unread' } as Notification;
+}
+
 function calculateSummary(notifs: Notification[]): NotificationSummary {
   const summary: NotificationSummary = {
     total: notifs.length,
@@ -87,7 +92,7 @@ export function useNotifications(
         throw fetchError;
       }
 
-      const notifs = (data || []) as Notification[];
+      const notifs = (data || []).map(mapRow);
       devLog(`[Notifications] Fetched ${notifs.length} notifications`);
       setAllNotifications(notifs);
       setError(null);
@@ -140,7 +145,7 @@ export function useNotifications(
     try {
       const { error: updateError } = await supabase
         .from('notifications')
-        .update({ status: 'read', read_at: now })
+        .update({ is_read: true })
         .eq('id', notificationId)
         .eq('user_id', userId);
 
@@ -173,9 +178,9 @@ export function useNotifications(
     try {
       const { error: updateError } = await supabase
         .from('notifications')
-        .update({ status: 'read', read_at: now })
+        .update({ is_read: true })
         .eq('user_id', userId)
-        .eq('status', 'unread');
+        .eq('is_read', false);
 
       if (updateError) throw updateError;
     } catch (err: any) {
@@ -228,7 +233,7 @@ export function useNotifications(
           devLog('[Notifications] Realtime:', payload.eventType);
 
           if (payload.eventType === 'INSERT') {
-            const newNotif = payload.new as Notification;
+            const newNotif = mapRow(payload.new);
             setAllNotifications((prev) => {
               // Avoid duplicates
               if (prev.some((n) => n.id === newNotif.id)) return prev;
@@ -236,7 +241,7 @@ export function useNotifications(
             });
             onNotificationInsert?.(newNotif);
           } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as Notification;
+            const updated = mapRow(payload.new);
             setAllNotifications((prev) =>
               prev.map((n) => (n.id === updated.id ? updated : n))
             );
