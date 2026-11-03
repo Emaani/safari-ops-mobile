@@ -21,12 +21,34 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
 
 export const MOBILE_MONEY_PROVIDERS = ['MTN', 'Airtel'] as const;
 
+/**
+ * The company's own receiving accounts for Bank Transfer payments — not a
+ * customer's account, so there's no reason to truncate these; they're
+ * already known/public within the business (printed on invoices, etc.).
+ * Selecting one sets both `bank_name` and `account_number` on PaymentDetails
+ * together, since picking the account implies the bank.
+ */
+export interface CompanyBankAccount {
+  id: string;
+  bankName: string;
+  currency: 'UGX' | 'USD';
+  accountNumber: string;
+  label: string;
+}
+
+export const COMPANY_BANK_ACCOUNTS: CompanyBankAccount[] = [
+  { id: 'stanbic_ugx', bankName: 'Stanbic Bank', currency: 'UGX', accountNumber: '9030024909947', label: 'Stanbic Bank — UGX (9030024909947)' },
+  { id: 'stanbic_usd', bankName: 'Stanbic Bank', currency: 'USD', accountNumber: '9030024909998', label: 'Stanbic Bank — USD (9030024909998)' },
+  { id: 'im_usd', bankName: 'I&M Bank', currency: 'USD', accountNumber: '50710985002', label: 'I&M Bank — USD (50710985002)' },
+  { id: 'im_ugx', bankName: 'I&M Bank', currency: 'UGX', accountNumber: '50710985001', label: 'I&M Bank — UGX (50710985001)' },
+];
+
 export interface PaymentDetails {
   // Mobile Money — both required by record_payment
   provider?: string;
   phone_number?: string;
-  // Bank Transfer — both required by record_payment; account_number is the
-  // last 4 digits only, same as the web dashboard, never the full account number
+  // Bank Transfer — both required by record_payment, both set together from
+  // a single CompanyBankAccount selection (see COMPANY_BANK_ACCOUNTS above)
   bank_name?: string;
   account_number?: string;
   // Card — processor required by record_payment; last 4 digits + approval
@@ -81,8 +103,7 @@ export function validatePaymentDetails(method: PaymentMethod, details: PaymentDe
       if (!details.phone_number?.trim()) return 'Enter the Mobile Money phone number.';
       return null;
     case 'Bank Transfer':
-      if (!details.bank_name?.trim()) return 'Enter the bank name.';
-      if (!details.account_number?.trim() || details.account_number.trim().length !== 4) return 'Enter the last 4 digits of the account number.';
+      if (!details.bank_name?.trim() || !details.account_number?.trim()) return 'Select which company bank account received the payment.';
       return null;
     case 'Card':
       if (!details.processor?.trim()) return 'Enter the card payment processor.';

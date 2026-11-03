@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal, Pressable, ScrollView } from 'react-native';
-import { MOBILE_MONEY_PROVIDERS, type PaymentDetails, type PaymentMethod } from '../../lib/paymentMethods';
-
-const BANK_OPTIONS = ['Stanbic Bank', 'I&M Bank'];
+import { COMPANY_BANK_ACCOUNTS, MOBILE_MONEY_PROVIDERS, type PaymentDetails, type PaymentMethod } from '../../lib/paymentMethods';
 
 const C = {
   primary: '#8B6B3E',
@@ -38,28 +36,36 @@ function Field({ value, onChange, placeholder, keyboardType, maxLength, autoCapi
   );
 }
 
-/** Dropdown for Bank Transfer's "Bank Name" — constrained to the two banks the business actually transacts with. */
-function BankPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/**
+ * Dropdown for Bank Transfer — one choice of which of the company's own
+ * receiving accounts the funds went into. Selecting an option sets both
+ * bank_name and account_number together, since the two are a fixed pair.
+ */
+function BankAccountPicker({ bankName, accountNumber, onSelect }: {
+  bankName: string; accountNumber: string; onSelect: (bankName: string, accountNumber: string) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const selectedId = COMPANY_BANK_ACCOUNTS.find(a => a.bankName === bankName && a.accountNumber === accountNumber)?.id;
+  const selectedLabel = COMPANY_BANK_ACCOUNTS.find(a => a.id === selectedId)?.label;
   return (
     <>
       <TouchableOpacity style={styles.selector} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={[styles.selectorText, !value && { color: C.textMuted }]}>{value || 'Select bank'}</Text>
+        <Text style={[styles.selectorText, !selectedLabel && { color: C.textMuted }]}>{selectedLabel || 'Select bank account'}</Text>
         <Text style={styles.chevron}>▾</Text>
       </TouchableOpacity>
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Select Bank</Text>
+            <Text style={styles.sheetTitle}>Select Bank Account</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {BANK_OPTIONS.map(bank => (
+              {COMPANY_BANK_ACCOUNTS.map(account => (
                 <TouchableOpacity
-                  key={bank}
-                  style={[styles.option, value === bank && styles.optionActive]}
-                  onPress={() => { onChange(bank); setOpen(false); }}
+                  key={account.id}
+                  style={[styles.option, selectedId === account.id && styles.optionActive]}
+                  onPress={() => { onSelect(account.bankName, account.accountNumber); setOpen(false); }}
                 >
-                  <Text style={[styles.optionText, value === bank && styles.optionTextActive]}>{bank}</Text>
+                  <Text style={[styles.optionText, selectedId === account.id && styles.optionTextActive]}>{account.label}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -113,10 +119,12 @@ export function PaymentMethodFields({ method, details, onDetailsChange }: Paymen
     case 'Bank Transfer':
       return (
         <>
-          <FieldLabel label="Bank Name *" />
-          <BankPicker value={details.bank_name || ''} onChange={v => onDetailsChange({ bank_name: v })} />
-          <FieldLabel label="Account Number (Last 4 Digits) *" />
-          <Field value={details.account_number || ''} onChange={v => onDetailsChange({ account_number: v.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" keyboardType="numeric" maxLength={4} />
+          <FieldLabel label="Bank Account *" />
+          <BankAccountPicker
+            bankName={details.bank_name || ''}
+            accountNumber={details.account_number || ''}
+            onSelect={(bankName, accountNumber) => onDetailsChange({ bank_name: bankName, account_number: accountNumber })}
+          />
           <Text style={styles.autoIdNotice}>The system generates the Transaction ID automatically; no reference is typed manually.</Text>
         </>
       );

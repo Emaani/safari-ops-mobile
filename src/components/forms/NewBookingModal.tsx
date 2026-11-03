@@ -26,7 +26,7 @@ import type { Vehicle } from '../../types/dashboard';
 import { useInAppNotification } from '../system/InAppNotificationBanner';
 import { notifySuccess } from '../../lib/haptics';
 import { usePaymentRecording, generateRequestId } from '../../hooks/usePaymentRecording';
-import type { PaymentDetails, PaymentMethod as RecordPaymentMethod } from '../../lib/paymentMethods';
+import { COMPANY_BANK_ACCOUNTS, type PaymentDetails, type PaymentMethod as RecordPaymentMethod } from '../../lib/paymentMethods';
 import { getErrorMessage } from '../../lib/errors';
 import { useAppPreferences } from '../../contexts/AppPreferencesContext';
 
@@ -119,11 +119,6 @@ function escapePostgrestSearch(v: string): string { return v.trim().replace(/[%,
 function calculateBalance(total: string, paid: string): number {
   return Math.max(0, (parseFloat(total) || 0) - (parseFloat(paid) || 0));
 }
-const BANK_DISPLAY_NAMES: Record<string, string> = {
-  stanbic_bank: 'Stanbic Bank',
-  im_bank: 'I&M Bank',
-};
-
 /**
  * Maps this form's legacy payment method options onto the shared record_payment
  * method + details shape. Method values here MUST match the server's own
@@ -131,7 +126,9 @@ const BANK_DISPLAY_NAMES: Record<string, string> = {
  * — a lowercase/snake_case value passes TypeScript but fails every deposit with
  * "Choose a valid payment method" since the Postgres function's `IN (...)` check
  * is case-sensitive. The server also requires phone_number for Mobile Money and
- * account_number for Bank Transfer, so both are threaded through here.
+ * account_number for Bank Transfer, so both are threaded through here. bankName/
+ * accountNumber are already the real values from a COMPANY_BANK_ACCOUNTS
+ * selection (see the Bank Account picker below), set together as a pair.
  */
 function mapLegacyPaymentMethod(
   method: PaymentMethod, bankName: string, accountNumber: string, phoneNumber: string,
@@ -140,7 +137,7 @@ function mapLegacyPaymentMethod(
     case 'mtn_uganda':    return { method: 'Mobile Money', paymentDetails: { provider: 'MTN', phone_number: phoneNumber.trim() } };
     case 'airtel_uganda': return { method: 'Mobile Money', paymentDetails: { provider: 'Airtel', phone_number: phoneNumber.trim() } };
     case 'mpesa_kenya':   return { method: 'Mobile Money', paymentDetails: { provider: 'M-Pesa', phone_number: phoneNumber.trim() } };
-    case 'bank_transfer': return { method: 'Bank Transfer', paymentDetails: { bank_name: BANK_DISPLAY_NAMES[bankName] || bankName.trim(), account_number: accountNumber.trim() } };
+    case 'bank_transfer': return { method: 'Bank Transfer', paymentDetails: { bank_name: bankName.trim(), account_number: accountNumber.trim() } };
     case 'cash':
     default:              return { method: 'Cash', paymentDetails: {} };
   }
@@ -248,7 +245,57 @@ const pickerSt = StyleSheet.create({
   cancelText:  { fontSize: 15, color: C.muted, fontWeight: '600' },
   confirmText: { fontSize: 15, color: C.primary, fontWeight: '800', textAlign: 'right' },
   picker:      { marginHorizontal: 4 },
+  listWrap:    { paddingHorizontal: 20, paddingTop: 8 },
+  option:      { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  optionActive:{ backgroundColor: C.primary + '12', borderRadius: 8, paddingHorizontal: 8 },
+  optionText:  { fontSize: 15, color: C.text },
+  optionTextActive: { color: C.primary, fontWeight: '700' },
 });
+
+/**
+ * Dropdown for Bank Transfer — one choice of which of the company's own
+ * receiving accounts the deposit went into. Selecting an option sets
+ * bankName/accountNumber together, since the two are a fixed pair.
+ */
+function BankAccountField({ bankName, accountNumber, onSelect }: {
+  bankName: string; accountNumber: string; onSelect: (bankName: string, accountNumber: string) => void;
+}) {
+  const { t } = useAppPreferences();
+  const [open, setOpen] = useState(false);
+  const selected = COMPANY_BANK_ACCOUNTS.find(a => a.bankName === bankName && a.accountNumber === accountNumber);
+
+  return (
+    <>
+      <TouchableOpacity style={fld.iconInput} onPress={() => setOpen(true)} activeOpacity={0.8}>
+        <Text style={[fld.iconInputText, !selected && { color: C.muted, fontWeight: '400' }]}>
+          {selected ? selected.label : t('newBooking.selectBankAccount')}
+        </Text>
+        <ChevronIcon open={false} />
+      </TouchableOpacity>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <Pressable style={pickerSt.backdrop} onPress={() => setOpen(false)} />
+        <View style={pickerSt.sheet}>
+          <View style={pickerSt.sheetHeader}>
+            <View style={{ width: 70 }} />
+            <Text style={pickerSt.sheetTitle}>{t('newBooking.selectBankAccountTitle')}</Text>
+            <TouchableOpacity onPress={() => setOpen(false)} style={pickerSt.headerBtn}><Text style={pickerSt.confirmText}>{t('common.cancel')}</Text></TouchableOpacity>
+          </View>
+          <ScrollView style={pickerSt.listWrap}>
+            {COMPANY_BANK_ACCOUNTS.map(account => (
+              <TouchableOpacity
+                key={account.id}
+                style={[pickerSt.option, selected?.id === account.id && pickerSt.optionActive]}
+                onPress={() => { onSelect(account.bankName, account.accountNumber); setOpen(false); }}
+              >
+                <Text style={[pickerSt.optionText, selected?.id === account.id && pickerSt.optionTextActive]}>{account.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+    </>
+  );
+}
 
 // ─── Vehicle Picker Sheet ─────────────────────────────────────────────────────
 function VehiclePickerSheet({
@@ -872,8 +919,7 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
     const paid = parseFloat(amountPaid || '0');
     if (isNaN(paid) || paid < 0) return t('editBooking.amountPaidNegative');
     if (paid > cost) return t('editBooking.amountPaidExceeds');
-    if (paymentMethod === 'bank_transfer' && !bankName.trim()) return t('newBooking.bankRequiredErr');
-    if (paymentMethod === 'bank_transfer' && accountNumber.trim().length !== 4) return t('newBooking.accountNumberRequiredErr');
+    if (paymentMethod === 'bank_transfer' && (!bankName.trim() || !accountNumber.trim())) return t('newBooking.bankAccountRequiredErr');
     return null;
   }, [companyName, phoneNumber, clientName, contact, email, packageType, dailyRate, startDate, endDate, totalCost, amountPaid, paymentMethod, bankName, accountNumber, t]);
 
@@ -1174,21 +1220,12 @@ export function NewBookingModal({ visible, onClose, onSuccess, vehicles, userId 
 
               {paymentMethod === 'bank_transfer' && (
                 <View style={fld.wrap}>
-                  <Text style={fld.label}>{t('newBooking.bankRequiredLabel')}</Text>
-                  <View style={st.segRow}>
-                    {['stanbic_bank', 'im_bank'].map(bank => (
-                      <TouchableOpacity key={bank} style={[st.seg, bankName === bank && st.segActive]} onPress={() => setBankName(bank)}>
-                        <Text style={[st.segText, bankName === bank && st.segTextActive]}>{bank === 'stanbic_bank' ? t('newBooking.stanbicBank') : t('newBooking.imBank')}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {paymentMethod === 'bank_transfer' && (
-                <View style={fld.wrap}>
-                  <Text style={fld.label}>{t('newBooking.accountNumberLabel')}</Text>
-                  <TextInput style={st.input} value={accountNumber} onChangeText={v => setAccountNumber(v.replace(/\D/g, '').slice(0, 4))} placeholder={t('newBooking.accountNumberPlaceholder')} placeholderTextColor={C.muted} keyboardType="numeric" maxLength={4} />
+                  <Text style={fld.label}>{t('newBooking.bankAccountLabel')}</Text>
+                  <BankAccountField
+                    bankName={bankName}
+                    accountNumber={accountNumber}
+                    onSelect={(bank, account) => { setBankName(bank); setAccountNumber(account); }}
+                  />
                 </View>
               )}
 

@@ -121,6 +121,9 @@ export function PaymentHistoryList({ sourceId }: PaymentHistoryListProps) {
               <Text style={[styles.amount, isReversed && styles.amountReversed]}>{formatCurrency(e.amount, e.currency)}</Text>
               <Text style={styles.method}>{methodLabel(e.method)}</Text>
             </View>
+            {e.method === 'Bank Transfer' && e.payment_details?.bank_name && e.payment_details?.account_number && (
+              <Text style={styles.bankAccount}>{t('payments.bankAccountLine', { bankName: e.payment_details.bank_name, accountNumber: e.payment_details.account_number })}</Text>
+            )}
             <Text style={styles.meta}>
               {formatDateDDMMYY(e.transaction_date)}
               {e.recorded_by_name ? ` · ${t('payments.recordedByPrefix', { name: e.recorded_by_name })}` : ''}
@@ -163,6 +166,7 @@ const styles = StyleSheet.create({
   amountReversed: { textDecorationLine: 'line-through', color: C.textMuted },
   method: { fontSize: 12, fontWeight: '700', color: C.primary, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
   meta: { fontSize: 11, color: C.textMuted, marginTop: 6 },
+  bankAccount: { fontSize: 11, color: C.primary, fontWeight: '600', marginTop: 4 },
   description: { fontSize: 12, color: C.textMuted, marginTop: 6, fontStyle: 'italic' },
   receiptNote: { fontSize: 11, color: C.primary, marginTop: 6, fontWeight: '600' },
   reversedPill: { backgroundColor: '#FFEEED', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
