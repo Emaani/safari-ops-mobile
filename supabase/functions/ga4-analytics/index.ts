@@ -203,6 +203,76 @@ function buildSourceMedium(report: any) {
   return rows.map((r: any) => ({ ...r, pct: Math.round((r.sessions / totalSessions) * 100) }));
 }
 
+/**
+ * Google Ads performance via GA4's own link to a Google Ads account — no
+ * separate Google Ads API credentials, same as the website. Metric/dimension
+ * names (advertiserAdCost, advertiserAdClicks, advertiserAdImpressions,
+ * sessionGoogleAdsCampaignName) confirmed verbatim against Google's GA4 Data
+ * API schema reference before use; a wrong name here fails the whole report
+ * call with a 400, so these are deliberately not guessed.
+ */
+function buildAds(totalsReport: any, campaignsReport: any) {
+  const tmh = (totalsReport.metricHeaders ?? []).map((h: any) => h.name);
+  const totalsRow = totalsReport.rows?.[0] ?? totalsReport.totals?.[0] ?? {};
+  const getTotal = (name: string) => {
+    const idx = tmh.indexOf(name);
+    return idx >= 0 ? Number(totalsRow.metricValues?.[idx]?.value ?? 0) : 0;
+  };
+
+  const cost        = getTotal("advertiserAdCost");
+  const clicks       = getTotal("advertiserAdClicks");
+  const impressions  = getTotal("advertiserAdImpressions");
+  const sessions     = getTotal("sessions");
+  const users        = getTotal("activeUsers");
+  const conversions  = getTotal("keyEvents");
+
+  // Zero across cost/clicks/impressions means Google Ads isn't linked to
+  // this GA4 property (or genuinely had no spend) — never show 0s as if
+  // they were real figures, since that reads as "no ad spend" rather than
+  // "we can't see ad spend."
+  const costDataAvailable = cost > 0 || clicks > 0 || impressions > 0;
+
+  const cmh = (campaignsReport.metricHeaders ?? []).map((h: any) => h.name);
+  const cdh = (campaignsReport.dimensionHeaders ?? []).map((h: any) => h.name);
+  const campIdx = cdh.indexOf("sessionGoogleAdsCampaignName");
+  const campaigns = ((campaignsReport.rows ?? []) as any[])
+    .map((row: any) => {
+      const get = (name: string) => {
+        const idx = cmh.indexOf(name);
+        return Number(row.metricValues?.[idx]?.value ?? 0);
+      };
+      return {
+        campaign:        row.dimensionValues?.[campIdx]?.value || "(not set)",
+        impressions:     get("advertiserAdImpressions"),
+        clicks:          get("advertiserAdClicks"),
+        cost:            get("advertiserAdCost"),
+        sessions:        get("sessions"),
+        users:           get("activeUsers"),
+        conversions:     get("keyEvents"),
+        engagedSessions: get("engagedSessions"),
+      };
+    })
+    // Drop pure-noise rows: no campaign attribution and no spend/clicks to show
+    .filter(c => c.campaign !== "(not set)" || c.cost > 0 || c.clicks > 0);
+
+  return {
+    costDataAvailable,
+    costNote: costDataAvailable ? undefined : "Google Ads isn't linked to Analytics for this property yet.",
+    totals: {
+      impressions,
+      clicks,
+      cost,
+      sessions,
+      users,
+      conversions,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      cpc: clicks > 0 ? cost / clicks : 0,
+      costPerConversion: conversions > 0 ? cost / conversions : 0,
+    },
+    campaigns,
+  };
+}
+
 function buildAudience(countryReport: any, deviceReport: any) {
   const buildRows = (report: any, dimName: string) => {
     const mh = (report.metricHeaders ?? []).map((h: any) => h.name);
@@ -332,9 +402,40 @@ serve(async (req) => {
           orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
           limit: 8,
         }),
+        // 9. Google Ads totals (dimensionless — aggregate data in rows[0], same as report 1).
+        // Uses the SAME dateRanges as every other report above, unlike whatever is
+        // currently deployed — this is the actual fix for the date range being ignored.
+        runReport(PROPERTY_ID, token, {
+          dateRanges,
+          metrics: [
+            { name: "advertiserAdCost" },
+            { name: "advertiserAdClicks" },
+            { name: "advertiserAdImpressions" },
+            { name: "sessions" },
+            { name: "activeUsers" },
+            { name: "keyEvents" },
+          ],
+          metricAggregations: ["TOTAL"],
+        }),
+        // 10. Google Ads by campaign
+        runReport(PROPERTY_ID, token, {
+          dateRanges,
+          metrics: [
+            { name: "advertiserAdCost" },
+            { name: "advertiserAdClicks" },
+            { name: "advertiserAdImpressions" },
+            { name: "sessions" },
+            { name: "activeUsers" },
+            { name: "keyEvents" },
+            { name: "engagedSessions" },
+          ],
+          dimensions: [{ name: "sessionGoogleAdsCampaignName" }],
+          orderBys: [{ metric: { metricName: "advertiserAdCost" }, desc: true }],
+          limit: 20,
+        }),
       ]);
 
-    const [summaryRaw, timeSeriesRaw, pagesRaw, sourceRaw, countryRaw, deviceRaw, keyEventsRaw, browserRaw] =
+    const [summaryRaw, timeSeriesRaw, pagesRaw, sourceRaw, countryRaw, deviceRaw, keyEventsRaw, browserRaw, adsTotalsRaw, adsCampaignsRaw] =
       settled.map(r => r.status === 'fulfilled' ? r.value : emptyReport);
 
     const summary    = buildSummary(summaryRaw);
@@ -342,6 +443,7 @@ serve(async (req) => {
     const topPages   = buildTopPages(pagesRaw);
     const sourceMedium = buildSourceMedium(sourceRaw);
     const audience   = buildAudience(countryRaw, deviceRaw);
+    const ads        = buildAds(adsTotalsRaw, adsCampaignsRaw);
 
     // Build engagement object (matching web Marketing Console format)
     const totalUsersVal = summary.totalUsers || summary.activeUsers;
@@ -407,6 +509,7 @@ serve(async (req) => {
         audience,
         engagement,
         browserData,
+        ads,
       }),
       { headers: CORS },
     );
