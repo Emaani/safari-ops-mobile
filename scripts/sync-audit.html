@@ -1,0 +1,336 @@
+<title>Sync & Robustness Audit</title>
+<meta name="description" content="Where the mobile app duplicates business logic that belongs in a shared RPC, and where it drifts from the web dashboard.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --bg:        #F7F4EE;
+    --bg-raised: #FFFFFF;
+    --card:      #FFFFFF;
+    --hero:      #1C1611;
+    --hero-2:    #2A2118;
+    --primary:   #8B6B3E;
+    --primary-2: #6E5430;
+    --gold:      #C6A563;
+    --sage:      #6E7B5C;
+    --sage-bg:   #EEF0E8;
+    --danger:    #B5482F;
+    --danger-bg: #FBEAE4;
+    --amber:     #A6791F;
+    --amber-bg:  #FBF1DD;
+    --text:      #211C15;
+    --text-muted:#736A5C;
+    --border:    #E7DFD1;
+    --border-2:  #D9CFBB;
+    --chip-bg:   #F1EADA;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #16130E;
+      --bg-raised: #1E1912;
+      --card:      #211B14;
+      --hero:      #0E0B08;
+      --hero-2:    #1A140D;
+      --primary:   #C6A06A;
+      --primary-2: #B78E58;
+      --gold:      #D8B876;
+      --sage:      #9AAB86;
+      --sage-bg:   #232920;
+      --danger:    #E08063;
+      --danger-bg: #2E1D17;
+      --amber:     #D8B45A;
+      --amber-bg:  #2E2612;
+      --text:      #F3EDE1;
+      --text-muted:#B4A996;
+      --border:    #33291C;
+      --border-2:  #423523;
+      --chip-bg:   #2A2216;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #16130E;
+    --bg-raised: #1E1912;
+    --card:      #211B14;
+    --hero:      #0E0B08;
+    --hero-2:    #1A140D;
+    --primary:   #C6A06A;
+    --primary-2: #B78E58;
+    --gold:      #D8B876;
+    --sage:      #9AAB86;
+    --sage-bg:   #232920;
+    --danger:    #E08063;
+    --danger-bg: #2E1D17;
+    --amber:     #D8B45A;
+    --amber-bg:  #2E2612;
+    --text:      #F3EDE1;
+    --text-muted:#B4A996;
+    --border:    #33291C;
+    --border-2:  #423523;
+    --chip-bg:   #2A2216;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 20px 80px; }
+  code { font-family: 'SF Mono', Menlo, monospace; font-size: 0.92em; background: var(--chip-bg); padding: 1px 5px; border-radius: 4px; }
+
+  /* ─── Hero ─────────────────────────────────────────── */
+  .hero {
+    background: linear-gradient(160deg, var(--hero) 0%, var(--hero-2) 100%);
+    padding: 56px 20px 44px;
+    margin-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; top: -60px; right: -60px;
+    width: 260px; height: 260px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(198,165,99,0.16), transparent 70%);
+  }
+  .hero-inner { max-width: 840px; margin: 0 auto; position: relative; }
+  .eyebrow {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--gold); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(32px, 5.4vw, 48px);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    color: #FBF7EF;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .hero-sub {
+    font-size: 16px; line-height: 1.6; color: #D9CDB8;
+    max-width: 62ch; margin: 0 0 22px;
+  }
+  .hero-meta {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    font-size: 12.5px; color: #A3937A; font-weight: 500;
+  }
+  .hero-meta strong { color: #E4D6BC; font-weight: 600; }
+
+  /* ─── Summary panel ────────────────────────────────── */
+  .summary {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 26px;
+    margin-bottom: 36px;
+  }
+  .summary h2 {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px;
+    margin: 0 0 10px; color: var(--text);
+  }
+  .summary p {
+    font-size: 14.5px; line-height: 1.7; color: var(--text-muted); margin: 0 0 10px;
+  }
+  .summary p:last-child { margin-bottom: 0; }
+  .summary .highlight { color: var(--text); font-weight: 600; }
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .stat { flex: 1; min-width: 110px; background: var(--chip-bg); border-radius: 10px; padding: 12px 14px; }
+  .stat .n { font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .stat .l { font-size: 10.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 5px; }
+  .stat.danger .n { color: var(--danger); }
+  .stat.amber .n { color: var(--amber); }
+  .stat.primary .n { color: var(--primary); }
+  .stat.sage .n { color: var(--sage); }
+
+  /* ─── Tier sections ────────────────────────────────── */
+  .tier { margin-bottom: 44px; }
+  .tier-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; padding-bottom: 14px; border-bottom: 2px solid var(--border-2); }
+  .tier-icon { font-size: 15px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .tier-broken .tier-icon { background: var(--danger-bg); }
+  .tier-risk .tier-icon { background: var(--amber-bg); }
+  .tier-robust .tier-icon { background: var(--sage-bg); }
+  .tier-polish .tier-icon { background: var(--chip-bg); }
+  .tier-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; color: var(--text); text-wrap: balance; }
+  .tier-sub { font-size: 12.5px; color: var(--text-muted); margin-left: auto; white-space: nowrap; font-weight: 500; }
+
+  .cards { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-left-width: 4px; border-radius: 12px; padding: 18px 20px; }
+  .tier-broken .card { border-left-color: var(--danger); }
+  .tier-risk .card { border-left-color: var(--amber); }
+  .tier-robust .card { border-left-color: var(--sage); }
+  .tier-polish .card { border-left-color: var(--border-2); }
+
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+  .card-title { font-size: 15.5px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+  .loc-tag { font-size: 10px; font-weight: 700; font-family: 'SF Mono', Menlo, monospace; letter-spacing: 0; color: var(--primary); background: var(--chip-bg); border-radius: 6px; padding: 4px 9px; white-space: nowrap; flex-shrink: 0; }
+  .card p { font-size: 13.5px; line-height: 1.65; color: var(--text-muted); margin: 0 0 9px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card .label { font-weight: 700; color: var(--text); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 5px; }
+  .fix { border-top: 1px dashed var(--border-2); padding-top: 9px; }
+
+  footer { text-align: center; font-size: 12px; color: var(--text-muted); padding-top: 24px; border-top: 1px solid var(--border); }
+
+  @media (max-width: 480px) {
+    .hero { padding: 44px 16px 36px; }
+    .card-head { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Safari Ops Mobile · Internal Review</p>
+    <h1>Sync &amp; Robustness Audit</h1>
+    <p class="hero-sub">A follow-on review triggered by the payment transaction ID fix — once one client duplicated a server-side rule and drifted from the web dashboard, we checked whether the same pattern recurs elsewhere. It does, twice over, plus a handful of standalone robustness gaps.</p>
+    <div class="hero-meta">
+      <span><strong>13</strong> findings</span>
+      <span><strong>2</strong> live bugs already in production</span>
+      <span>Generated 10 Oct 2026</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="summary">
+    <h2>The pattern behind this audit</h2>
+    <p>The payment bug wasn't really about payments — it was about <span class="highlight">a business rule living in two places at once</span>: mobile wrote <code>bookings.amount_paid</code> directly while the web dashboard went through a shared <code>record_payment</code> function, so the two clients could quietly disagree about a booking's balance and transaction history.</p>
+    <p>That exact shape of bug — client-side logic that should be one server-side rule, instead reimplemented per screen — recurs in <span class="highlight">vehicle status transitions</span> and <span class="highlight">cash requisition approvals</span>. The vehicle case has already produced a live bug, not just a risk. The rest of this report covers unbounded queries, redundant realtime subscriptions, and a few smaller robustness gaps that surfaced along the way.</p>
+    <div class="stat-row">
+      <div class="stat danger"><div class="n">2</div><div class="l">Already broken</div></div>
+      <div class="stat amber"><div class="n">3</div><div class="l">Sync risk</div></div>
+      <div class="stat sage"><div class="n">5</div><div class="l">Robustness</div></div>
+      <div class="stat primary"><div class="n">3</div><div class="l">Polish</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ ALREADY BROKEN ═══════════════════ -->
+  <section class="tier tier-broken">
+    <div class="tier-head">
+      <div class="tier-icon">🔴</div>
+      <div class="tier-title">Already Broken — Fix Regardless of Anything Else</div>
+      <div class="tier-sub">2 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Safari-booked vehicles never return to "available"</span><span class="loc-tag">SafariManagementScreen.tsx:518</span></div>
+        <p>When a vehicle is assigned to a safari booking, <code>saveOps</code> sets the vehicle to <code>booked</code> — but there is no matching write anywhere that ever sets it back to <code>available</code> when the safari completes or is cancelled. Compare this to the vehicle-hire flow in <code>EditBookingModal.tsx</code>, which explicitly releases the vehicle on <code>Completed</code>/<code>Cancelled</code>. The safari flow has no equivalent, and the write is wrapped in a silent <code>catch {'{'}/* non-fatal */{'}'}</code> that would hide a failure even if one were added.</p>
+        <p class="fix"><span class="label">Impact</span>Every vehicle assigned through Safari Management's Operations tab is permanently stuck as "booked" in Fleet once that safari ends — it can never be assigned to anything else until someone manually flips it back from the web dashboard or a database console.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">New booking marks vehicle "booked" even when created as Cancelled/Completed</span><span class="loc-tag">NewBookingModal.tsx:931</span></div>
+        <p><code>STATUS_OPTIONS</code> lets staff create a booking directly as <code>Completed</code> or <code>Cancelled</code> (useful for backfilling historical records) — but the vehicle-assignment write at line 931 unconditionally sets the vehicle to <code>booked</code> whenever one is attached, with no check against the chosen status. <code>EditBookingModal.tsx</code> documents the correct rule ("Completed/Cancelled → available, else → booked") but <code>NewBookingModal</code> never applies it.</p>
+        <p class="fix"><span class="label">Impact</span>Backfilling a completed historical booking with a vehicle attached locks that vehicle as unavailable in Fleet, even though the trip it was "booked" for is already over.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ SYNC RISK ═══════════════════ -->
+  <section class="tier tier-risk">
+    <div class="tier-head">
+      <div class="tier-icon">🟠</div>
+      <div class="tier-title">Same Bug Class as the Payment Fix</div>
+      <div class="tier-sub">3 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Vehicle status rule is copy-pasted three times, and has already drifted</span><span class="loc-tag">3 files</span></div>
+        <p>The "what should a vehicle's status be after this booking write" rule is implemented independently in <code>NewBookingModal.tsx:931</code> (always <code>booked</code>, no release logic at all), <code>EditBookingModal.tsx:351-366</code> (the fullest version — releases on Completed/Cancelled, releases a swapped-out vehicle, releases on unassignment), and <code>SafariManagementScreen.tsx:518</code> (only ever sets <code>booked</code>, gated on the vehicle's current status, never releases). Three copies, three different behaviors, in the same app.</p>
+        <p class="fix"><span class="label">Approach</span>Move this rule into a Postgres function — mirroring exactly what <code>record_payment</code> already does for the payment case — triggered off booking-status changes, so web and mobile both get vehicle availability right by construction instead of by each client remembering the rule correctly.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Cash requisition approval has no shared RPC at all</span><span class="loc-tag">TransactionDetailModal.tsx:188</span></div>
+        <p>Every CR status change (Approve/Decline) is a direct <code>cash_requisitions.update()</code> from mobile — there is no <code>approve_cash_requisition</code>-style RPC the way there now is for payments. If the web dashboard's approval flow does anything beyond the status write — a notification, an audit log entry, a validation the mobile client doesn't know about — mobile bypasses all of it today, invisibly.</p>
+        <p class="fix"><span class="label">Approach</span>Same treatment as payments: a shared <code>update_cr_status</code> (or similar) RPC that both clients call, so approval behavior can't silently diverge between web and mobile.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">CR approval may never post to financial_transactions from mobile</span><span class="loc-tag">financial_transactions is read-only in mobile</span></div>
+        <p>Mobile never inserts into <code>financial_transactions</code> — confirmed, every reference to that table in <code>src/</code> is a read. That means approving a CR from the mobile app relies entirely on something else (a database trigger, or web-only code) to create the matching expense ledger row. This is probably fine if a trigger exists — but it's worth confirming directly, because if it doesn't, every CR approved from a phone in the field quietly never shows up in Finance until someone also touches it from the web.</p>
+        <p class="fix"><span class="label">Approach</span>Verify server-side whether a trigger creates the ledger entry on CR approval. If not, the same RPC recommended above should write both rows atomically — exactly the "one transaction, one function" shape <code>record_payment</code> already established.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ ROBUSTNESS ═══════════════════ -->
+  <section class="tier tier-robust">
+    <div class="tier-head">
+      <div class="tier-icon">🟡</div>
+      <div class="tier-title">Robustness</div>
+      <div class="tier-sub">5 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Unbounded queries on tables that only grow</span><span class="loc-tag">5 locations</span></div>
+        <p><code>useNotifications.ts:72</code> fetches every notification a user has ever received with no limit (the code comment literally says "Fetches ALL notifications once"). <code>useBookingsData.ts:37</code> fetches every booking ever made when the status filter is "all." <code>SafariManagementScreen.tsx:1216, 2417, 3136</code> each fetch the entire <code>safari_bookings</code> table with no date bound or row cap, for the Bookings tab, the Analytics tab, and the Payments tab respectively.</p>
+        <p class="fix"><span class="label">Approach</span>Add a sensible <code>.limit()</code> everywhere (the Finance hooks already do this correctly — 100-500 rows depending on filter) and prefer narrowing by date range over fetching everything and filtering client-side.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Notifications and exchange rates each run 2-3 redundant realtime subscriptions</span><span class="loc-tag">useNotifications.ts · useExchangeRate.ts</span></div>
+        <p><code>useNotifications(userId)</code> is independently invoked from the app root, from the header's notification bell, and from the Notifications screen itself — all three typically mounted at once, each running its own unbounded fetch <em>and</em> opening its own realtime channel literally named <code>notifications-${'{'}userId{'}'}</code>. <code>useExchangeRate()</code> has the same issue between Dashboard and Finance — two channels both named <code>exchange-rates-changes</code> running concurrently. Both tables are even already listed in <code>realtimeManager.ts</code>'s <code>ALL_TABLES</code> array, which bookings/fleet/finance/dashboard all correctly route through — notifications and exchange rates just never got wired in.</p>
+        <p class="fix"><span class="label">Approach</span>Route both through the existing <code>realtimeManager</code> the same way the other four data hooks already do — the shared-channel infrastructure is already built, these two just need to use it.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Offline network detection is built but completely unwired</span><span class="loc-tag">useNetworkStatus.ts</span></div>
+        <p>The hook exists, works, and is exported — but nothing in the app imports it. No offline banner, no gating on write actions, nothing. For a safari ops app whose users are routinely inside national parks with no signal, a visible "you're offline" state is one of the highest-value things in this list and it's sitting there half-built.</p>
+        <p class="fix"><span class="label">Approach</span>Wire it into a persistent banner at the app shell level, and surface it specifically on the payment-recording and CR-submission screens where a silent failure is most costly.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">No retry queue for failed writes while offline</span><span class="loc-tag">App-wide</span></div>
+        <p><code>record_payment</code>'s idempotency key protects against double-submission on a manual retry, but there's no automatic resubmission — if a guide records a payment with no signal, it just fails, and the amount isn't captured anywhere until they remember to try again with connectivity. There's no AsyncStorage-backed queue for failed mutations anywhere in the app; AsyncStorage today only holds auth state, preferences, and read-through cache.</p>
+        <p class="fix"><span class="label">Approach</span>Once the offline banner above exists, the natural next step is queuing failed payment/CR submissions locally and replaying them automatically when <code>useNetworkStatus</code> reports back online.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Two conflicting definitions of <code>SafariBooking</code></span><span class="loc-tag">types/dashboard.ts:123 · types/safari.ts:5</span></div>
+        <p>One file defines a minimal financial-only shape (no <code>status</code>, no <code>booking_reference</code>); the other defines a rich operational shape with joined relations. Nothing currently imports the wrong one, but same name, same project, two different shapes is exactly the setup for a future edit to autocomplete into the wrong import and compile against fields that don't exist on the record actually being passed in.</p>
+        <p class="fix"><span class="label">Approach</span>Rename one — e.g. <code>SafariBookingSummary</code> for the dashboard.ts financial shape — so the name itself signals which one a new piece of code should reach for.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ POLISH ═══════════════════ -->
+  <section class="tier tier-polish">
+    <div class="tier-head">
+      <div class="tier-icon">🟢</div>
+      <div class="tier-title">Polish</div>
+      <div class="tier-sub">3 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">No shared error-message formatter</span><span class="loc-tag">25+ call sites</span></div>
+        <p>Every screen rolls its own <code>Alert.alert('Error', e?.message || 'fallback text')</code> — consistent in style, but duplicated 25+ times with no shared helper. <code>SafariManagementScreen.tsx</code> even has its own inline <code>isSchemaErr</code> check reinventing "is this a Postgres schema-cache error" logic that would belong in that same shared helper.</p>
+        <p class="fix"><span class="label">Approach</span>A single <code>getErrorMessage(e, fallback)</code> utility would collapse all of these and become the natural place to translate raw Postgres error text into something a non-technical user can act on.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Harmless duplicate: <code>CacheEntry</code></span><span class="loc-tag">useGA4Analytics.ts:109 · useGoogleAds.ts:77</span></div>
+        <p>Same name, different shapes, both non-exported and scoped to their own file — no cross-import risk, unlike the <code>SafariBooking</code> case above. Flagging only for completeness; not worth touching on its own.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">CR cancellation has no write path at all</span><span class="loc-tag">cash_requisitions</span></div>
+        <p>Approve and Decline both exist; there is no "Cancel" status write anywhere in the mobile app for a CR that's no longer needed. Worth confirming whether this is intentionally web-only or simply missing.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>Jackal Adventures · Safari Ops Mobile — internal engineering review</footer>
+
+</div>

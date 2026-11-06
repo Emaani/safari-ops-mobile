@@ -1,0 +1,441 @@
+<title>Safari Ops Roadmap</title>
+<meta name="description" content="Prioritized improvement recommendations for the Jackal Adventures safari operations mobile app.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --bg:        #F7F4EE;
+    --bg-raised: #FFFFFF;
+    --card:      #FFFFFF;
+    --hero:      #1C1611;
+    --hero-2:    #2A2118;
+    --primary:   #8B6B3E;
+    --primary-2: #6E5430;
+    --gold:      #C6A563;
+    --sage:      #6E7B5C;
+    --sage-bg:   #EEF0E8;
+    --danger:    #B5482F;
+    --danger-bg: #FBEAE4;
+    --text:      #211C15;
+    --text-muted:#736A5C;
+    --border:    #E7DFD1;
+    --border-2:  #D9CFBB;
+    --chip-bg:   #F1EADA;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #16130E;
+      --bg-raised: #1E1912;
+      --card:      #211B14;
+      --hero:      #0E0B08;
+      --hero-2:    #1A140D;
+      --primary:   #C6A06A;
+      --primary-2: #B78E58;
+      --gold:      #D8B876;
+      --sage:      #9AAB86;
+      --sage-bg:   #232920;
+      --danger:    #E08063;
+      --danger-bg: #2E1D17;
+      --text:      #F3EDE1;
+      --text-muted:#B4A996;
+      --border:    #33291C;
+      --border-2:  #423523;
+      --chip-bg:   #2A2216;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #16130E;
+    --bg-raised: #1E1912;
+    --card:      #211B14;
+    --hero:      #0E0B08;
+    --hero-2:    #1A140D;
+    --primary:   #C6A06A;
+    --primary-2: #B78E58;
+    --gold:      #D8B876;
+    --sage:      #9AAB86;
+    --sage-bg:   #232920;
+    --danger:    #E08063;
+    --danger-bg: #2E1D17;
+    --text:      #F3EDE1;
+    --text-muted:#B4A996;
+    --border:    #33291C;
+    --border-2:  #423523;
+    --chip-bg:   #2A2216;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+  }
+
+  /* ─── Hero ─────────────────────────────────────────── */
+  .hero {
+    background: linear-gradient(160deg, var(--hero) 0%, var(--hero-2) 100%);
+    padding: 56px 20px 44px;
+    margin-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; top: -60px; right: -60px;
+    width: 260px; height: 260px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(198,165,99,0.16), transparent 70%);
+  }
+  .hero-inner { max-width: 840px; margin: 0 auto; position: relative; }
+  .eyebrow {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--gold); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(32px, 5.4vw, 48px);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    color: #FBF7EF;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .hero-sub {
+    font-size: 16px; line-height: 1.6; color: #D9CDB8;
+    max-width: 62ch; margin: 0 0 22px;
+  }
+  .hero-meta {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    font-size: 12.5px; color: #A3937A; font-weight: 500;
+  }
+  .hero-meta strong { color: #E4D6BC; font-weight: 600; }
+
+  /* ─── Summary panel ────────────────────────────────── */
+  .summary {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 26px;
+    margin-bottom: 44px;
+  }
+  .summary h2 {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px;
+    margin: 0 0 10px; color: var(--text);
+  }
+  .summary p {
+    font-size: 14.5px; line-height: 1.7; color: var(--text-muted); margin: 0 0 10px;
+  }
+  .summary p:last-child { margin-bottom: 0; }
+  .stat-row {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px;
+  }
+  .stat {
+    flex: 1; min-width: 120px;
+    background: var(--chip-bg); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .stat .n {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px;
+    color: var(--primary); font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .stat .l {
+    font-size: 11px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-top: 5px;
+  }
+
+  /* ─── Priority sections ────────────────────────────── */
+  .tier { margin-bottom: 48px; }
+  .tier-head {
+    display: flex; align-items: baseline; gap: 12px;
+    margin-bottom: 6px; padding-bottom: 14px;
+    border-bottom: 2px solid var(--border-2);
+  }
+  .tier-num {
+    font-family: 'Fraunces', serif; font-weight: 700; font-size: 15px;
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; flex-shrink: 0;
+  }
+  .tier-1 .tier-num { background: var(--danger); }
+  .tier-2 .tier-num { background: var(--primary); }
+  .tier-3 .tier-num { background: var(--sage); }
+  .tier-title {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px;
+    color: var(--text); text-wrap: balance;
+  }
+  .tier-sub {
+    font-size: 12.5px; color: var(--text-muted); margin-left: auto;
+    white-space: nowrap; font-weight: 500;
+  }
+
+  /* ─── Cards ─────────────────────────────────────────── */
+  .cards { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .tier-1 .card { border-left-color: var(--danger); }
+  .tier-2 .card { border-left-color: var(--primary); }
+  .tier-3 .card { border-left-color: var(--sage); }
+
+  .card-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .card-title {
+    font-size: 15.5px; font-weight: 700; color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .screen-tag {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--primary);
+    background: var(--chip-bg); border-radius: 6px;
+    padding: 4px 9px; white-space: nowrap; flex-shrink: 0;
+  }
+  .card p {
+    font-size: 13.5px; line-height: 1.65; color: var(--text-muted);
+    margin: 0 0 9px;
+  }
+  .card p:last-child { margin-bottom: 0; }
+  .card .label {
+    font-weight: 700; color: var(--text); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-right: 5px;
+  }
+  .approach { border-top: 1px dashed var(--border-2); padding-top: 9px; }
+
+  footer {
+    text-align: center; font-size: 12px; color: var(--text-muted);
+    padding-top: 24px; border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 480px) {
+    .hero { padding: 44px 16px 36px; }
+    .card-head { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Safari Ops Mobile · Internal Review</p>
+    <h1>Improvement Roadmap</h1>
+    <p class="hero-sub">A prioritized set of fixes and features across Dashboard, Fleet, Finance, Bookings, Safari Management, Marketing, and Notifications — assessed against how the app is actually used to run daily safari operations.</p>
+    <div class="hero-meta">
+      <span><strong>25</strong> recommendations</span>
+      <span><strong>7</strong> screens reviewed</span>
+      <span>Generated 28 Sep 2026</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="summary">
+    <h2>Where the app stands today</h2>
+    <p>The foundation is solid — Expo SDK 54, Supabase with live real-time subscriptions on Dashboard, Bookings, Fleet, Finance and Safari, plus reanimated, victory-native charts, push notifications, biometric auth, and offline network detection all already installed as dependencies.</p>
+    <p>The gap is that several of these capabilities are installed but not fully wired into the day-to-day experience — offline detection has no banner, biometric auth isn't called on resume, push notifications don't deep-link anywhere, and a few screens quietly use stale data (fixed exchange rates, unbounded date ranges) that would mislead a manager glancing at a number.</p>
+    <div class="stat-row">
+      <div class="stat"><div class="n">7</div><div class="l">High impact</div></div>
+      <div class="stat"><div class="n">10</div><div class="l">Medium impact</div></div>
+      <div class="stat"><div class="n">8</div><div class="l">Nice to have</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PRIORITY 1 ═══════════════════ -->
+  <section class="tier tier-1">
+    <div class="tier-head">
+      <div class="tier-num">1</div>
+      <div class="tier-title">High Impact — Achievable Now</div>
+      <div class="tier-sub">7 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Live exchange rate in Petty Cash</span><span class="screen-tag">Finance</span></div>
+        <p>The PettyCash component hardcodes <code>{ USD: 1, UGX: 3700, KES: 130 }</code> while everywhere else in the app pulls live rates via <code>useExchangeRate</code>. Petty cash totals shown in UGX or KES are calculated against a rate that may be months stale — a manager glancing at the number gets a wrong figure with no warning.</p>
+        <p class="approach"><span class="label">Approach</span>Accept a <code>conversionRates</code> prop matching the shape FinanceScreen already computes from <code>useExchangeRate</code>, and thread it down. No new network call needed.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Year/month filter for Finance records</span><span class="screen-tag">Finance</span></div>
+        <p>FinanceScreen fetches with no date filter and a flat <code>.limit(100)</code>. For a company booking year-round, September records silently fall off the end of the list while January is unreachable — and totals can't be compared month-to-month against the Dashboard, which does filter by month.</p>
+        <p class="approach"><span class="label">Approach</span>Reuse the month/year filter chips already built in DashboardScreen. Pass <code>monthFilter</code>/<code>year</code> into <code>useFinanceData</code>, add date-range clauses to the query, and drop the arbitrary row cap once the range bounds the result set.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Today's Operations Briefing</span><span class="screen-tag">Dashboard</span></div>
+        <p>Dashboard shows monthly aggregates and recent bookings by creation date — but an ops manager opening the app in the morning most urgently needs to see what's departing today, what's currently in the field, and which vehicles are out. None of that is surfaced anywhere.</p>
+        <p class="approach"><span class="label">Approach</span>Add a horizontal-scroll widget between Quick Actions and the KPI grid: filter bookings where <code>start_date = today</code> or <code>status = 'in_progress'</code> (already in state). Card shows vehicle plate, client, destination, pax, guide — tap to open Bookings.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Insurance &amp; service-overdue alerts</span><span class="screen-tag">Fleet</span></div>
+        <p><code>useFleetData</code> already fetches <code>insurance_expiry</code>, <code>last_service_date</code> and <code>next_service_date</code> for every vehicle, and these show inside the detail modal — but nothing surfaces them proactively. A vehicle going out with lapsed insurance is a legal and safety exposure, not just a data gap.</p>
+        <p class="approach"><span class="label">Approach</span>Add a "Needs Attention" section at the top of Fleet filtering vehicles with insurance expiring within 30 days (or already expired) or an overdue <code>next_service_date</code>. Surface a count badge on the Fleet tab via <code>tabBarBadge</code>. No new fetching required.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Record Payment from Outstanding Payments</span><span class="screen-tag">Dashboard</span></div>
+        <p>The Outstanding Payments modal is read-only. Seeing which bookings have a balance due but having no way to act on it means staff read the list, then navigate to Bookings, find the booking again, and open its detail — for a task performed dozens of times a week.</p>
+        <p class="approach"><span class="label">Approach</span>Add a "Record Payment" button per row that opens an inline sheet — amount, currency, method. On save, update <code>amount_paid</code> on the booking and refetch. The fields already exist on the Booking type.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Strip raw <code>console.log</code> from production hooks</span><span class="screen-tag">App-wide</span></div>
+        <p><code>useFinanceData</code> and <code>useFleetData</code> log fetch activity directly with <code>console.log</code> — including financial totals and vehicle records — which persists into production device logs. A gated <code>devLog</code> helper already exists and is used elsewhere in the codebase.</p>
+        <p class="approach"><span class="label">Approach</span>Search-and-replace remaining <code>console.log</code>/<code>console.error</code> calls in hooks with <code>devLog</code>, confirming it's gated on <code>__DEV__</code>. Small change, real exposure closed.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Push notification deep-linking</span><span class="screen-tag">Notifications</span></div>
+        <p><code>expo-notifications</code> is installed and a notification service exists, but nothing registers <code>addNotificationResponseReceivedListener</code> anywhere in the app. Tapping a push for a new booking or an approved CR just opens the app at whatever screen was last active.</p>
+        <p class="approach"><span class="label">Approach</span>Register the listener at the app root; parse <code>notification.request.content.data</code> for <code>type</code>/<code>id</code> and navigate accordingly. Notification types are already catalogued in NotificationsScreen's <code>TYPE_EMOJI</code> map.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ PRIORITY 2 ═══════════════════ -->
+  <section class="tier tier-2">
+    <div class="tier-head">
+      <div class="tier-num">2</div>
+      <div class="tier-title">Medium Impact</div>
+      <div class="tier-sub">10 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Fix the wrong brand palette in constants/colors.ts</span><span class="screen-tag">App-wide</span></div>
+        <p><code>src/constants/colors.ts</code> defines <code>primary: '#3b82f6'</code> — a blue — while every screen actually uses the warm bronze <code>#8B6B3E</code> via its own local color object. The shared constants file is simply wrong and unused; any future brand tweak means editing seven screens individually.</p>
+        <p class="approach"><span class="label">Approach</span>Correct the constants file to the real palette, then wire each screen to import from it via a shared <code>useThemeColors()</code> hook — which also opens the door to dark mode later.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Calendar view for Bookings</span><span class="screen-tag">Bookings</span></div>
+        <p>A date-sorted list doesn't show how loaded a given week is or where the gaps are. Safari bookings run 4–8 weeks out — staff currently cross-reference manually to judge availability for a new request.</p>
+        <p class="approach"><span class="label">Approach</span>Add a Calendar/List toggle with a month-strip that highlights booking-count per date; tapping a date filters the existing list. Uses data already in state — no new fetching.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">UWA permit reference &amp; confirmation tracking</span><span class="screen-tag">Safari Management</span></div>
+        <p>The permit catalog covers Gorilla and Chimp permits with a booking join table, but there's no field for the Uganda Wildlife Authority's actual booking reference, and no way to mark whether UWA has confirmed it. An unconfirmed gorilla permit costs the client their trek — this is the single highest-stakes data gap in the app.</p>
+        <p class="approach"><span class="label">Approach</span>Add <code>external_reference</code> and <code>authority_confirmed</code> to <code>safari_booking_permits</code>. Show both inline in the booking's Permits section, and flag any booking with an unconfirmed gorilla/chimp permit in red.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Share booking confirmation as PDF</span><span class="screen-tag">Bookings</span></div>
+        <p>There's no way to generate a client-facing confirmation from the mobile app. WhatsApp is the default communication channel in east African safari operations, and staff need to send a formatted summary on the spot, not from a desktop later.</p>
+        <p class="approach"><span class="label">Approach</span><code>expo-print</code> renders a simple HTML template with booking details; <code>expo-sharing</code> (already installed) sends it straight to WhatsApp. Add a "Share Confirmation" button on the booking detail.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Odometer update from the field</span><span class="screen-tag">Fleet</span></div>
+        <p>Odometer readings are fetched and displayed but there's no way to update them from mobile — only from the web dashboard. Service-interval tracking, insurance claims, and driver accountability all depend on this being current.</p>
+        <p class="approach"><span class="label">Approach</span>Add an "Update Odometer" action in the vehicle detail modal — numeric input pre-filled with the current reading, writes back with a timestamp.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Client lookup screen</span><span class="screen-tag">New screen</span></div>
+        <p>Clients are referenced everywhere — <code>client_id</code>, company name, contact — but there's no screen to pull up a client's history, contact info, or lifetime spend. When a repeat client calls to book, staff have no way to check their record from a phone.</p>
+        <p class="approach"><span class="label">Approach</span>New screen (reachable from More or the client name on a booking) querying <code>clients</code> with search: company, contact, total bookings, total spend. Tap through to all bookings for that client.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Expose promotion start/end dates in the create form</span><span class="screen-tag">Marketing</span></div>
+        <p>The <code>Promotion</code> type already carries <code>start_date</code>/<code>end_date</code>, but the creation form doesn't appear to expose them — so promotions can't be pre-scheduled for Christmas gorilla treks or Easter safaris and must be manually flipped live at the right moment.</p>
+        <p class="approach"><span class="label">Approach</span>Add date pickers (<code>@react-native-community/datetimepicker</code> is already installed) to the promotion form, and show a live/upcoming/past indicator on each promotion card.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Unread badge + mark-all-read</span><span class="screen-tag">Notifications</span></div>
+        <p>There's no badge on the Notifications tab, so a new booking or CR approval gives no visible signal on the tab bar — and after a busy day, dismissing notifications one by one is tedious.</p>
+        <p class="approach"><span class="label">Approach</span>Expose the unread count from <code>useNotifications</code> to the tab navigator's <code>tabBarBadge</code>. Add a "Mark all read" header action doing one batch update.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Resolve the SafariScreen / SafariManagementScreen overlap</span><span class="screen-tag">Bookings · Safari Mgmt</span></div>
+        <p>Two screens cover overlapping ground — a simpler <code>SafariScreen</code> list view and the full four-tab <code>SafariManagementScreen</code>. It's unclear which is actually reachable from the tab bar; maintaining both risks staff landing on the wrong one and doubles the surface area for every future fix.</p>
+        <p class="approach"><span class="label">Approach</span>Audit the navigation config to see which is live. Either fold SafariScreen in as a sub-view of Safari Management's Bookings tab, or remove it outright.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Remove the dead <code>&amp;&amp; false</code> loading overlay</span><span class="screen-tag">Dashboard</span></div>
+        <p>DashboardScreen has a loading condition that ends in <code>&amp;&amp; false</code>, permanently disabling the overlay — almost certainly a leftover patch for a rendering bug that was never actually resolved. It reads as intentional but silently does nothing, which misleads whoever touches this code next.</p>
+        <p class="approach"><span class="label">Approach</span>Either delete the dead conditional entirely, or diagnose the original rendering issue and replace it with the <code>KpiRowSkeleton</code> pattern already used elsewhere on the same screen.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ PRIORITY 3 ═══════════════════ -->
+  <section class="tier tier-3">
+    <div class="tier-head">
+      <div class="tier-num">3</div>
+      <div class="tier-title">Nice to Have</div>
+      <div class="tier-sub">8 items</div>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Visible offline banner + action queue</span><span class="screen-tag">App-wide</span></div>
+        <p>Guides and drivers routinely lose signal inside Bwindi, Queen Elizabeth, or Murchison Falls. <code>useNetworkStatus</code> correctly tracks connectivity but isn't wired into any visible UI — a write attempted offline currently just fails silently.</p>
+        <p class="approach"><span class="label">Approach</span>Start with a persistent amber "You're offline — changes will sync when reconnected" banner. Follow with queuing critical writes (payment records, status updates) in AsyncStorage and replaying on reconnect.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Guide availability calendar</span><span class="screen-tag">Safari Management</span></div>
+        <p>Assigning a guide to a new booking gives no indication they're already committed to another safari on overlapping dates — a real double-booking risk when several safaris run concurrently.</p>
+        <p class="approach"><span class="label">Approach</span>Add a monthly strip in the guide detail view highlighting confirmed assignment dates, and a conflict warning in the guide picker when selected dates overlap an existing booking.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Vehicle booking availability calendar</span><span class="screen-tag">Fleet</span></div>
+        <p>Determining whether a specific vehicle is free for a new hire request currently means manually cross-referencing the Bookings screen — there's no at-a-glance view per vehicle.</p>
+        <p class="approach"><span class="label">Approach</span>Add a booked-date-range calendar strip to the vehicle detail modal, querying both <code>bookings</code> and <code>safari_bookings</code> by vehicle id.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">UTM link generator</span><span class="screen-tag">Marketing</span></div>
+        <p><code>useUTMTracking</code> exists and GA4 source data is already surfaced, but there's no way for staff to generate a trackable link for a WhatsApp campaign or agent referral email — so that traffic just shows up as "direct" in GA4, undermining the analytics that already exist.</p>
+        <p class="approach"><span class="label">Approach</span>Add a small form — destination page, source/medium/campaign — that builds a UTM URL and shares it via the native Share sheet.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Pre-trip vehicle checklist</span><span class="screen-tag">Fleet · Bookings</span></div>
+        <p>East African safari vehicles are legally required to carry specific equipment — fire extinguisher, first aid kit, valid insurance card, yellow fever certificates — and there's currently no pre-departure confirmation step in the app.</p>
+        <p class="approach"><span class="label">Approach</span>A checklist template table in Supabase; the assigned guide checks off each item with a timestamp before departure, creating an audit trail for incident investigations.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Day-by-day itinerary builder</span><span class="screen-tag">Safari Management</span></div>
+        <p>A safari booking captures start/end dates, pax, and a package reference — but the actual day-by-day plan (Day 1: Entebbe → lodge, Day 2: gorilla trek) lives entirely off-system, so agents can't share or track it from the app.</p>
+        <p class="approach"><span class="label">Approach</span>Add an <code>itinerary_days</code> field (or linked table) and a simple day-editor in the booking detail — location/activity per day, rendered as a read-only timeline in the overview.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Biometric lock on app resume</span><span class="screen-tag">App root</span></div>
+        <p><code>expo-local-authentication</code> is installed but not wired up anywhere. On a shared device or one left unattended, anyone can open the app straight to live financial figures.</p>
+        <p class="approach"><span class="label">Approach</span>On <code>AppState</code> returning to foreground after 5+ minutes backgrounded, require Face ID / fingerprint before rendering screen content.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">Driver management screen</span><span class="screen-tag">Fleet</span></div>
+        <p>Drivers are referenced on vehicle records but have no screen of their own — no way to check license expiry, see a driver's trip history, or find a backup when a regular driver calls in sick.</p>
+        <p class="approach"><span class="label">Approach</span>Add a Drivers sub-tab to Fleet querying the existing <code>drivers</code> table: name, phone, assigned vehicle, license type/expiry, linked trip history.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>Jackal Adventures · Safari Ops Mobile — internal engineering review</footer>
+
+</div>

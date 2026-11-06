@@ -47,5 +47,8 @@ ios/Pods/
 ios/build/
 jackalapp/
 
+# Supabase CLI local link cache
+supabase/.temp/
+
 # iOS signing credentials (certs, provisioning profiles, keys)
 native/ios-signing/
