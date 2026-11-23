@@ -23,7 +23,7 @@ import { supabase } from '../lib/supabase';
 import { RecordPaymentSheet } from '../components/payments/RecordPaymentSheet';
 
 // Hooks
-import { useExchangeRate, getConversionRates } from '../hooks/useExchangeRate';
+import { useExchangeRate, getConversionRates, convertToBaseCurrency, convertFromBaseCurrency } from '../hooks/useExchangeRate';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardRealtimeSync } from '../hooks/useDashboardRealtimeSync';
 import { useDashboardCalculations } from '../hooks/useDashboardCalculations';
@@ -464,6 +464,7 @@ export function DashboardScreen() {
     vehicles,
     bookings,
     recentBookings: recentBookingsRaw,
+    outstandingBookings: outstandingBookingsAllTime,
     repairs,
     financialTransactions,
     cashRequisitions,
@@ -489,6 +490,7 @@ export function DashboardScreen() {
   const calculations = useDashboardCalculations({
     vehicles,
     bookings,
+    outstandingBookingsAllTime,
     repairs,
     financialTransactions,
     cashRequisitions,
@@ -708,6 +710,12 @@ export function DashboardScreen() {
 
   // Prepare recent bookings data for widget — uses the unfiltered top-10 fetch
   // so the list matches the web dashboard (most recently CREATED, not date-filtered).
+  //
+  // Each booking's amount must be converted from ITS OWN currency into the
+  // display currency before being shown — it was previously relabeled with
+  // `currency` (the display currency) without converting the number itself,
+  // so a UGX booking's raw UGX figure rendered with a "$" prefix as if it
+  // were that same number of US dollars.
   const recentBookingsData = useMemo(() => {
     return recentBookingsRaw.map((booking) => ({
       id: booking.id,
@@ -715,10 +723,14 @@ export function DashboardScreen() {
       start_date: booking.start_date,
       end_date: booking.end_date,
       status: booking.status,
-      total_cost: booking.total_amount ?? booking.total_cost ?? 0,
+      total_cost: convertFromBaseCurrency(
+        convertToBaseCurrency(booking.total_amount ?? booking.total_cost ?? 0, booking.currency, conversionRates),
+        currency,
+        conversionRates
+      ),
       currency: currency,
     }));
-  }, [recentBookingsRaw, currency]);
+  }, [recentBookingsRaw, currency, conversionRates]);
 
   // ========================================================================
   // RENDER

@@ -33,6 +33,7 @@ export interface DashboardCalculationsProps {
   // Data from useDashboardData
   vehicles: Vehicle[];
   bookings: Booking[];
+  outstandingBookingsAllTime: Booking[];
   repairs: Repair[];
   financialTransactions: FinancialTransaction[];
   cashRequisitions: CashRequisition[];
@@ -247,6 +248,7 @@ export function useDashboardCalculations(
   const {
     vehicles,
     bookings,
+    outstandingBookingsAllTime,
     repairs,
     financialTransactions,
     cashRequisitions,
@@ -461,24 +463,26 @@ export function useDashboardCalculations(
     // Outstanding Payments — any non-cancelled booking with balance_due > 0.
     // Uses the DB balance_due column when available, falls back to total_amount - amount_paid.
     //
-    // Deliberately uses ALL bookings, NOT dashboardFilteredBookings — same
-    // reasoning as Active Bookings above. A balance owed from a booking
-    // that started last March is still owed today; scoping this to
-    // whatever month/year the user has the revenue chart set to would make
-    // real outstanding debt disappear from the tile the moment they change
-    // an unrelated filter, which doesn't match a balance-due/AR figure's
-    // actual semantics (a snapshot of the present, not of a period) and
-    // breaks web-dashboard parity. A prior change here deliberately scoped
-    // this to dashboardFilteredBookings — reverted; flag with the web team
-    // if the website genuinely does scope this by period, since that would
-    // be surprising for an AR-style metric.
+    // Deliberately sourced from outstandingBookingsAllTime, NOT the `bookings`
+    // array (which useDashboardData scopes to dashboardFilterYear for the
+    // charts/KPIs that are genuinely period-scoped). An AR balance owed
+    // from a booking that started last year is still owed today, so this
+    // must not disappear just because the dashboard's year filter moved on.
+    // outstandingBookingsAllTime is fetched separately across all years and
+    // pre-filtered to start_date <= today, which also matches the website's
+    // definition confirmed against prod: a booking that hasn't started yet
+    // isn't due yet, so it isn't counted as outstanding until its trip date
+    // arrives. (Previously this read from `bookings`, which both wrongly
+    // excluded prior-years' unpaid trips AND wrongly included not-yet-due
+    // future bookings — the two errors that caused mobile's total to drift
+    // from the web dashboard's.)
     const getBalanceDue = (b: (typeof bookings)[0]): number => {
       if (typeof b.balance_due === 'number' && b.balance_due > 0) return b.balance_due;
       const totalAmt = b.total_amount || b.total_cost || 0;
       return Math.max(0, totalAmt - b.amount_paid);
     };
 
-    const outstandingBookings = bookings.filter(
+    const outstandingBookings = outstandingBookingsAllTime.filter(
       (b) => !['Cancelled', 'cancelled'].includes(b.status) && getBalanceDue(b) > 0
     );
 
@@ -1113,6 +1117,7 @@ export function useDashboardCalculations(
   }, [
     vehicles,
     bookings,
+    outstandingBookingsAllTime,
     repairs,
     financialTransactions,
     cashRequisitions,

@@ -13,6 +13,7 @@ interface DashboardDataState {
   vehicles: Vehicle[];
   bookings: Booking[];
   recentBookings: Booking[]; // unfiltered — top 10 by created_at DESC for the Recent Bookings widget
+  outstandingBookings: Booking[]; // ALL years, start_date <= today — see fetchOutstandingBookings
   repairs: Repair[];
   financialTransactions: FinancialTransaction[];
   cashRequisitions: CashRequisition[];
@@ -39,6 +40,7 @@ export function useDashboardData({
     vehicles: [],
     bookings: [],
     recentBookings: [],
+    outstandingBookings: [],
     repairs: [],
     financialTransactions: [],
     cashRequisitions: [],
@@ -200,6 +202,39 @@ export function useDashboardData({
     })) as Booking[];
   }, []);
 
+  // Fetch Outstanding Payments source — deliberately NOT bound to
+  // dashboardFilterYear (unlike fetchBookings above). An AR balance owed
+  // from a booking dated in a prior year is still owed today; scoping this
+  // fetch to the selected year silently dropped those rows, which is how
+  // this drifted from the web dashboard's total (confirmed against prod:
+  // mobile summed only the current-year rows while web also counts prior
+  // years' unpaid completed trips). Matches web parity: any non-cancelled
+  // booking whose trip has already started (start_date <= today) is
+  // "outstanding" once it has a balance; a booking that hasn't started yet
+  // isn't due yet, so it's excluded here the same way the website excludes it.
+  const fetchOutstandingBookings = useCallback(async (_fetchId: number) => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { data: rows, error } = await supabase
+      .from('bookings')
+      .select(
+        'id, booking_reference, start_date, end_date, status, amount_paid, total_amount, balance_due, currency, assigned_vehicle_id, client_id, client_name, created_at'
+      )
+      .not('status', 'in', '(Cancelled,cancelled)')
+      .lte('start_date', today);
+
+    if (error) {
+      console.warn('[DashboardData] Could not fetch outstanding bookings:', error.message);
+      return [] as Booking[];
+    }
+
+    return (rows || []).map(b => ({
+      ...b,
+      booking_number: b.booking_reference,
+      total_cost: b.total_amount,
+    })) as Booking[];
+  }, []);
+
   // Fetch all data
   const fetchAllData = useCallback(async () => {
     const fetchId = ++fetchCounter;
@@ -212,6 +247,7 @@ export function useDashboardData({
         vehicles,
         bookings,
         recentBookings,
+        outstandingBookings,
         repairs,
         transactions,
         crs,
@@ -222,6 +258,7 @@ export function useDashboardData({
         fetchVehicles(fetchId),
         fetchBookings(fetchId),
         fetchRecentBookings(fetchId),
+        fetchOutstandingBookings(fetchId),
         fetchRepairs(fetchId),
         fetchTransactions(fetchId),
         fetchCashRequisitions(fetchId),
@@ -247,6 +284,7 @@ export function useDashboardData({
         vehicles,
         bookings: bookingsWithNames,
         recentBookings,
+        outstandingBookings,
         repairs,
         financialTransactions: transactions,
         cashRequisitions: crs,
@@ -271,6 +309,7 @@ export function useDashboardData({
     fetchVehicles,
     fetchBookings,
     fetchRecentBookings,
+    fetchOutstandingBookings,
     fetchRepairs,
     fetchTransactions,
     fetchCashRequisitions,

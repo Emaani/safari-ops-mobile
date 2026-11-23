@@ -12,6 +12,12 @@ export interface SafariBooking {
   total_price_usd?: number;
   deposit_amount?: number;
   amount_paid?: number;
+  // amount_paid/deposit_amount are recorded in this currency, NOT always USD
+  // (unlike total_price_usd) — convert via exchange_rate (the rate snapshot
+  // taken when the trip was booked) before comparing/summing against any
+  // _usd field.
+  currency?: string;
+  exchange_rate?: number;
   booking_direction?: string;
   profit_margin?: number;
   total_expenses_usd?: number;

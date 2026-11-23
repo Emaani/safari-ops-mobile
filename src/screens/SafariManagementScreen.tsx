@@ -33,6 +33,7 @@ import { devError } from '../lib/devLog';
 import { supabase } from '../lib/supabase';
 import { LoadingView } from '../components/system/JackalLoader';
 import { formatCurrency } from '../lib/utils';
+import { DEFAULT_RATES } from '../hooks/useExchangeRate';
 import type {
   SafariBooking, SafariGuide, PermitCatalog, SafariPackage, SafariBookingPermit,
   SafariFieldReport, SafariItineraryDay,
@@ -202,6 +203,17 @@ function calcDays(start?: string, end?: string) {
   const d = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
   return `${d} day${d !== 1 ? 's' : ''}`;
 }
+// amount_paid/deposit_amount have no _usd sibling column (unlike
+// total_price_usd/total_price_ugx), so they're recorded in the booking's own
+// `currency`. Converts to USD using the booking's own snapshot exchange_rate
+// (the rate in effect when the trip was booked), falling back to the current
+// default rate — never assumes a raw amount is already USD.
+function toUSD(amount = 0, record: { currency?: string | null; exchange_rate?: number | null }): number {
+  if (!amount || !record.currency || record.currency === 'USD') return amount;
+  const rate = record.exchange_rate || DEFAULT_RATES[record.currency as keyof typeof DEFAULT_RATES] || 1;
+  return amount / rate;
+}
+
 function getPaymentLabel(paid = 0, total = 0, deposit = 0, t?: TFn): { label: string; color: string; pct: number } {
   const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
   if (paid <= 0) return { label: t ? t('safari.unpaid') : 'Unpaid', color: C.danger, pct: 0 };
@@ -288,7 +300,7 @@ function BookingCard({ b, onPress }: { b: SafariBooking; onPress: () => void }) 
   const { t } = useAppPreferences();
   const st = STATUS_CFG[b.status] || STATUS_CFG.pending;
   const client = b.clients?.company_name || b.customer_name || 'Unknown Client';
-  const pay = getPaymentLabel(b.amount_paid, b.total_price_usd, b.deposit_amount, t);
+  const pay = getPaymentLabel(toUSD(b.amount_paid, b), b.total_price_usd, toUSD(b.deposit_amount, b), t);
   return (
     <TouchableOpacity style={bc.card} onPress={onPress} activeOpacity={0.78}>
       <View style={[bc.accent, { backgroundColor: st.text }]} />
@@ -533,8 +545,10 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
 
   if (!booking || !visible) return null;
   const st = STATUS_CFG[booking.status] || STATUS_CFG.pending;
-  const pay = getPaymentLabel(booking.amount_paid, booking.total_price_usd, booking.deposit_amount, t);
-  const balance = (booking.total_price_usd || 0) - (booking.amount_paid || 0);
+  const amountPaidUSD = toUSD(booking.amount_paid, booking);
+  const depositUSD = toUSD(booking.deposit_amount, booking);
+  const pay = getPaymentLabel(amountPaidUSD, booking.total_price_usd, depositUSD, t);
+  const balance = (booking.total_price_usd || 0) - amountPaidUSD;
 
   // Accurate profit margin: always compute from raw cost fields
   const totalRevenue  = booking.total_price_usd || 0;
@@ -588,7 +602,7 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
         <div style="margin-top:24px;padding:16px;background:#FEF0DC;border-radius:8px;">
           <table style="width:100%;font-size:14px;">
             <tr><td style="color:#6C6C70;">Total Cost</td><td style="text-align:right;font-weight:800;font-size:16px;">${formatCurrency(totalRevenue, 'USD')}</td></tr>
-            <tr><td style="color:#6C6C70;">Amount Paid</td><td style="text-align:right;color:#34A853;font-weight:700;">${formatCurrency(booking.amount_paid || 0, 'USD')}</td></tr>
+            <tr><td style="color:#6C6C70;">Amount Paid</td><td style="text-align:right;color:#34A853;font-weight:700;">${formatCurrency(amountPaidUSD, 'USD')}</td></tr>
             <tr><td style="color:#6C6C70;">Balance Due</td><td style="text-align:right;color:${balance > 0 ? '#FF3B30' : '#34A853'};font-weight:700;">${formatCurrency(balance, 'USD')}</td></tr>
           </table>
         </div>
@@ -664,9 +678,9 @@ function BookingDetailModal({ booking, visible, onClose, onRefetch }: {
                 { l: 'Total Revenue', v: formatCurrency(totalRevenue, 'USD'), big: true },
                 totalCosts > 0 ? { l: 'Total Costs', v: formatCurrency(totalCosts, 'USD'), c: C.danger } : null,
                 totalCosts > 0 ? { l: 'Net Profit', v: formatCurrency(netProfit, 'USD'), c: netProfit >= 0 ? C.success : C.danger } : null,
-                { l: 'Amount Paid', v: formatCurrency(booking.amount_paid || 0, 'USD'), c: C.success },
+                { l: 'Amount Paid', v: formatCurrency(amountPaidUSD, 'USD'), c: C.success },
                 { l: 'Balance Due', v: formatCurrency(balance, 'USD'), c: balance > 0 ? C.danger : C.success },
-                booking.deposit_amount ? { l: 'Deposit Required', v: formatCurrency(booking.deposit_amount, 'USD') } : null,
+                booking.deposit_amount ? { l: 'Deposit Required', v: formatCurrency(depositUSD, 'USD') } : null,
                 profitMarginPct != null ? { l: 'Profit Margin', v: `${profitMarginPct.toFixed(1)}%`, c: profitMarginPct >= 0 ? C.success : C.danger } : null,
               ].filter(Boolean).map((row: any, i) => (
                 <View key={i} style={dm.finRow}>
@@ -1240,6 +1254,8 @@ function BookingsTab() {
       total_price_usd:   d.total_price_usd ?? d.total_amount ?? d.price_usd ?? undefined,
       deposit_amount:    d.deposit_amount   ?? d.deposit      ?? undefined,
       amount_paid:       d.amount_paid      ?? d.paid         ?? undefined,
+      currency:          d.currency         ?? undefined,
+      exchange_rate:     d.exchange_rate    ?? undefined,
       booking_direction: d.booking_direction ?? d.direction   ?? undefined,
       profit_margin:        d.profit_margin        ?? undefined,
       total_expenses_usd:   d.total_expenses_usd   ?? undefined,
@@ -3162,6 +3178,8 @@ interface PaymentBooking {
   end_date?: string;
   total_price_usd?: number;
   amount_paid?: number;
+  currency?: string;
+  exchange_rate?: number;
   updated_at?: string;
   clients?: { company_name: string } | null;
   safari_packages?: { name: string; duration_days?: number } | null;
@@ -3176,7 +3194,7 @@ function PaymentsTab() {
   useEffect(() => {
     setLoading(true);
     supabase.from('safari_bookings')
-      .select(`booking_reference, id, customer_name, status, start_date, end_date, total_price_usd, amount_paid, updated_at,
+      .select(`booking_reference, id, customer_name, status, start_date, end_date, total_price_usd, amount_paid, currency, exchange_rate, updated_at,
         clients(company_name), safari_packages(name, duration_days)`)
       .gte('amount_paid', 0)
       .order('updated_at', { ascending: false })
@@ -3184,8 +3202,8 @@ function PaymentsTab() {
       .then(({ data }) => { setBookings((data || []) as unknown as PaymentBooking[]); setLoading(false); });
   }, []);
 
-  const fullyPaid = useMemo(() => bookings.filter(b => (b.amount_paid || 0) >= (b.total_price_usd || 0) && (b.total_price_usd || 0) > 0), [bookings]);
-  const totalRevenue = useMemo(() => fullyPaid.reduce((s, b) => s + (b.amount_paid || 0), 0), [fullyPaid]);
+  const fullyPaid = useMemo(() => bookings.filter(b => toUSD(b.amount_paid, b) >= (b.total_price_usd || 0) && (b.total_price_usd || 0) > 0), [bookings]);
+  const totalRevenue = useMemo(() => fullyPaid.reduce((s, b) => s + toUSD(b.amount_paid, b), 0), [fullyPaid]);
   const avgValue = fullyPaid.length > 0 ? totalRevenue / fullyPaid.length : 0;
   const activeCount = bookings.filter(b => b.status === 'active').length;
   const completedCount = bookings.filter(b => b.status === 'completed').length;
@@ -3197,7 +3215,7 @@ function PaymentsTab() {
   }, [bookings, search]);
 
   const getPayStatus = (b: PaymentBooking) => {
-    const paid = b.amount_paid || 0; const total = b.total_price_usd || 0;
+    const paid = toUSD(b.amount_paid, b); const total = b.total_price_usd || 0;
     if (paid <= 0) return { label: t('safari.unpaid'), color: C.danger };
     if (paid >= total && total > 0) return { label: t('safari.fullyPaid'), color: C.success };
     return { label: t('safari.partial'), color: C.gold };
@@ -3254,7 +3272,7 @@ function PaymentsTab() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
                   <Text style={paStyle.date}>{fmtDate(b.start_date)} → {fmtDate(b.end_date)}</Text>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={paStyle.paid}>{formatCurrency(b.amount_paid || 0, 'USD')}</Text>
+                    <Text style={paStyle.paid}>{formatCurrency(toUSD(b.amount_paid, b), 'USD')}</Text>
                     {(b.total_price_usd || 0) > 0 ? <Text style={paStyle.total}>{t('safari.ofAmount', { amount: formatCurrency(b.total_price_usd || 0, 'USD') })}</Text> : null}
                   </View>
                 </View>
@@ -3395,7 +3413,7 @@ function ClientHistoryModal({ client, visible, onClose }: {
     if (!visible || !client) return;
     setLoading(true);
     supabase.from('safari_bookings')
-      .select('id, booking_reference, status, start_date, end_date, total_price_usd, amount_paid')
+      .select('id, booking_reference, status, start_date, end_date, total_price_usd, amount_paid, currency, exchange_rate')
       .eq('client_id', client.id)
       .order('start_date', { ascending: false })
       .then(({ data }) => { setBookings((data || []) as unknown as SafariBooking[]); setLoading(false); });
@@ -3403,7 +3421,7 @@ function ClientHistoryModal({ client, visible, onClose }: {
 
   if (!client) return null;
   const lifetimeSpend = bookings.reduce((s, b) => s + (b.total_price_usd || 0), 0);
-  const lifetimePaid  = bookings.reduce((s, b) => s + (b.amount_paid || 0), 0);
+  const lifetimePaid  = bookings.reduce((s, b) => s + toUSD(b.amount_paid, b), 0);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
