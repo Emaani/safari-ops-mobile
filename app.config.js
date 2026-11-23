@@ -13,7 +13,7 @@ export default {
   expo: {
     name: 'Jackal Adventures',
     slug: 'safari-ops-mobile',
-    version: '1.1.0',
+    version: '1.1.1',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
@@ -30,7 +30,7 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      buildNumber: '67',
+      buildNumber: '68',
       bundleIdentifier: 'com.jackalwild.jackaladventures',
       infoPlist: {
         UIBackgroundModes: ['remote-notification'],
