@@ -71,6 +71,20 @@ export function BiometricGateScreen({
 }) {
   const { theme } = useAppPreferences();
 
+  // WhatsApp-style: fire Face ID the instant this gate appears, same as
+  // LoginScreen's own auto-trigger — no tap required as long as biometric
+  // login is enabled. The button below stays as a fallback to retry after
+  // a failed/cancelled system prompt, not as the primary way in.
+  const onAuthenticateRef = useRef(onAuthenticate);
+  onAuthenticateRef.current = onAuthenticate;
+  const hasAutoFiredRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoFiredRef.current) return;
+    hasAutoFiredRef.current = true;
+    const t = setTimeout(() => onAuthenticateRef.current(), 400);
+    return () => clearTimeout(t);
+  }, []); // intentionally runs once on mount only
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <View style={styles.centered}>
