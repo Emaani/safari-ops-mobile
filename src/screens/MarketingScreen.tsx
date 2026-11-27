@@ -844,8 +844,8 @@ function MarketingCommandCenterTab() {
       {/* GA4 unavailable banner */}
       {unavailable && (
         <View style={cc.warnBanner}>
-          <Text style={cc.warnText}>⚡ GA4 not configured — showing Supabase analytics only.</Text>
-          <Text style={cc.warnSub}>Add GA4_SERVICE_ACCOUNT_JSON + GA4_PROPERTY_ID in Supabase Edge Function secrets.</Text>
+          <Text style={cc.warnText}>⚡ GA4 not configured — showing in-app analytics only.</Text>
+          <Text style={cc.warnSub}>Add GA4_SERVICE_ACCOUNT_JSON + GA4_PROPERTY_ID to the backend configuration.</Text>
         </View>
       )}
       {ga4Error && !unavailable && (
@@ -857,7 +857,7 @@ function MarketingCommandCenterTab() {
       {/* ── SECTION 1: Traffic & Engagement KPIs ─────────────────────────────── */}
       <Text style={cc.sectionHeader}>
         {'🔵 '}{t('marketing.trafficEngagement')}{'  '}
-        <Text style={cc.sourceTag}>{s ? 'GA4' : 'Supabase'}</Text>
+        <Text style={cc.sourceTag}>{s ? 'GA4' : 'In-App'}</Text>
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         {(s ? [
@@ -935,7 +935,7 @@ function MarketingCommandCenterTab() {
       {/* UTM attribution from marketing_leads — always shown alongside or when GA4 unavailable */}
       {dbStats.utmChannels.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>{t('marketing.leadAttribution')}  <Text style={cc.sourceTagInline}>Supabase · UTM</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.leadAttribution')}  <Text style={cc.sourceTagInline}>In-App · UTM</Text></Text>
           {dbStats.utmChannels.map(({ source, count, pct }) => {
             const color = CHANNEL_COLORS[source] || C.gold;
             return (
@@ -1033,7 +1033,7 @@ function MarketingCommandCenterTab() {
       )}
 
       {/* ── SECTION 6: Supabase Conversion KPIs ─────────────────────────────── */}
-      <Text style={cc.sectionHeader}>{'🟣 '}{t('marketing.conversionsRevenue')}  <Text style={cc.sourceTag}>Supabase</Text></Text>
+      <Text style={cc.sectionHeader}>{'🟣 '}{t('marketing.conversionsRevenue')}  <Text style={cc.sourceTag}>In-App</Text></Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         {[
           { label: 'Bookings',    value: dbStats.totalBookings.toLocaleString(),     color: C.primary },
@@ -1074,7 +1074,7 @@ function MarketingCommandCenterTab() {
       {/* Booking funnel */}
       {dbStats.funnel.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>{t('marketing.bookingFunnel')}  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.bookingFunnel')}  <Text style={cc.sourceTagInline}>In-App</Text></Text>
           {dbStats.funnel.map(f => (
             <View key={f.label} style={cc.funnelRow}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: f.color, marginRight: 6 }} />
@@ -1091,7 +1091,7 @@ function MarketingCommandCenterTab() {
 
       {/* Portal catalog */}
       <View style={cc.sect}>
-        <Text style={cc.sectTitle}>{t('marketing.portalCatalogLive')}  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+        <Text style={cc.sectTitle}>{t('marketing.portalCatalogLive')}  <Text style={cc.sourceTagInline}>In-App</Text></Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {[
             { label: 'Vehicles Live',  value: dbStats.portalVehicles,  color: C.primary },
@@ -1109,7 +1109,7 @@ function MarketingCommandCenterTab() {
       {/* Top packages */}
       {dbStats.topPackages.length > 0 && (
         <View style={cc.sect}>
-          <Text style={cc.sectTitle}>{t('marketing.topPackages')}  <Text style={cc.sourceTagInline}>Supabase</Text></Text>
+          <Text style={cc.sectTitle}>{t('marketing.topPackages')}  <Text style={cc.sourceTagInline}>In-App</Text></Text>
           {dbStats.topPackages.map((p, i) => (
             <View key={i} style={cc.pkgRow}>
               <View style={cc.pkgRank}><Text style={cc.pkgRankT}>{i + 1}</Text></View>
